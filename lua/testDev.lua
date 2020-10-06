@@ -9,8 +9,8 @@ local functionEx = function(x, ...)
 	end
 end
 
-local add = functionEx{"number", "number"}(
-function(a, b) 
-	return a + b
-end)()
-print(add(1, 2))
+local query = sql.Query
+local format = string.format
+function fQuery(s, ...)
+	return query(format(s, ...))
+end
