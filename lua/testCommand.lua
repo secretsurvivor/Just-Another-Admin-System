@@ -1,11 +1,12 @@
--- Serverside
+-- Shared ToDo: Convert to serverside, add secruity
 if !sql.TableExists("JAAS_command") then
 	sql.Query("CREATE TABLE JAAS_command(name TEXT, rank UNSIGNED BIG INT)")
 end
 local commandTable = {}
-local command = {["add"]=true, ["exist"]=true, ["get"]=true, ["getAll"]=true}
-local categ = {["Uncategorised"] = {}}
-function command:add(name, func, argTable, code)
+local command = {["add"]=true, ["exist"]=true, ["get"]=true, ["getAll"]=true} -- Local function table, initialised with variables to avoid Hash Table resizing
+local categ = {["Uncategorised"] = {}} -- Command categories
+
+function command:add(name, func, argTable, code) -- Adds command to JAAS - Name of Command, Command Function, Argument Table, Command Rank Code
 	local nullCheck = name and func
 	argTable = argTable or {}
 	code = code or 0
@@ -22,21 +23,21 @@ function command:add(name, func, argTable, code)
 		error(string.format("Parameter %s must be a %s", eror[1], eror[2]), 2)
 	end
 end
-function command:setCategory(name)
+function command:setCategory(name) -- Set current category that added commands will be assigned to
 	self.category = name
 	categ[name] = {}
 end
-function command:clearCategory()
+function command:clearCategory() -- Set current category as default - "Uncategorised"
 	self.category = "Uncategorised"
 end
 function command.printCategories()
 	PrintTable(categ)
 end
-function command.exist(name)
+function command.exist(name) -- Checks if command exists in the table
 	local test, err = pcall(function(name) local c = commandTable[name].name end, name)
 	return not(err and true)
 end
-function command.get(name)
+function command.get(name) -- Gets command data table
 	--ToDo: Deep copy the results
 	return commandTable[name]
 end
@@ -49,14 +50,25 @@ function command.getAll()
 	return copy
 end
 
-local argTable = {true, true}
-local typeMap = {
+local argTable = {["add"]=true, ["dispense"]=true}
+local typeMap = { -- For quick conversation between String and Int, possibly be replaced with local function to avoid allocating memory
 	["BOOL"] = 1,
 	["NUM"] = 2,
 	["STRING"] = 3,
 	["PLAYER"] = 4,
 	["PLAYERS"] = 5
 }
+/*
+	This is the argument table used for adding commands so it can check arguments and data types
+	before the command is executed. It works as any public class and is designed so that it can
+	run in a single parameter. Once the table is dispensed, the internal table is reset.
+	
+	local cmd = JAASCommand()
+	local arg = cmd.ArgumentTable()
+	
+	arg:add("Player", "PLAYER"):dispense()
+	arg:add("Num1", 2):add("Num2", 2):dispense()
+*/
 function argTable:add(name, dataType, required, default)
 	if name and dataType then
 		if type(dataType) == "string" then
@@ -88,6 +100,8 @@ setmetatable(argTable, {
 function command.ArgumentTable()
 	return argTable()
 end
+
+-- Metatable stuff to force interaction with functions locally --
 setmetatable(command, {
 	__index = function() end,
 	__newindex = function() end,
@@ -96,7 +110,7 @@ setmetatable(command, {
 JAASCommand = {}
 setmetatable(JAASCommand, {
 	__call = function(self)
-		--ToDo: Add file use log
+		--ToDo: Add file trace
 		local cmd = {}
 		cmd.category = "Uncategorised"
 		setmetatable(cmd, {__index = command})
@@ -106,7 +120,7 @@ setmetatable(JAASCommand, {
 	__metatable = nil
 })
 
-concommand.Add("JAAS", function(ply, cmdStr, args, argStr)
+concommand.Add("JAAS", function(ply, cmdStr, args, argStr) -- Garry's Mod Command that interacts with JAAS commands
 	if command.exist(args[1]) then
 		local cmdArgs = {}
 		local cmdArgStr = ""
