@@ -1,8 +1,8 @@
 if !sql.TableExists("JAAS_rank") then
-	sql.Query("CREATE TABLE JAAS_rank(id UNSIGNED INT NOT NULL UNIQUE, name TEXT NOT NULL UNIQUE, position UNSIGNED TINYINT(255) NOT NULL UNIQUE CHECK (position != 0), power UNSIGNED TINYINT(255) DEFAULT 0, invisible BOOL DEFAULT FALSE, PRIMARY KEY (id))")
+	fQuery("CREATE TABLE JAAS_rank(id UNSIGNED INT NOT NULL UNIQUE, name TEXT NOT NULL UNIQUE, position UNSIGNED TINYINT(255) NOT NULL UNIQUE CHECK (position != 0 AND position <= 64), power UNSIGNED TINYINT(255) DEFAULT 0, invisible BOOL DEFAULT FALSE, PRIMARY KEY (id))")
 end
 
-local local_rank = {} -- Used for local functions, for rank data
+local local_rank = {["getName"] = true, ["setName"] = true, ["getCodePosition"] = true, ["getCode"] = true} -- Used for local functions, for rank data
 
 function local_rank:getName()
     local name = fQuery("SELECT name FROM JAAS_rank WHERE id=%u", self.id)
@@ -70,11 +70,11 @@ setmetatable(local_rank, {
 	__metatable = nil
 })
 
-local rank = {} -- Used for global functions, for rank table
+local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true} -- Used for global functions, for rank table
 
 function rank.addRank(name, power, invis)
     local next_position = fQuery("SELECT MAX(position) FROM JAAS_rank")
-    if istable(next_position) then
+    if next_position then
         next_position = next_position[1]["position"]
         local a = fQuery("INSERT INTO JAAS_rank(name, position, power, invisible) VALUES ('%s', %u, %u, %s)", name, next_position*2, power, invis)
         if a then
@@ -87,6 +87,26 @@ function rank.safeRemoveRank()
 end
 
 function rank.forceRankShuffle()
+end
+
+function rank.rankIterator(key)
+    local a = fQuery("SELECT * FROM JAAS_rank")
+    local i = 0
+    if key then
+        return function next()
+            i += 1
+            if i < #a then
+                return a[i][key]
+            end
+        end
+    else
+        return function next()
+            i += 1
+            if i < #a then
+                return a[i]
+            end
+        end
+    end
 end
 
 local p_cache = {}
@@ -108,11 +128,10 @@ function rank.getMaxPower(code)
     if not(err and true) then
         return p_cache[code]
     else
-        local a = fQuery("SELECT position, power FROM JAAS_rank")
         local max = 0
-        for k,v in pairs(a) do
-            if bit.band(code, bit.lshift(1, v["position"])) > 0 and v["power"] > max then
-                max = v["power"]
+        for t in rank.rankIterator() do
+            if bit.band(code, bit.lshift(1, t.position)) > 0 and t.power > max then
+                max = t.power
             end
         end
         p_cache[code] = max

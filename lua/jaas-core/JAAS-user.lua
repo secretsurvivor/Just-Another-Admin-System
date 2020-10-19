@@ -1,5 +1,5 @@
 if !sql.TableExists("JAAS_user") then
-	sql.Query("CREATE TABLE JAAS_user(steamid TEXT NOT NULL, code UNSIGNED BIG INT DEFAULT 0, PRIMARY KEY (steamid))")
+	fQuery("CREATE TABLE JAAS_user(steamid TEXT NOT NULL, code UNSIGNED BIG INT DEFAULT 0, PRIMARY KEY (steamid))")
 end
 
 gameevent.Listen("player_connect")
@@ -55,6 +55,26 @@ function user:xorCode(code)
 		if a then
 			hook.Run("JAAS-userRank-dirty")
 			return a
+		end
+	end
+end
+
+function user.userIterator(key)
+	local a = fQuery("SELECT * FROM JAAS_user")
+	local i = 0
+	if key then
+		return function next()
+			i += 1
+			if i < #a then
+				return a[i][key]
+			end
+		end
+	else
+		return function next()
+			i += 1
+			if i < #a then
+				return a[i]["steamid"], a[i]["code"]
+			end
 		end
 	end
 end
