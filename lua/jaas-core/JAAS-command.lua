@@ -7,14 +7,16 @@ local argTable = {["add"]=true, ["dispense"]=true} -- Argument Table Builder, fo
 local function typeMap(typ)
     if typ == "BOOL" then
         return 1
-    elseif typ = "NUM" then
+    elseif typ = "INT" then
         return 2
-    elseif typ = "STRING" then
+    elseif typ = "FLOAT" then
         return 3
-    elseif typ = "PLAYER" then
+    elseif typ = "STRING" then
         return 4
-    elseif typ = "PLAYERS" then
+    elseif typ = "PLAYER" then
         return 5
+    elseif typ = "PLAYERS" then
+        return 6
     end
 end
 
@@ -46,7 +48,7 @@ end
 
 function argTable:dispense()
 	local old = self.internal
-	self.internal = {}
+	self.internal = {} -- {Name, Datatype, Required, Default}
 	return old
 end
 
@@ -77,14 +79,20 @@ function local_command:getCode()
 end
 
 function local_command:setCode(code)
-    command_table[self.category][self.name][1] = code
-    return fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s', category='%s'", code, self.name, self.category)
+    local a = fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s', category='%s'", code, self.name, self.category) and nil
+    if a then
+        command_table[self.category][self.name][1] = code
+    end
+    return a
 end
 
 function local_command:xorCode(code)
-    local c = bit.bxor(command_table[self.category][self.name][1], code)
-    command_table[self.category][self.name][1] = c
-    return fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s', category='%s'", c, self.name, self.category)
+    local a = fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s', category='%s'", c, self.name, self.category) and nil
+    if a then
+        local c = bit.bxor(command_table[self.category][self.name][1], code)
+        command_table[self.category][self.name][1] = c
+    end
+    return a
 end
 
 function local_command:executeCommand(...)
@@ -127,7 +135,7 @@ function command:setCategory(name)
     self.category = name
 end
 
-function command.clearCategory()
+function command:clearCategory()
     self.category = "default"
 end
 
@@ -159,5 +167,43 @@ setmetatable(JAAS.command, {
 	__newindex = function() end,
 	__metatable = nil
 })
+
+util.AddNetworkString("JAAS_ClientCommand")
+/*
+    Category : String
+    Name : String
+*/
+net.Receive("JAAS_ClientCommand", function(len, ply)
+    local category, name = net.ReadString(), net.ReadString()
+    if pcall(function(cat, nam) local c = command_table[cat][nam] end, category, name) then -- Command is valid
+        local rankCode = command_table[category][name][1] or 0
+        local playerData = JAAS.player(ply:SteamID()) or 0
+        if bit.band(rankCode, playerData:getCode()) > 0 then -- Player has access to execute command
+            local funcArgs, funcArgs_toBeExecuted = command_table[category][name][3], {}
+            for i, arg in SortedPairs(funcArgs) do -- Read Function Arguments
+                local readArg
+                if arg[2] == 1 then
+                    readArg = net.ReadBool()
+                elseif arg[2] == 2 then
+                    readArg = net.ReadInt(64)
+                elseif arg[2] == 3 then
+                    readArg = net.ReadFloat()
+                elseif arg[2] == 4 then
+                    readArg = net.ReadString()
+                elseif arg[2] == 5 then
+                    readArg = net.ReadString()
+                elseif arg[2] == 6 then
+                    readArg = net.ReadTable()
+                end
+                readArg = readArg or funcArgs[4]
+                if !readArg then break end
+                table.insert(funcArgs_toBeExecuted, readArg)
+            end
+            if #funcArgs == #funcArgs_toBeExecuted then -- All checks complete, command can be executed
+                command_table[category][name][2](unpack(funcArgs_toBeExecuted))
+            end
+        end
+    end
+end)
 
 print("JAAS Command Module Loaded")
