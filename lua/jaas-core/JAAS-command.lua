@@ -168,19 +168,36 @@ setmetatable(JAAS.command, {
 	__metatable = nil
 })
 
-util.AddNetworkString("JAAS_ClientCommand")
+util.AddNetworkString "JAAS_ClientCommand"
+/*
+    #0 - Successfull Command Execution
+    #1 - Invalid Command
+    #2 - Invalid Player Access
+    #3 - Invalid Argument 
+    #4 - Function Feedback
+*/
+local function returnCommandErrors(ply, errorCode, category, name, message)
+    net.Start("JAAS_ClientCommand")
+    net.WriteInt(errorCode, 3)
+    net.WriteString(category)
+    net.WriteString(name)
+    if errorCode == 4 then
+        net.WriteString(message)
+    end
+    net.Send(ply)
+end
 /*
     Category : String
     Name : String
 */
-net.Receive("JAAS_ClientCommand", function(len, ply)
+net.Receive("JAAS_ClientCommand", function(_, ply)
     local category, name = net.ReadString(), net.ReadString()
     if pcall(function(cat, nam) local c = command_table[cat][nam] end, category, name) then -- Command is valid
         local rankCode = command_table[category][name][1] or 0
         local playerData = JAAS.player(ply:SteamID()) or 0
         if bit.band(rankCode, playerData:getCode()) > 0 then -- Player has access to execute command
             local funcArgs, funcArgs_toBeExecuted = command_table[category][name][3], {}
-            for i, arg in SortedPairs(funcArgs) do -- Read Function Arguments
+            for i, arg in ipairs(funcArgs) do -- Read Function Arguments
                 local readArg
                 if arg[2] == 1 then
                     readArg = net.ReadBool()
@@ -196,14 +213,25 @@ net.Receive("JAAS_ClientCommand", function(len, ply)
                     readArg = net.ReadTable()
                 end
                 readArg = readArg or funcArgs[4]
-                if !readArg then break end
+                if !readArg and funcArgs[3] then break end
                 table.insert(funcArgs_toBeExecuted, readArg)
             end
             if #funcArgs == #funcArgs_toBeExecuted then -- All checks complete, command can be executed
-                command_table[category][name][2](unpack(funcArgs_toBeExecuted))
+                local a = command_table[category][name][2](unpack(funcArgs_toBeExecuted))
+                if a then
+                    returnCommandErrors(ply, 4, category, name, a)
+                else
+                    returnCommandErrors(ply, 0, category, name)
+                end
+            else
+                returnCommandErrors(ply, 3, category, name)
             end
+        else
+            returnCommandErrors(ply, 2, category, name)
         end
+    else
+        returnCommandErrors(ply, 1, category, name)
     end
 end)
 
-print("JAAS Command Module Loaded")
+print "JAAS Command Module Loaded"
