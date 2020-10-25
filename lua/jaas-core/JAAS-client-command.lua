@@ -1,29 +1,11 @@
-JAAS = {}
-
 local command = {}
 
-/*
-    if typ == "BOOL" then
-        return bool
-    elseif typ = "INT" then
-        return int
-    elseif typ = "FLOAT" then
-        return float
-    elseif typ = "STRING" then
-        return string
-    elseif typ = "PLAYER" then
-        return string
-    elseif typ = "PLAYERS" then
-        return table
-    end
-*/
-function command.executeCommand(category, name, argumentTable, ...)
-    if #argumentTable == #{...} then
+function command.executeCommand(category, name, argumentTable, t)
+    if #argumentTable == #t then
         net.Start("JAAS_ClientCommand")
         net.WriteString(category)
         net.WriteString(name)
-        local varArgs = {...}
-        for i,v in ipairs(varArgs) do
+        for i,v in ipairs(t) do
             local a = argumentTable[i][2]
             if a == 1 then
                 net.WriteBool(v)
@@ -61,3 +43,5 @@ hook.Add("JAAS_CommandFeedback", "JAAS_CommandFeedback_ConsoleEcho", function(co
     else -- Unknown Error Code
     end
 end)
+
+print "JAAS Client Command Module - Loaded"

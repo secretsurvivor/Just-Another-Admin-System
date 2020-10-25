@@ -1,3 +1,4 @@
+local fQuery, dataTypeCheck, keyExists = unpack( JAAS.Dev .. (QUERY + TYPECHECK + KEYEXIST) )
 if !sql.TableExists("JAAS_rank") then
 	fQuery("CREATE TABLE JAAS_rank(id UNSIGNED INT NOT NULL UNIQUE, name TEXT NOT NULL UNIQUE, position UNSIGNED TINYINT(255) NOT NULL UNIQUE CHECK (position != 0 AND position <= 64), power UNSIGNED TINYINT(255) DEFAULT 0, invisible BOOL DEFAULT FALSE, PRIMARY KEY (id))")
 end
@@ -6,7 +7,7 @@ local local_rank = {["getName"] = true, ["setName"] = true, ["getCodePosition"] 
 
 function local_rank:getName()
     local name = fQuery("SELECT name FROM JAAS_rank WHERE id=%u", self.id)
-    if istable(name) then
+    if dataTypeCheck("table", name) then
         return name[1]["name"]
     end
 end
@@ -17,14 +18,14 @@ end
 
 function local_rank:getCodePosition()
     local position = fQuery("SELECT position FROM JAAS_rank WHERE id=%u", self.id)
-    if istable(position) then
+    if position then
         return position[1]["position"]
     end
 end
 
 function local_rank:getCode()
     local position = fQuery("SELECT position FROM JAAS_rank WHERE id=%u", self.id)
-    if istable(position) then
+    if position then
         position = position[1]["position"]
         return bit.lshift(1, position)
     end
@@ -32,7 +33,7 @@ end
 
 function local_rank:getPower()
     local power = fQuery("SELECT power FROM JAAS_rank WHERE id=%u", self.id)
-    if istable(power) then
+    if power then
         return power[1]["power"]
     end
 end
@@ -47,7 +48,7 @@ end
 
 function local_rank:getInvis()
     local invis = fQuery("SELECT invisible FROM JAAS_rank WHERE id=%u", self.id)
-    if istable(invis) then
+    if invis then
         return invis[1]["invisible"]
     end
 end
@@ -58,12 +59,9 @@ end
 
 setmetatable(local_rank, {
     __call = function(self, rank_name)
-        local rank_object = {}
         local a = fQuery("SELECT id FROM JAAS_rank WHERE name='%s'", rank_name)
-        if istable(a) then
-            rank_object.id = a[1]["id"]
-            setmetatable(rank_object, {__index = local_rank})
-            return rank_object
+        if a then
+            return setmetatable({id = a[1]["id"]}, {__index = local_rank})
         end
     end,
     __newindex = function() end,
@@ -93,18 +91,17 @@ function rank.rankIterator(key)
     local a = fQuery("SELECT * FROM JAAS_rank")
     local i = 0
     if key then
-        return function next()
-            i += 1
-            if i < #a then
+        return function ()
+            i = i + 1
+            if i <= #a then
                 return a[i][key]
             end
         end
-    else
-        return function next()
-            i += 1
-            if i < #a then
-                return a[i]
-            end
+    end
+    return function ()
+        i = i + 1
+        if i <= #a then
+            return a[i]
         end
     end
 end
@@ -124,8 +121,7 @@ function rank.getMaxPower(code)
         p_cache = {}
         p_cache_dirty = false
     end
-    local test, err = pcall(function(code) local p = p_cache[code] end, code)
-    if not(err and true) then
+    if keyExists(p_cache, code) then
         return p_cache[code]
     else
         local max = 0
@@ -139,4 +135,4 @@ function rank.getMaxPower(code)
     end
 end
 
-print("JAAS Rank Module Loaded")
+print "JAAS Rank Module - Loaded"
