@@ -15,6 +15,33 @@ end})
 function include.server(_) if SERVER then include(_) end end
 function include.client(_) AddCSLuaFile(_) if CLIENT then include(_) end end
 function include.shared(_) include.server(_) include.client(_) end
+local stageMeta, stateMeta = 
+    {__call = function (self, _) rawset(self, #self + 1, _) end, __index = function () end, __newindex = function () end},
+    {__call = function (self, _) self.init(_) end}
+JAAS.include = setmetatable({
+    shared = setmetatable({
+        pre = setmetatable({}, stageMeta),
+        init = setmetatable({}, stageMeta),
+        post = setmetatable({}, stageMeta)
+    }, {__call = function (self, _) self.init(_) end}),
+    server = setmetatable({
+        pre = setmetatable({}, stageMeta),
+        init = setmetatable({}, stageMeta),
+        post = setmetatable({}, stageMeta)
+    }, {__call = function (self, _) self.init(_) end}),
+    client = setmetatable({
+        pre = setmetatable({}, stageMeta),
+        init = setmetatable({}, stageMeta),
+        post = setmetatable({}, stageMeta)
+    }, {__call = function (self, _) self.init(_) end}),
+}, {__call = function (self, _) self.shared.init(_) end})
+
+local files = {}
+files = file.Find("JAAS/autorun/*.lua", "LUA")
+
+for _, file_ in ipairs(files) do
+    include.server("JAAS/autorun/"..file_)
+end
 
 print "-------- JAAS Modules --------"
 
@@ -28,84 +55,73 @@ include ["server"] {
 
 include ["client"] "jaas-core/JAAS-client-command.lua"
 
-if SERVER then
-    local files = file.Find("JAAS/autorun/*.lua", "LUA")
-    if #files > 0 then
-        print "-------- JAAS Autorun --------"
+if CLIENT then print "------------------------------" end
 
-        local stageMeta, stateMeta = 
-        {__call = function (self, _) rawset(self, #self + 1, _) end, __index = function () end, __newindex = function () end},
-        {__call = function (self, _) self.init(_) end}
-        JAAS.include = setmetatable({
-            shared = setmetatable({
-                pre = setmetatable({}, stageMeta),
-                init = setmetatable({}, stageMeta),
-                post = setmetatable({}, stageMeta)
-            }, {__call = function (self, _) self.init(_) end}),
-            server = setmetatable({
-                pre = setmetatable({}, stageMeta),
-                init = setmetatable({}, stageMeta),
-                post = setmetatable({}, stageMeta)
-            }, {__call = function (self, _) self.init(_) end}),
-            client = setmetatable({
-                pre = setmetatable({}, stageMeta),
-                init = setmetatable({}, stageMeta),
-                post = setmetatable({}, stageMeta)
-            }, {__call = function (self, _) self.init(_) end}),
-        }, {__call = function (self, _) self.shared.init(_) end})
-
-        for _, file_ in ipairs(files) do
-            include.server("JAAS/autorun/"..file_)
+local function includeLoop(table_)
+    local function clientSupport(_)
+        if CLIENT then return  end
+        if SERVER then return (#table_.server[_]) + (#table_.client[_]) end
+    end
+    local message = false
+    for _,v in ipairs{"pre", "init", "post"} do
+        local a = 0
+        if CLIENT then
+            a = (#table_.shared[v]) + (#table_.client[v])
+        else
+            a = (#table_.shared[v]) + (#table_.server[v]) + (#table_.client[v])
         end
-
-        if ((#JAAS.include.shared.pre) + (#JAAS.include.server.pre) + (#JAAS.include.client.pre)) > 0 then
-            print "Pre-Initialisation"
-            for _,file_ in ipairs(JAAS.include.shared.pre) do
-                print("  [Shared] - " .. file_)
-                include.shared(file_)
+        if a > 0 then
+            if !message then print "-------- JAAS Autorun --------" message = true end
+            for _, file_ in ipairs(table_.shared[v]) do
+                include.shared(file_) 
+                print("  [shared] "..file_)
             end
-            for _,file_ in ipairs(JAAS.include.server.pre) do
-                print("  [Server] - " .. file_)
-                include.server(file_)
+            if SERVER then 
+                for _, file_ in ipairs(table_.server[v]) do
+                    include.server(file_) 
+                    print("  [server] "..file_) 
+                end
             end
-            for _,file_ in ipairs(JAAS.include.client.pre) do
-                print("  [Client] - " .. file_)
-                include.client(file_)
-            end
-        end
-
-        if ((#JAAS.include.shared.init) + (#JAAS.include.server.init) + (#JAAS.include.client.init)) > 0 then
-            print "Initialisation"
-            for _,file_ in ipairs(JAAS.include.shared.init) do
-                print("  [Shared] - " .. file_)
-                include.shared(file_)
-            end
-            for _,file_ in ipairs(JAAS.include.server.init) do
-                print("  [Server] - " .. file_)
-                include.server(file_)
-            end
-            for _,file_ in ipairs(JAAS.include.client.init) do
-                print("  [Client] - " .. file_)
-                include.client(file_)
-            end
-        end
-
-        if ((#JAAS.include.shared.post) + (#JAAS.include.server.post) + (#JAAS.include.client.post)) > 0 then
-            print "Post-Initialisation"
-            for _,file_ in ipairs(JAAS.include.shared.post) do
-                print("  [Shared] - " .. file_)
-                include.shared(file_)
-            end
-            for _,file_ in ipairs(JAAS.include.server.post) do
-                print("  [Server] - " .. file_)
-                include.server(file_)
-            end
-            for _,file_ in ipairs(JAAS.include.client.post) do
-                print("  [Client] - " .. file_)
-                include.client(file_)
+            for _, file_ in ipairs(table_.client[v]) do
+                include.client(file_) 
+                print("  [client] "..file_)
             end
         end
     end
+    print "------------------------------"
 end
 
-print "------------------------------"
+if SERVER then
+    includeLoop(JAAS.include)
+
+    util.AddNetworkString "JAAS_InitTableSync" 
+    net.Receive("JAAS_InitTableSync", function (_, ply)
+        local includeTable, count = {
+            shared = {pre = {}, init = {}, post = {}},
+            client = {pre = {}, init = {}, post = {}}
+        }, 0
+        for _, key1 in ipairs{"shared", "client"} do
+            includeTable[key1].pre = JAAS.include[key1].pre
+            count = count + (#JAAS.include[key1].pre)
+            includeTable[key1].init = JAAS.include[key1].init
+            count = count + (#JAAS.include[key1].init)
+            includeTable[key1].post = JAAS.include[key1].post
+            count = count + (#JAAS.include[key1].post)
+        end
+        if count > 0 then
+            net.Start("JAAS_InitTableSync")
+            net.WriteTable(includeTable)
+            net.Send(ply)
+        end
+    end)
+elseif CLIENT then
+    net.Receive("JAAS_InitTableSync", function (_, ply)
+        local table_ = net.ReadTable()
+        includeLoop(table_)
+    end)
+
+    hook.Add("InitPostEntity", "JAAS_ClientInit", function()
+        net.Start "JAAS_InitTableSync" 
+        net.SendToServer()
+    end)
+end
