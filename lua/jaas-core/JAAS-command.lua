@@ -1,6 +1,8 @@
-local fQuery, dataTypeCheck, keyExists = unpack( JAAS.Dev .. (QUERY + TYPECHECK + KEYEXIST) )
+if JAAS.Command then return end
+local dev = JAAS.Dev()
+local log = JAAS.Log("Command")
 if !sql.TableExists("JAAS_command") then
-	fQuery("CREATE TABLE JAAS_command(name TEXT NOT NULL, category TEXT NOT NULL, code UNSIGNED BIG INT NOT NULL DEFAULT 0, PRIMARY KEY (name, category))")
+	dev.fQuery("CREATE TABLE JAAS_command(name TEXT NOT NULL, category TEXT NOT NULL, code UNSIGNED BIG INT NOT NULL DEFAULT 0, PRIMARY KEY (name, category))")
 end
 
 local argTable = {["add"]=true, ["dispense"]=true} -- Argument Table Builder, for command registering and user interface
@@ -27,10 +29,10 @@ end
 	arg:add("Num1", 2):add("Num2", 2):dispense()
 */
 function argTable:add(name, dataType, required, default)
-    if dataTypeCheck("string", dataType) then
+    if dev.dataTypeCheck("string", dataType) then
         dataType = typeMap(dataType)
     end
-    if dataTypeCheck("string", name, "number", dataType) then
+    if dev.dataTypeCheck("string", name, "number", dataType) then
         table.insert(self.internal, {name, dataType, required and true, default})
 		return self
     end
@@ -66,7 +68,7 @@ function local_command:getCode()
 end
 
 function local_command:setCode(code)
-    local a = fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s', category='%s'", code, self.name, self.category) and nil
+    local a = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s', category='%s'", code, self.name, self.category) and nil
     if a then
         command_table[self.category][self.name][1] = code
     end
@@ -74,7 +76,7 @@ function local_command:setCode(code)
 end
 
 function local_command:xorCode(code)
-    local a = fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s', category='%s'", c, self.name, self.category) and nil
+    local a = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s', category='%s'", c, self.name, self.category) and nil
     if a then
         local c = bit.bxor(command_table[self.category][self.name][1], code)
         command_table[self.category][self.name][1] = c
@@ -97,24 +99,24 @@ setmetatable(local_command, {
 local command = {} -- Used for global functions, for command table
 
 function command:registerCommand(name, func, funcArgs, code)
-    local a = fQuery("SELECT code FROM JAAS_command WHERE name='%s', category='%s'", name, self.category)
+    local a = dev.fQuery("SELECT code FROM JAAS_command WHERE name='%s', category='%s'", name, self.category)
     if a then
         code = a[1]["code"]
     else
         code = code or 0
     end
-    if keyExists(command_table, category) then
+    if command_table[category] ~= nil then
         command_table[self.category] = {[name]=true}
     end
     command_table[self.category][name] = {code, func, funcArgs}
     if !a then
-        fQuery("INSERT INTO JAAS_command (name, category) VALUES ('%s', '%s')", name, self.category)
+        dev.fQuery("INSERT INTO JAAS_command (name, category) VALUES ('%s', '%s')", name, self.category)
     end
     return local_command(name, self.category)
 end
 
 function command:setCategory(name)
-    if dataTypeCheck("string", name) then
+    if dev.dataTypeCheck("string", name) then
         self.category = name
     end
 end
@@ -132,11 +134,15 @@ setmetatable(command, {
 	__newindex = function() end,
 	__metatable = nil
 })
-JAAS.command = setmetatable({}, {
+JAAS.Command = setmetatable({}, {
     __call = function(self, command_name, command_category)
-		--ToDo: Add file trace
+		local f_str, id = log:executionTraceLog("Command")
+        if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+            log:removeTraceLog(id)
+            return
+        end
 		if command_name and command_category then
-            if keyExists(command_table, category, name) then
+            if command_table[category] ~= nil and command_table[category][name] ~= nil then
                 return local_command(command_name, command_category)
             end
         else
@@ -171,7 +177,7 @@ end
 */
 net.Receive("JAAS_ClientCommand", function(_, ply)
     local category, name = net.ReadString(), net.ReadString()
-    if keyExists(command_table, category, name) then -- Command is valid
+    if command_table[category] ~= nil and command_table[category][name] ~= nil then -- Command is valid
         local rankCode = command_table[category][name][1] or 0
         local playerData = JAAS.player(ply:SteamID()) or 0
         if bit.band(rankCode, playerData:getCode()) > 0 then -- Player has access to execute command
@@ -224,7 +230,7 @@ end
 
 concommand.Add("JAAS", function (ply, cmd, args, argStr)
     local category, name = args[1], args[2]
-    if keyExists(command_table, category, name) then
+    if command_table[category] ~= nil and command_table[category][name] ~= nil then
         if IsValid(ply) then
             local rankCode = command_table[category][name][1] or 0
             local playerData = JAAS.player(ply:SteamID()) or 0
@@ -256,4 +262,4 @@ concommand.Add("JAAS", function (ply, cmd, args, argStr)
     end
 end)
 
-print "JAAS Command Module - Loaded"
+log:printLog "Module Loaded"

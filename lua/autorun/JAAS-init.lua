@@ -1,3 +1,4 @@
+--if JAAS then return end
 JAAS = {}
 
 local include = setmetatable({}, {__call = function (self, _)
@@ -14,7 +15,7 @@ local AddCSLuaFile = setmetatable({}, {__call = function (self, _)
 end})
 function include.server(_) if SERVER then include(_) end end
 function include.client(_) AddCSLuaFile(_) if CLIENT then include(_) end end
-function include.shared(_) include.server(_) include.client(_) end
+function include.shared(_) AddCSLuaFile(_) include(_) end
 local stageMeta, stateMeta = 
     {__call = function (self, _) rawset(self, #self + 1, _) end, __index = function () end, __newindex = function () end},
     {__call = function (self, _) self.init(_) end}
@@ -36,21 +37,23 @@ JAAS.include = setmetatable({
     }, {__call = function (self, _) self.init(_) end}),
 }, {__call = function (self, _) self.shared.init(_) end})
 
-local files = {}
-files = file.Find("JAAS/autorun/*.lua", "LUA")
-
-for _, file_ in ipairs(files) do
-    include.server("JAAS/autorun/"..file_)
+for _, file_ in ipairs(file.Find("jaas/autorun/*.lua", "lsv")) do
+    include.server("jaas/autorun/"..file_)
 end
 
 print "-------- JAAS Modules --------"
 
-include ["shared"] "jaas-core/JAAS-developer.lua"
+include ["shared"] {
+    "JAAS_variables.lua",
+    "jaas-core/JAAS-log.lua",
+    "jaas-core/JAAS-developer.lua"
+}
 
 include ["server"] {
     "jaas-core/JAAS-user.lua",
     "jaas-core/JAAS-rank.lua",
-    "jaas-core/JAAS-command.lua"
+    "jaas-core/JAAS-command.lua",
+    "jaas-core/JAAS-permission.lua"
 }
 
 include ["client"] "jaas-core/JAAS-client-command.lua"
@@ -58,10 +61,6 @@ include ["client"] "jaas-core/JAAS-client-command.lua"
 if CLIENT then print "------------------------------" end
 
 local function includeLoop(table_)
-    local function clientSupport(_)
-        if CLIENT then return  end
-        if SERVER then return (#table_.server[_]) + (#table_.client[_]) end
-    end
     local message = false
     for _,v in ipairs{"pre", "init", "post"} do
         local a = 0
@@ -101,12 +100,10 @@ if SERVER then
             client = {pre = {}, init = {}, post = {}}
         }, 0
         for _, key1 in ipairs{"shared", "client"} do
-            includeTable[key1].pre = JAAS.include[key1].pre
-            count = count + (#JAAS.include[key1].pre)
-            includeTable[key1].init = JAAS.include[key1].init
-            count = count + (#JAAS.include[key1].init)
-            includeTable[key1].post = JAAS.include[key1].post
-            count = count + (#JAAS.include[key1].post)
+            for _, key2 in ipairs{"pre", "init", "post"} do
+                includeTable[key1][key2] = JAAS.include[key1][key2]
+                count = count + (#JAAS.include[key1][key2])
+            end
         end
         if count > 0 then
             net.Start("JAAS_InitTableSync")
@@ -116,8 +113,7 @@ if SERVER then
     end)
 elseif CLIENT then
     net.Receive("JAAS_InitTableSync", function (_, ply)
-        local table_ = net.ReadTable()
-        includeLoop(table_)
+        includeLoop(net.ReadTable())
     end)
 
     hook.Add("InitPostEntity", "JAAS_ClientInit", function()

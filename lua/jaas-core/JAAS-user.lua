@@ -1,12 +1,13 @@
-local fQuery, dataTypeCheck, keyExists = unpack( JAAS.Dev .. (QUERY + TYPECHECK + KEYEXIST) )
+local dev = JAAS.Dev()
+local log = JAAS.Log("Player")
 if !sql.TableExists("JAAS_user") then
-	fQuery("CREATE TABLE JAAS_user(steamid TEXT NOT NULL, code UNSIGNED BIG INT DEFAULT 0, PRIMARY KEY (steamid))")
+	dev.fQuery("CREATE TABLE JAAS_user(steamid TEXT NOT NULL, code UNSIGNED BIG INT DEFAULT 0, PRIMARY KEY (steamid))")
 end
 
 gameevent.Listen("player_connect")
 hook.Add("player_connect", "JAAS-player-registration", function(data) -- To be logged
 	if data.bot == 0 then
-		fQuery("INSERT INTO JAAS_user(steamid) VALUES ('%s') WHERE NOT (SELECT * FROM JAAS_user WHERE steamid='%s)'", data.networkid, data.networkid)
+		dev.fQuery("INSERT INTO JAAS_user(steamid) VALUES ('%s') WHERE NOT (SELECT * FROM JAAS_user WHERE steamid='%s)'", data.networkid, data.networkid)
 	end
 end)
 
@@ -20,7 +21,7 @@ hook.Add("JAAS-userRank-dirty", "JAAS-userObjectCache", function()
 end)
 
 local add_to_cache = function(steamid)
-	local a = fQuery("SELECT code FROM JAAS_user WHERE steamid='%s'", steamid)
+	local a = dev.fQuery("SELECT code FROM JAAS_user WHERE steamid='%s'", steamid)
 	if a then
 		u_cache[steamid] = a[1]["code"]
 		return true
@@ -32,7 +33,7 @@ function user:getCode()
 end
 
 function user:setCode(code)
-	local a = fQuery("UPDATE JAAS_user SET code=%u WHERE steamid='%s'", code, self.steamid)
+	local a = dev.fQuery("UPDATE JAAS_user SET code=%u WHERE steamid='%s'", code, self.steamid)
 	if a then
 		hook.Run("JAAS-userRank-dirty")
 		return a
@@ -40,11 +41,11 @@ function user:setCode(code)
 end
 
 function user:xorCode(code)
-	local current_code = fQuery("SELECT code FROM JAAS_user WHERE steamid='%s'", self.steamid)
+	local current_code = dev.fQuery("SELECT code FROM JAAS_user WHERE steamid='%s'", self.steamid)
 	if current_code then
 		current_code = current_code[1]["code"]
 		local xor_code = bit.bxor(current_code, code)
-		local a = fQuery("UPDATE JAAS_user SET code=%u WHERE steamid='%s'", xor_code, self.steamid)
+		local a = dev.fQuery("UPDATE JAAS_user SET code=%u WHERE steamid='%s'", xor_code, self.steamid)
 		if a then
 			hook.Run("JAAS-userRank-dirty")
 			return a
@@ -53,7 +54,7 @@ function user:xorCode(code)
 end
 
 function user.userIterator(key)
-	local a = fQuery("SELECT * FROM JAAS_user")
+	local a = dev.fQuery("SELECT * FROM JAAS_user")
 	local i = 0
 	if key then
 		return function ()
@@ -78,7 +79,11 @@ setmetatable(user, {
 })
 JAAS.player = setmetatable({}, {
 	__call = function(self, steamid)
-		--ToDo: Add file trace
+		local f_str, id = log:executionTraceLog("Player")
+		if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+			log:removeTraceLog(id)
+			return
+		end
 		if u_cache_dirty then
 			u_cache = {}
 			u_cache_dirty = true
@@ -91,4 +96,4 @@ JAAS.player = setmetatable({}, {
 	__metatable = nil
 })
 
-print "JAAS User Module - Loaded" 
+log:printLog "Module Loaded"

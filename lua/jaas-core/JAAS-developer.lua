@@ -1,61 +1,88 @@
 local query, format, type = sql.Query, string.format, type
-local dev, dev_string = {
-	function (s, ...) -- fQuery
-		return query(format(s, ...))
-	end,
-	function (...) -- dataTypeCheck
-		local varArgs = {...}
-		if varArgs and (#varArgs) % 2 == 0 then
-			for i=1, #varArgs, 2 do
-				if type(varArgs[1 + i]) == varArgs[i] then
-					return true
-				else
-					error("Invalid Datatype", 2)
-				end
+local log = JAAS.Log("Developer")
+local dev = {}
+
+function dev.fQuery(s, ...)
+	return query(format(s, ...))
+end
+
+function dev.dataTypeCheck(...)
+	local varArgs = {...}
+	if varArgs and (#varArgs) % 2 == 0 then
+		for i=1, #varArgs, 2 do
+			if type(varArgs[1 + i]) == varArgs[i] then
+				return true
+			else
+				error("Invalid Datatype", 2)
 			end
 		end
-	end,
-	function (table_, key, key2) -- keyExists
-		if !table_ and !key then return end
-		if key2 then
-			return pcall(function(_,__) local ___ = table_[_][__] end, key, key2)
+	end
+end
+
+function dev.verifyFilepath(filepath, verify_str)
+	-- Verify String example: addons/*/lua/jaas/*
+	local filepath_func = string.gmatch(filepath, ".")
+	local verify_func = string.gmatch(verify_str, ".")
+	local count = 0
+	local wild_card,verified,incorrect = false, false, false
+	local f_c, v_c = filepath_func(), verify_func()
+	while !verified and !incorrect do
+		if wild_card then
+			if v_c == "*" then
+				v_c = verify_func()
+				count = 1 + count
+			end
+			if v_c == nil then
+				verified = true
+			end
+			if f_c == "/" then
+				wild_card = false
+				v_c = verify_func()
+			end
+			if count == (#verify_str) + 1 then
+				verified = true
+			end
+			f_c = filepath_func()
+		else
+			if f_c == v_c then
+			elseif v_c == "*" then
+				wild_card = true
+			else
+				incorrect = true
+			end
+			f_c = filepath_func()
+			v_c = verify_func()
+			count = 1 + count
 		end
-		return !pcall(function(_) local __ = table_[_] end, key)
+		if f_c == nil then
+			incorrect = true
+		end
 	end
-},
-{
-	"fQuery",
-	"dataTypeCheck",
-	"keyExists"
-}
-QUERY, TYPECHECK, KEYEXIST = (function ()
-	local v = {}
-	for i=0, #dev-1 do
-		table.insert(v, bit.lshift(1, i))
+	return verified
+end
+
+function dev.verifyFilepath_table(filepath, verify_str_table)
+	for _, v_str in ipairs(verify_str_table) do
+		if verifyFilepath(filepath, v_str) then
+			return true
+		end
 	end
-	return unpack(v)
-end)()
+	return false
+end
 
 JAAS.Dev = setmetatable({}, {
-	__concat = function(left, right)
-		local v = {}
-		for i=0, #dev-1 do
-			if bit.band(right, bit.lshift(1, i)) != 0 then
-				v[1 + i] = dev[1 + i]
-			end
-		end
-		if #v == 1 then
-			return v[1]
-		end
-		return v
-	end,
 	__call = function ()
-		local a = {}
-		for i, v in ipairs(dev) do
-			a[dev_string[i]] = v
+		local f_str, id = log:executionTraceLog()
+		if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+			log:removeTraceLog(id)
+			return
 		end
-	return a
-end
+		return setmetatable({}, {
+			__index = dev,
+			__newindex = function () end,
+			__metatable = nil
+		})
+	end
 })
 
-print "JAAS Developer Module - Loaded"
+log:printLog "Module Loaded"

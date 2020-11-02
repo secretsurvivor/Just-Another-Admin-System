@@ -1,4 +1,8 @@
+local log = JAAS.Log("Command")
+
 local command = {}
+
+local command_table = {}
 
 function command.executeCommand(category, name, argumentTable, t)
     if #argumentTable == #t then
@@ -44,4 +48,29 @@ hook.Add("JAAS_CommandFeedback", "JAAS_CommandFeedback_ConsoleEcho", function(co
     end
 end)
 
-print "JAAS Client Command Module - Loaded"
+concommand.Add("JAAS", function(ply, cmd, args, argStr)
+    local category, name = args[1], args[2]
+    if command_table[category] ~= nil and command_table[category][name] ~= nil then
+
+    end
+end)
+
+JAAS.Command = setmetatable({}, {
+    __call = function ()
+        local f_str, id = log:executionTraceLog("Command")
+        if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+            log:removeTraceLog(id)
+            return
+        end
+        return setmetatable({}, {
+            __index = command,
+            __newindex = function () end,
+            __metatable = nil
+        })
+    end,
+    __index = function () end,
+    __newindex = function () end,
+    __metatable = nil
+})
+
+log:printLog "Module Loaded"
