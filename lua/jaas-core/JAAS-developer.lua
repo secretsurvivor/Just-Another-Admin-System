@@ -70,6 +70,19 @@ function dev.verifyFilepath_table(filepath, verify_str_table)
 	return false
 end
 
+function dev.sharedSync(networkString, server_func, hook_identifier, client_func)
+	if SERVER then
+		util.AddNetworkString(networkString)
+		net.Receive(networkString, server_func)
+	elseif CLIENT then
+		net.Receive(networkString, client_func)
+		hook.Add("InitPostEntity", hook_identifier, function ()
+			net.Start(networkString)
+        	net.SendToServer()
+		end)
+	end
+end
+
 JAAS.Dev = setmetatable({}, {
 	__call = function ()
 		local f_str, id = log:executionTraceLog()

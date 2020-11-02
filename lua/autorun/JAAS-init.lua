@@ -51,12 +51,13 @@ include ["shared"] {
 
 include ["server"] {
     "jaas-core/JAAS-user.lua",
-    "jaas-core/JAAS-rank.lua",
+    "jaas-core/JAAS-rank.lua"
+}
+
+include ["shared"] {
     "jaas-core/JAAS-command.lua",
     "jaas-core/JAAS-permission.lua"
 }
-
-include ["client"] "jaas-core/JAAS-client-command.lua"
 
 if CLIENT then print "------------------------------" end
 
@@ -92,32 +93,25 @@ end
 
 if SERVER then
     includeLoop(JAAS.include)
-
-    util.AddNetworkString "JAAS_InitTableSync" 
-    net.Receive("JAAS_InitTableSync", function (_, ply)
-        local includeTable, count = {
-            shared = {pre = {}, init = {}, post = {}},
-            client = {pre = {}, init = {}, post = {}}
-        }, 0
-        for _, key1 in ipairs{"shared", "client"} do
-            for _, key2 in ipairs{"pre", "init", "post"} do
-                includeTable[key1][key2] = JAAS.include[key1][key2]
-                count = count + (#JAAS.include[key1][key2])
-            end
-        end
-        if count > 0 then
-            net.Start("JAAS_InitTableSync")
-            net.WriteTable(includeTable)
-            net.Send(ply)
-        end
-    end)
-elseif CLIENT then
-    net.Receive("JAAS_InitTableSync", function (_, ply)
-        includeLoop(net.ReadTable())
-    end)
-
-    hook.Add("InitPostEntity", "JAAS_ClientInit", function()
-        net.Start "JAAS_InitTableSync" 
-        net.SendToServer()
-    end)
 end
+
+local dev = JAAS.Dev()
+dev.sharedSync("JAAS_InitTableSync", function (_, ply)
+    local includeTable, count = {
+        shared = {pre = {}, init = {}, post = {}},
+        client = {pre = {}, init = {}, post = {}}
+    }, 0
+    for _, key1 in ipairs{"shared", "client"} do
+        for _, key2 in ipairs{"pre", "init", "post"} do
+            includeTable[key1][key2] = JAAS.include[key1][key2]
+            count = count + (#JAAS.include[key1][key2])
+        end
+    end
+    if count > 0 then
+        net.Start("JAAS_InitTableSync")
+        net.WriteTable(includeTable)
+        net.Send(ply)
+    end
+end, "JAAS_ClientInit", function (_, ply)
+    includeLoop(net.ReadTable())
+end)
