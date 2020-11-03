@@ -17,6 +17,7 @@ function log:silentLog(str)
 end
 
 function log:chatLog(str)
+    PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
 end
 
 function log:error(str, level)
