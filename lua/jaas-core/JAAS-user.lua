@@ -77,7 +77,7 @@ setmetatable(user, {
 	__newindex = function () end,
 	__metatable = nil
 })
-JAAS.player = setmetatable({}, {
+JAAS.Player = setmetatable({}, {
 	__call = function(self, steamid)
 		local f_str, id = log:executionTraceLog("Player")
 		if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
@@ -87,6 +87,9 @@ JAAS.player = setmetatable({}, {
 		if u_cache_dirty then
 			u_cache = {}
 			u_cache_dirty = true
+		end
+		if !isstring(steamid) and IsValid(steamid) then
+			steamid = steamid:SteamID()
 		end
 		if add_to_cache(steamid) then
 			return setmetatable({steamid = steamid}, {__index = user, __newindex = function() end})
