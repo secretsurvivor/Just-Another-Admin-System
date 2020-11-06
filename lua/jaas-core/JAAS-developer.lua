@@ -1,4 +1,5 @@
 local query, format, type = sql.Query, string.format, type
+local ipairs, gmatch, net = ipairs, string.gmatch, net
 local log = JAAS.Log("Developer")
 local dev = {}
 
@@ -6,23 +7,10 @@ function dev.fQuery(s, ...)
 	return query(format(s, ...))
 end
 
-function dev.dataTypeCheck(...)
-	local varArgs = {...}
-	if varArgs and (#varArgs) % 2 == 0 then
-		for i=1, #varArgs, 2 do
-			if type(varArgs[1 + i]) == varArgs[i] then
-				return true
-			else
-				error("Invalid Datatype", 2)
-			end
-		end
-	end
-end
-
 function dev.verifyFilepath(filepath, verify_str)
 	-- Verify String example: addons/*/lua/jaas/*
-	local filepath_func = string.gmatch(filepath, ".")
-	local verify_func = string.gmatch(verify_str, ".")
+	local filepath_func = gmatch(filepath, ".")
+	local verify_func = gmatch(verify_str, ".")
 	local count = 0
 	local wild_card,verified,incorrect = false, false, false
 	local f_c, v_c = filepath_func(), verify_func()
@@ -60,6 +48,17 @@ function dev.verifyFilepath(filepath, verify_str)
 	end
 	return verified
 end
+
+/*function dev.verifyFilepath2(filepath, verify_pattern)
+	if istable(verify_pattern) then
+		for _,v in ipairs(verify_pattern)
+			if filepath == string.match(filepath, v)
+		end
+		return false
+	else
+		return filepath == string.match(filepath, verify_pattern)
+	end
+end*/
 
 function dev.verifyFilepath_table(filepath, verify_str_table)
 	for _, v_str in ipairs(verify_str_table) do

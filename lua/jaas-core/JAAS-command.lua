@@ -29,10 +29,10 @@ end
 	arg:add("Num1", 2):add("Num2", 2):dispense()
 */
 function argTable:add(name, dataType, required, default)
-    if dev.dataTypeCheck("string", dataType) then
+    if isstring(dataType) then
         dataType = typeMap(dataType)
     end
-    if dev.dataTypeCheck("string", name, "number", dataType) then
+    if isstring(name) and isnumber(dataType) then
         table.insert(self.internal, {name, dataType, required and true, default})
 		return self
     end
@@ -51,12 +51,13 @@ setmetatable(argTable, {
 	__metatable = nil
 })
 
-local command_table = {} -- SERVER -- [category][name] = {code, function, funcArgs} -- CLIENT -- [category][name] = {code, funcArgs}
+local command_table = {} -- SERVER -- [category][name] = {code, funcArgs, function} -- CLIENT -- [category][name] = {code, funcArgs}
 
+local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] = true, ["setCode"] = true} -- Used for local functions, for command data
 local command = {["registerCommand"] = true, ["setCategory"] = true, ["clearCategory"] = true, ["argumentTableBuilder"] = true} -- Used for global functions, for command table
 
 function command:setCategory(name)
-    if dev.dataTypeCheck("string", name) then
+    if isstring(name) then
         self.category = name
     end
 end
@@ -70,7 +71,6 @@ function command.argumentTableBuilder()
 end
 
 if SERVER then
-    local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] = true, ["setCode"] = true} -- Used for local functions, for command data
 
     function local_command:getName()
         return self.name
@@ -85,24 +85,24 @@ if SERVER then
     end
 
     function local_command:setCode(code)
-        local a = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", code, self.name, self.category) and nil
-        if a then
+        local q = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", code, self.name, self.category) and nil
+        if q then
             command_table[self.category][self.name][1] = code
         end
-        return a
+        return q
     end
 
     function local_command:xorCode(code)
-        local a = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", c, self.name, self.category) and nil
-        if a then
-            local c = bit.bxor(command_table[self.category][self.name][1], code)
-            command_table[self.category][self.name][1] = c
+        local c_xor = bit.bxor(command_table[self.category][self.name][1], code)
+        local q = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", c_xor, self.name, self.category) and nil
+        if q then
+            command_table[self.category][self.name][1] = c_xor
         end
-        return a
+        return q
     end
 
     function local_command:executeCommand(...)
-        return command_table[self.category][self.name][2](...)
+        return command_table[self.category][self.name][3](...)
     end
 
     setmetatable(local_command, {
@@ -114,58 +114,87 @@ if SERVER then
     })
 
     function command:registerCommand(name, func, funcArgs, code)
-        local a = dev.fQuery("SELECT code FROM JAAS_command WHERE name='%s' AND category='%s'", name, self.category)
-        if a then
-            code = tonumber(a[1]["code"])
-        else
-            code = code or 0
+        local q = dev.fQuery("SELECT code FROM JAAS_command WHERE name='%s' AND category='%s'", name, self.category)
+        if q then
+            code = tonumber(q[1]["code"])
+        elseif code == nil then
+            code = 0
         end
-        if !a then
-            a = dev.fQuery("INSERT INTO JAAS_command (name, category) VALUES ('%s', '%s')", name, self.category)
+        if !q then
+            dev.fQuery("INSERT INTO JAAS_command (name, category, code) VALUES ('%s', '%s', %u)", name, self.category, code)
+            q = true
         end
-        if a then
+        if q then
             funcArgs = funcArgs or {}
             if command_table[self.category] ~= nil then
-                command_table[self.category][name] = {code, func, funcArgs}
-                return local_command(name, self.category)
+                command_table[self.category][name] = {code, funcArgs, func}
             else
-                command_table[self.category] = {[name]={code, func, funcArgs}}
+                command_table[self.category] = {[name]={code, funcArgs, func}}
             end
+            return local_command(name, self.category)
         end
     end
 elseif CLIENT then
     function command:registerCommand(name, func, funcArgs, code)
         funcArgs = funcArgs or {}
-        if command_table[self.category] ~= nil then
-            command_table[self.category][name] = {code, funcArgs}
-        else
-            command_table[self.category] = {[name]={code, funcArgs}}
+        if isstring(name) and istable(funcArgs) then
+            if command_table[self.category] ~= nil then
+                command_table[self.category][name] = {code, funcArgs}
+            else
+                command_table[self.category] = {[name]={code, funcArgs}}
+            end
+        end
+    end
+
+    local function getPlyFromNick(str)
+        for _,ply in ipairs(player.GetAll()) do
+            if string.find(ply:Nick(), str) then
+                return ply
+            end
         end
     end
     
     function command.executeCommand(category, name, argumentTable, t)
-        if #argumentTable == #t then
-            net.Start("JAAS_ClientCommand")
-            net.WriteString(category)
-            net.WriteString(name)
-            for i,v in ipairs(t) do
-                local a = argumentTable[i][2]
-                if a == 1 then
-                    net.WriteBool(v)
-                elseif a == 2 then
-                    net.WriteInt(v, 64)
-                elseif a == 3 then
-                    net.WriteFloat(v)
-                elseif a == 4 then
-                    net.WriteString(v)
-                elseif a == 5 then
-                    net.WriteString(v)
-                elseif a == 6 then
-                    net.WriteTable(v)
+        net.Start("JAAS_ClientCommand")
+        net.WriteString(category)
+        net.WriteString(name)
+        for i,v in ipairs(t) do
+            local a = argumentTable[i][2]
+            if a == 1 then -- Bool
+                if isstring(v) then
+                    v = v == "true"
                 end
+                net.WriteBool(v) 
+            elseif a == 2 then -- Int
+                if isstring(v) then
+                    v = tonumber(v)
+                end
+                net.WriteInt(v, 64)
+            elseif a == 3 then -- Float
+                if isstring(v) then
+                    v = tonumber(v)
+                end
+                net.WriteFloat(v)
+            elseif a == 4 then -- String
+                net.WriteString(v)
+            elseif a == 5 then -- Player
+                if isstring(v) then
+                    v = getPlyFromNick(v)
+                end
+                if IsValid(v) then
+                    net.WriteEntity(v)
+                end
+            elseif a == 6 then -- Players
+                if isstring(v) then
+                    v = string.ToTable(v)
+                end
+                for i,p in ipairs(v) do
+                    v[i] = getPlyFromNick(p)
+                end
+                net.WriteTable(v)
             end
-            net.SendToServer()
         end
+        net.SendToServer()
     end
 end
 
@@ -204,7 +233,7 @@ JAAS.Command = setmetatable({}, {
             log:removeTraceLog(id)
             return
         end
-		if command_name and command_category then
+		if SERVER and command_name and command_category then
             if command_table[category] ~= nil and command_table[category][name] ~= nil then
                 return local_command(command_name, command_category)
             end
@@ -215,6 +244,58 @@ JAAS.Command = setmetatable({}, {
 	__newindex = function() end,
 	__metatable = nil
 })
+
+local function commandAutoComplete(cmd, args_str)
+    local args = string.Explode(" ", string.Trim(args_str))
+    local autocomplete = {}
+    for category,t in pairs(command_table) do
+        local a = string.match(category, args[1])
+        if a then
+            if (#args) == 2 or args[1] == category then
+                for name,t in pairs(t) do
+                    if args[2] and string.find(name, args[2]) then
+                        if (#args) > 2 then -- cmd arguments
+                            autocomplete = {}
+                            local cmd_args = ""
+                            for i=3, #args do
+                                if i > 3 then
+                                    cmd_args = cmd_args.." "..args[i-1]
+                                end
+                                if t[2][i-2][2] == 1 then
+                                    table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." true")
+                                    table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." false")
+                                elseif t[2][i-2][2] == 5 then
+                                    for _,ply in ipairs(player.GetAll()) do
+                                        if string.find(ply:Nick(), args[i]) then
+                                            table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." \""..ply:Nick().."\"")
+                                            break
+                                        else
+                                            table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." \""..ply:Nick().."\"")
+                                        end
+                                    end
+                                elseif t[2][i-2][2] == 6 then
+                                    
+                                end
+                            end
+                            break
+                        else
+                            table.insert(autocomplete, "JAAS "..category.." "..name)
+                        end
+                        break
+                    else
+                        table.insert(autocomplete, "JAAS "..category.." "..name)
+                    end
+                end
+            else
+                table.insert(autocomplete, "JAAS "..category)
+            end
+            break
+        else
+            table.insert(autocomplete, "JAAS "..category)
+        end
+    end
+    return autocomplete
+end
 
 if SERVER then
     util.AddNetworkString "JAAS_ClientCommand"
@@ -243,9 +324,9 @@ if SERVER then
         local category, name = net.ReadString(), net.ReadString()
         if command_table[category] ~= nil and command_table[category][name] ~= nil then -- Command is valid
             local rankCode = command_table[category][name][1] or 0
-            local playerData = JAAS.player(ply:SteamID()) or 0
+            local playerData = JAAS.Player(ply) or 0
             if rankCode == 0 or bit.band(rankCode, playerData:getCode()) > 0 then -- Player has access to execute command
-                local funcArgs, funcArgs_toBeExecuted = command_table[category][name][3], {}
+                local funcArgs, funcArgs_toBeExecuted = command_table[category][name][2], {}
                 for i, arg in ipairs(funcArgs) do -- Read Function Arguments
                     local readArg
                     if arg[2] == 1 then
@@ -254,17 +335,19 @@ if SERVER then
                         readArg = net.ReadInt(64)
                     elseif arg[2] == 3 then
                         readArg = net.ReadFloat()
-                    elseif arg[2] == 4 or arg[2] == 5 then
+                    elseif arg[2] == 4 then
                         readArg = net.ReadString()
+                    elseif arg[2] == 5 then
+                        readArg = net.ReadEntity()
                     elseif arg[2] == 6 then
                         readArg = net.ReadTable()
                     end
-                    readArg = readArg or funcArgs[4]
-                    if !readArg and funcArgs[3] then break end
+                    readArg = readArg or arg[4]
+                    if !readArg and arg[3] then break end
                     table.insert(funcArgs_toBeExecuted, readArg)
                 end
                 if #funcArgs == #funcArgs_toBeExecuted then -- All checks complete, command can be executed
-                    local a = command_table[category][name][2](ply, unpack(funcArgs_toBeExecuted))
+                    local a = command_table[category][name][3](ply, unpack(funcArgs_toBeExecuted))
                     if a then returnCommandErrors(ply, 4, category, name, a) -- Function Feedback
                     else returnCommandErrors(ply, 0, category, name) -- Executed Successfully
                     end
@@ -280,6 +363,13 @@ if SERVER then
         if num == 1 then return isbool , tobool
         elseif num == 2 or num == 3 then return isnumber , tonumber
         elseif num == 4 or num == 5 then return isstring , tostring
+        elseif num == 5 then return isentity, function (str)
+            for _,ply in ipairs(player.GetAll()) do
+                if string.find(ply:Nick(),str) then
+                    return ply
+                end
+            end
+        end
         elseif num == 6 then return istable , string.ToTable
         end
     end
@@ -297,12 +387,12 @@ if SERVER then
         if command_table[category] ~= nil and command_table[category][name] ~= nil then
             if IsValid(ply) then
                 local rankCode = command_table[category][name][1] or 0
-                local playerData = JAAS.player(ply:SteamID()) or 0
+                local playerData = JAAS.Player(ply) or 0
                 if not bit.band(rankCode, playerData:getCode()) > 0 then
                     return
                 end
             end
-            local funcArgs, funcArgs_toBeExecuted = command_table[category][name][3], {}
+            local funcArgs, funcArgs_toBeExecuted = command_table[category][name][2], {}
             for i, arg in ipairs(funcArgs) do
                 local value = typeFix(arg[2], args[i + 2])
                 value = value or funcArgs[4]
@@ -312,7 +402,7 @@ if SERVER then
                 table.insert(funcArgs_toBeExecuted, value)
             end
             if #funcArgs == #funcArgs_toBeExecuted then
-                local feedback = command_table[category][name][2](ply, unpack(funcArgs_toBeExecuted))
+                local feedback = command_table[category][name][3](ply, unpack(funcArgs_toBeExecuted))
                 if feedback then
                     if istable(feedback) then
                         PrintTable(feedback)
@@ -324,7 +414,7 @@ if SERVER then
         else
             Error("Command invalid\n") -- Replace with Log Module error
         end
-    end)
+    end, commandAutoComplete)
 elseif CLIENT then
 
     net.Receive("JAAS_ClientCommand", function()
@@ -363,7 +453,7 @@ elseif CLIENT then
         else
             print "Unknown Command"
         end
-    end)
+    end, commandAutoComplete)
 end
 
 concommand.Add("JAAS_printCommands", function ()
