@@ -37,30 +37,6 @@ JAAS.include = setmetatable({
     }, {__call = function (self, _) self.init(_) end}),
 }, {__call = function (self, _) self.shared.init(_) end})
 
-for _, file_ in ipairs(file.Find("jaas/autorun/*.lua", "lsv")) do
-    include.server("jaas/autorun/"..file_)
-end
-
-print "-------- JAAS Modules --------"
-
-include ["shared"] {
-    "JAAS_variables.lua",
-    "jaas-core/JAAS-log.lua",
-    "jaas-core/JAAS-developer.lua"
-}
-
-include ["server"] {
-    "jaas-core/JAAS-user.lua",
-    "jaas-core/JAAS-rank.lua"
-}
-
-include ["shared"] {
-    "jaas-core/JAAS-command.lua",
-    "jaas-core/JAAS-permission.lua"
-}
-
-if CLIENT then print "------------------------------" end
-
 local function includeLoop(table_)
     local message = false
     for _,v in ipairs{"pre", "init", "post"} do
@@ -90,6 +66,28 @@ local function includeLoop(table_)
     end
     print "------------------------------"
 end
+
+for _, file_ in ipairs(file.Find("jaas/autorun/*.lua", "lsv")) do
+    include.server("jaas/autorun/"..file_)
+end
+
+print "-------- JAAS Modules --------"
+
+include ["shared"] {
+    "JAAS_variables.lua",
+    "jaas-core/JAAS-log.lua",
+    "jaas-core/JAAS-developer.lua"
+}
+
+include ["server"] {
+    "jaas-core/JAAS-user.lua",
+    "jaas-core/JAAS-rank.lua",
+    "jaas-core/JAAS-permission.lua"
+}
+
+include ["shared"] "jaas-core/JAAS-command.lua"
+
+if CLIENT then print "------------------------------" end
 
 if SERVER then
     includeLoop(JAAS.include)
