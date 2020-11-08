@@ -1,5 +1,5 @@
 --if JAAS then return end
-JAAS = {}
+JAAS = {["Command"] = false, ["Rank"] = false, ["Permission"] = false, ["Player"] = false}
 
 local include = setmetatable({}, {__call = function (self, _)
     if !istable(_) then include(_) return end
@@ -16,7 +16,7 @@ end})
 function include.server(_) if SERVER then include(_) end end
 function include.client(_) AddCSLuaFile(_) if CLIENT then include(_) end end
 function include.shared(_) AddCSLuaFile(_) include(_) end
-local stageMeta, stateMeta = 
+local stageMeta, stateMeta =
     {__call = function (self, _) rawset(self, #self + 1, _) end, __index = function () end, __newindex = function () end},
     {__call = function (self, _) self.init(_) end}
 JAAS.include = setmetatable({
@@ -49,17 +49,17 @@ local function includeLoop(table_)
         if a > 0 then
             if !message then print "-------- JAAS Autorun --------" message = true end
             for _, file_ in ipairs(table_.shared[v]) do
-                include.shared(file_) 
+                include.shared(file_)
                 print("  [shared] "..file_)
             end
-            if SERVER then 
+            if SERVER then
                 for _, file_ in ipairs(table_.server[v]) do
-                    include.server(file_) 
-                    print("  [server] "..file_) 
+                    include.server(file_)
+                    print("  [server] "..file_)
                 end
             end
             for _, file_ in ipairs(table_.client[v]) do
-                include.client(file_) 
+                include.client(file_)
                 print("  [client] "..file_)
             end
         end
@@ -89,12 +89,8 @@ include ["shared"] "jaas-core/JAAS-command.lua"
 
 if CLIENT then print "------------------------------" end
 
-if SERVER then
-    includeLoop(JAAS.include)
-end
-
 local dev = JAAS.Dev()
-dev.sharedSync("JAAS_InitTableSync", function (_, ply)
+local RefreshClientInclude = dev.sharedSync("JAAS_InitTableSync", function (_, ply)
     local includeTable, count = {
         shared = {pre = {}, init = {}, post = {}},
         client = {pre = {}, init = {}, post = {}}
@@ -106,10 +102,18 @@ dev.sharedSync("JAAS_InitTableSync", function (_, ply)
         end
     end
     if count > 0 then
-        net.Start("JAAS_InitTableSync")
-        net.WriteTable(includeTable)
-        net.Send(ply)
+        return includeTable
     end
-end, "JAAS_ClientInit", function (_, ply)
-    includeLoop(net.ReadTable())
+end, "JAAS_ClientInit", function (_, ply, table)
+    includeLoop(table)
 end)
+
+if SERVER then
+    includeLoop(JAAS.include)
+
+    concommand.Add("JAAS_RefreshClientFiles", function ()
+        for _,ply in ipairs(player.GetAll()) do
+            RefreshClientInclude(nil,ply)
+        end
+    end)
+end
