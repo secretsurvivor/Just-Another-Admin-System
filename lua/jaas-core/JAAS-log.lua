@@ -6,7 +6,7 @@ function log.getLogFile(date)
 end
 
 function log.writeToLogFile(str)
-    
+
 end
 
 function log:printLog(str)
@@ -29,10 +29,22 @@ end
 local executionTrace = {} -- [label] = {[id] = {file path, line}*}
 local refusedTrace = {} -- [label] = {id*}
 
+local function addToExecutionTrace(label, filepath, line)
+    local duplicate = false
+    for _,v in ipairs(executionTrace[label]) do
+        if v[1] == filepath and v[2] == line then
+            duplicate = true
+        end
+    end
+    if !duplicate then
+        table.insert(executionTrace[label], {filepath, line})
+    end
+end
+
 function log:executionTraceLog()
     local info = debug.getinfo(3)
     if executionTrace[self.label] ~= nil then
-        table.insert(executionTrace[self.label], {info.short_src, info.currentline})
+        addToExecutionTrace(self.label, info.short_src, info.currentline)
     else
         executionTrace[self.label] = {{info.short_src, info.currentline}}
     end
