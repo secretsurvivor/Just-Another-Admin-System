@@ -35,7 +35,7 @@ setmetatable(permission_local, {
         return setmetatable({name = name}, {
             __index = permission_local,
             __newindex = function () end,
-            __metatable = nil
+            __metatable = "jaas_permission_object"
         })
     end
 })
@@ -57,12 +57,25 @@ function permission.registerPermission(name, code)
     end
 end
 
+hook.Add("JAAS_RemoveRankPosition", "JAAS_RankRemove-Permission", function (func)
+    sql.Begin()
+    for name, code in pairs(permission_table) do
+        local new_code = func(code)
+        permission_table[name] = new_code
+        dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", new_code, name)
+    end
+    sql.Commit()
+end)
+
 JAAS.Permission = setmetatable({}, {
-    __call = function ()
+    __call = function (self, permission_name)
 		local f_str, id = log:executionTraceLog("Command")
         if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
             log:removeTraceLog(id)
             return
+        end
+        if permission_name and permission_table[permission_name] ~= nil then
+            return permission_local(permission_name)
         end
         return setmetatable({}, {__index = permission, __newindex = function () end, __metatable = nil})
     end

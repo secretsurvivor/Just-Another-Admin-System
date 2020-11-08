@@ -1,6 +1,6 @@
 local permission = JAAS.Permission()
 
-local noclip = permission.registerPermission("noclip", 1):getCode()
+local noclip = permission.registerPermission("noclip"):getCode()
 
 hook.Add("PlayerNoClip", "JAAS_noclipPermission", function (ply, desiredNoClipState)
     local code = JAAS.Player(ply):getCode()
