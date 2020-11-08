@@ -72,16 +72,20 @@ setmetatable(local_rank, {
 })
 
 local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true} -- Used for global functions, for rank table
+local rank_count = dev.fQuery("SELECT COUNT(id) FROM JAAS_rank")[1]["COUNT(id)"]
 
 function rank.addRank(name, power, invis)
-    local t = dev.fQuery("SELECT MAX(id), MAX(position) FROM JAAS_rank")[1]
-    local next_id, next_position = t["MAX(id)"], t["MAX(position)"]
-    if next_position then
-        if next_id = "NULL" then next_id = 0 end
-        if next_position == "NULL" then next_position = 0 end
-        local a = dev.fQuery("INSERT INTO JAAS_rank(id, name, position, power, invisible) VALUES (%u, '%s', %u, %u, %s)", 1 + next_id, name, 1 + next_position, power, invis)
-        if a != false then
-            return local_rank(name)
+    if rank_count < 64 then
+        local t = dev.fQuery("SELECT MAX(id), MAX(position) FROM JAAS_rank")[1]
+        local next_id, next_position = t["MAX(id)"], t["MAX(position)"]
+        if next_position then
+            if next_id = "NULL" then next_id = 0 end
+            if next_position == "NULL" then next_position = 0 end
+            local a = dev.fQuery("INSERT INTO JAAS_rank(id, name, position, power, invisible) VALUES (%u, '%s', %u, %u, %s)", 1 + next_id, name, 1 + next_position, power, invis)
+            if a != false then
+                return local_rank(name)
+                rank_count = 1 + rank_count
+            end
         end
     end
 end
@@ -112,12 +116,15 @@ function rank.removeRank(name)
     if isstring(name) then
         rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE name='%s'", name)[1]["position"])
         q = dev.fQuery("DELETE FROM JAAS_rank WHERE name='%s'", name)
+        rank_count = rank_count - 1
     elseif isnumber(name) then
         rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%s", name)[1]["position"])
         q = dev.fQuery("DELETE FROM JAAS_rank WHERE id=%s", name)
+        rank_count = rank_count - 1
     elseif istable(name) and getmetatable(name) == "jaas_rank_object" then
         rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%s", name.id)[1]["position"])
         q = dev.fQuery("DELETE FROM JAAS_rank WHERE id=%s", name.id)
+        rank_count = rank_count - 1
     end
     if q != false then
         local rank_code = bit.lshift(1, rank_position - 1)
@@ -163,18 +170,21 @@ function rank.removeRanks(...)
                     if dev.fQuery("DELETE FROM JAAS_rank WHERE name='%s'", v) then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
+                        rank_count = rank_count - 1
                     end
                 elseif isnumber(v) then
                     rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%s", v)[1]["position"])
                     if dev.fQuery("DELETE FROM JAAS_rank WHERE id=%s", v) then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
+                        rank_count = rank_count - 1
                     end
                 elseif istable(v) and getmetatable(v) == "jaas_rank_object" then
                     rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%s", v.id)[1]["position"])
                     if dev.fQuery("DELETE FROM JAAS_rank WHERE id=%s", v.id) then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
+                        rank_count = rank_count - 1
                     end
                 end
                 rankPositions[rank_code_count] = rank_position
