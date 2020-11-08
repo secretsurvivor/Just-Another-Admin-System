@@ -27,7 +27,7 @@ command:registerCommand("God", function(ply)
 			log:chatLog(ply:Nick().." has Godmode")
 		end
 	end
-end, nil, 1)
+end)
 
 command:registerCommand("Kill", function (ply, target)
 	if IsValid(target) and target:Alive() then
@@ -35,20 +35,18 @@ command:registerCommand("Kill", function (ply, target)
 	elseif ply:Alive() then
 		ply:Kill()
 	end
-end, argTable:add("Target", "PLAYER"):dispense(), 2)
+end, argTable:add("Target", "PLAYER"):dispense())
 
-local listBots = {}
 command:registerCommand("CreateBot", function (ply)
-	if ( !game.SinglePlayer() && player.GetCount() < game.MaxPlayers() ) then
-        local num = #listBots
-        listBots[ num ] = player.CreateNextBot("Bot_" .. ( num + 1 ) )
+	if (!game.SinglePlayer() and player.GetCount() < game.MaxPlayers()) then
+        player.CreateNextBot("Bot_"..((#player.GetBots()) + 1))
     else
-	    print( "Can't create bot!" )
+	    return "Cannot create bot"
     end
-end, nil, 1)
+end)
 
 command:registerCommand("SetRunSpeed", function (ply, speed, target)
 	if IsValid(target) then
 		target:SetRunSpeed(speed)
 	end
-end, argTable:add("Speed", "INT"):add("Target", "PLAYER"):dispense(), 1)
+end, argTable:add("Speed", "INT"):add("Target", "PLAYER"):dispense())

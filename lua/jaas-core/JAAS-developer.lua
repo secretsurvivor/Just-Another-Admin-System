@@ -96,7 +96,7 @@ end
 function dev.mergeSort(table) -- Acc
 	local function sort(table, lower, upper)
 		if lower < upper then
-			local mid = math.ceil((lower + upper)/2))
+			local mid = math.ceil((lower + upper)/2)
 			sort(table, lower, mid)
 			sort(table, mid + 1, upper)
 			do
@@ -115,7 +115,7 @@ function dev.mergeSort(table) -- Acc
 						i = 1 + i
 					else
 						table[k] = right[j]
-						j + 1 + j
+						j = 1 + j
 					end
 				end
 				while i < sub1_l do

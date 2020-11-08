@@ -311,7 +311,7 @@ local function commandAutoComplete(cmd, args_str)
                                 elseif arg_type == 7 then -- Rank
                                 elseif arg_type == 8 then -- Ranks
                                 elseif arg_type == 9 then -- Option
-                                    for k,_ in pairs(t[2][i-2][4])
+                                    for k,_ in pairs(t[2][i-2][4]) do
                                         table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." "..k)
                                     end
                                 elseif arg_type == 10 then -- Options

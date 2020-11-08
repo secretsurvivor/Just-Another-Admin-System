@@ -79,12 +79,12 @@ function rank.addRank(name, power, invis)
         local t = dev.fQuery("SELECT MAX(id), MAX(position) FROM JAAS_rank")[1]
         local next_id, next_position = t["MAX(id)"], t["MAX(position)"]
         if next_position then
-            if next_id = "NULL" then next_id = 0 end
+            if next_id == "NULL" then next_id = 0 end
             if next_position == "NULL" then next_position = 0 end
             local a = dev.fQuery("INSERT INTO JAAS_rank(id, name, position, power, invisible) VALUES (%u, '%s', %u, %u, %s)", 1 + next_id, name, 1 + next_position, power, invis)
             if a != false then
-                return local_rank(name)
                 rank_count = 1 + rank_count
+                return local_rank(name)
             end
         end
     end
@@ -187,8 +187,8 @@ function rank.removeRanks(...)
                         rank_count = rank_count - 1
                     end
                 end
-                rankPositions[rank_code_count] = rank_position
-                if k > rank_code_count then
+                rankPositions[rank_code_count + 1] = rank_position
+                if k > rank_code_count + 1 then
                     rankPositions[k] = nil
                 end
             end
