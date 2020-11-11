@@ -1,31 +1,31 @@
 local dev = JAAS.Dev()
 local log = JAAS.Log("Rank")
-if !sql.TableExists("JAAS_rank") then
-	dev.fQuery("CREATE TABLE JAAS_rank(id INT NOT NULL UNIQUE PRIMARY KEY, name TEXT NOT NULL UNIQUE, position UNSIGNED TINYINT(255) NOT NULL UNIQUE CHECK (position != 0 AND position <= 64), power UNSIGNED TINYINT(255) DEFAULT 0, invisible BOOL DEFAULT FALSE)")
+if !sql.TableExists("JAAS_rank") and SERVER then
+	dev.fQuery("CREATE TABLE JAAS_rank(name TEXT NOT NULL UNIQUE, position UNSIGNED TINYINT(255) NOT NULL UNIQUE CHECK (position != 0 AND position <= 64), power UNSIGNED TINYINT(255) DEFAULT 0, invisible BOOL DEFAULT FALSE)")
 end
 
 local local_rank = {["getName"] = true, ["setName"] = true, ["getCodePosition"] = true, ["getCode"] = true} -- Used for local functions, for rank data
 
 function local_rank:getName()
-    local name = dev.fQuery("SELECT name FROM JAAS_rank WHERE id=%u", self.id)
+    local name = dev.fQuery("SELECT name FROM JAAS_rank WHERE rowid=%u", self.id)
     if name then
         return name[1]["name"]
     end
 end
 
 function local_rank:setName(name)
-    return dev.fQuery("UPDATE JAAS_rank SET name='%s' WHERE id=%u", name, self.id)
+    return dev.fQuery("UPDATE JAAS_rank SET name='%s' WHERE rowid=%u", name, self.id)
 end
 
 function local_rank:getCodePosition()
-    local position = dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%u", self.id)
+    local position = dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%u", self.id)
     if position then
         return position[1]["position"]
     end
 end
 
 function local_rank:getCode()
-    local position = dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%u", self.id)
+    local position = dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%u", self.id)
     if position then
         position = position[1]["position"]
         return bit.lshift(1, position)
@@ -33,14 +33,14 @@ function local_rank:getCode()
 end
 
 function local_rank:getPower()
-    local power = dev.fQuery("SELECT power FROM JAAS_rank WHERE id=%u", self.id)
+    local power = dev.fQuery("SELECT power FROM JAAS_rank WHERE rowid=%u", self.id)
     if power then
         return power[1]["power"]
     end
 end
 
 function local_rank:setPower(power)
-    local a = dev.fQuery("UPDATE JAAS_rank SET power=%u WHERE id=%u", power, self.id)
+    local a = dev.fQuery("UPDATE JAAS_rank SET power=%u WHERE rowid=%u", power, self.id)
     if a then
         hook.Run("JAAS-rankPowerCache-dirty")
         return a
@@ -48,21 +48,21 @@ function local_rank:setPower(power)
 end
 
 function local_rank:getInvis()
-    local invis = dev.fQuery("SELECT invisible FROM JAAS_rank WHERE id=%u", self.id)
+    local invis = dev.fQuery("SELECT invisible FROM JAAS_rank WHERE rowid=%u", self.id)
     if invis then
         return invis[1]["invisible"]
     end
 end
 
 function local_rank:setInvis(invis)
-    return dev.fQuery("UPDATE JAAS_rank SET invisible=%s WHERE id=%u", invis, self.id)
+    return dev.fQuery("UPDATE JAAS_rank SET invisible=%s WHERE rowid=%u", invis, self.id)
 end
 
 setmetatable(local_rank, {
     __call = function(self, rank_name)
         if isstring(rank_name) then
-            local a = dev.fQuery("SELECT id FROM JAAS_rank WHERE name='%s'", rank_name)
-            return setmetatable({id = a[1]["id"]}, {__index = local_rank})
+            local a = dev.fQuery("SELECT rowid FROM JAAS_rank WHERE name='%s'", rank_name)
+            return setmetatable({id = a[1]["rowid"]}, {__index = local_rank})
         elseif isnumber(rank_name) then
             return setmetatable({id = rank_name}, {__index = local_rank})
         end
@@ -72,16 +72,15 @@ setmetatable(local_rank, {
 })
 
 local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true} -- Used for global functions, for rank table
-local rank_count = dev.fQuery("SELECT COUNT(id) FROM JAAS_rank")[1]["COUNT(id)"]
+local rank_count = dev.fQuery("SELECT COUNT(rowid) FROM JAAS_rank")[1]["COUNT(rowid)"]
 
 function rank.addRank(name, power, invis)
     if rank_count < 64 then
-        local t = dev.fQuery("SELECT MAX(id), MAX(position) FROM JAAS_rank")[1]
-        local next_id, next_position = t["MAX(id)"], t["MAX(position)"]
-        if next_position then
-            if next_id == "NULL" then next_id = 0 end
+        local t = dev.fQuery("SELECT MAX(position) FROM JAAS_rank")[1]
+        if t then
+            local next_position = t["MAX(position)"]
             if next_position == "NULL" then next_position = 0 end
-            local a = dev.fQuery("INSERT INTO JAAS_rank(id, name, position, power, invisible) VALUES (%u, '%s', %u, %u, %s)", 1 + next_id, name, 1 + next_position, power, invis)
+            local a = dev.fQuery("INSERT INTO JAAS_rank(name, position, power, invisible) VALUES (%u, '%s', %u, %u, %s)", name, 1 + next_position, power, invis)
             if a != false then
                 rank_count = 1 + rank_count
                 return local_rank(name)
@@ -118,12 +117,12 @@ function rank.removeRank(name)
         q = dev.fQuery("DELETE FROM JAAS_rank WHERE name='%s'", name)
         rank_count = rank_count - 1
     elseif isnumber(name) then
-        rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%s", name)[1]["position"])
-        q = dev.fQuery("DELETE FROM JAAS_rank WHERE id=%s", name)
+        rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", name)[1]["position"])
+        q = dev.fQuery("DELETE FROM JAAS_rank WHERE rowid=%s", name)
         rank_count = rank_count - 1
     elseif istable(name) and getmetatable(name) == "jaas_rank_object" then
-        rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%s", name.id)[1]["position"])
-        q = dev.fQuery("DELETE FROM JAAS_rank WHERE id=%s", name.id)
+        rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", name.id)[1]["position"])
+        q = dev.fQuery("DELETE FROM JAAS_rank WHERE rowid=%s", name.id)
         rank_count = rank_count - 1
     end
     if q != false then
@@ -150,7 +149,7 @@ function rank.removeRank(name)
         sql.Begin()
         for t in rank.rankIterator() do
             if tonumber(t["position"]) > rank_position then
-                dev.fQuery("UPDATE JAAS_rank SET position=%u WHERE id=%s", t["position"]-1, t["id"])
+                dev.fQuery("UPDATE JAAS_rank SET position=%u WHERE rowid=%s", t["position"]-1, t["id"])
             end
         end
         sql.Commit()
@@ -173,15 +172,15 @@ function rank.removeRanks(...)
                         rank_count = rank_count - 1
                     end
                 elseif isnumber(v) then
-                    rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%s", v)[1]["position"])
+                    rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", v)[1]["position"])
                     if dev.fQuery("DELETE FROM JAAS_rank WHERE id=%s", v) then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
                         rank_count = rank_count - 1
                     end
                 elseif istable(v) and getmetatable(v) == "jaas_rank_object" then
-                    rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE id=%s", v.id)[1]["position"])
-                    if dev.fQuery("DELETE FROM JAAS_rank WHERE id=%s", v.id) then
+                    rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", v.id)[1]["position"])
+                    if dev.fQuery("DELETE FROM JAAS_rank WHERE rowid=%s", v.id) then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
                         rank_count = rank_count - 1
@@ -219,7 +218,7 @@ function rank.removeRanks(...)
             local i = 1
             for t in rank.rankIterator() do
                 if rankPositions[i] < tonumber(t["position"]) then
-                    dev.fQuery("UPDATE JAAS_rank SET position=%u WHERE id=%s", t["position"]-i, t["id"])
+                    dev.fQuery("UPDATE JAAS_rank SET position=%u WHERE rowid=%s", t["position"]-i, t["id"])
                     i = 1 + i
                 end
             end
@@ -259,7 +258,7 @@ function rank.getMaxPower(code)
 end
 
 function rank.getRank(name)
-    local a = dev.fQuery("SELECT id FROM JAAS_rank WHERE name='%s'", rank_name)
+    local a = dev.fQuery("SELECT rowid FROM JAAS_rank WHERE name='%s'", rank_name)
     if a then
         return local_rank(tonumber(a[1]["id"]))
     end
@@ -273,12 +272,12 @@ JAAS.Rank = setmetatable({}, {
             return
         end
         if rank_name then
-            local a = dev.fQuery("SELECT id FROM JAAS_rank WHERE name='%s'", rank_name)
+            local a = dev.fQuery("SELECT rowid FROM JAAS_rank WHERE name='%s'", rank_name)
             if a then
                 return local_rank(tonumber(a[1]["id"]))
             end
         else
-            return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = nil})
+            return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})
         end
     end,
     __index = function () end,

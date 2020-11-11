@@ -144,7 +144,7 @@ JAAS.Dev = setmetatable({}, {
 		return setmetatable({}, {
 			__index = dev,
 			__newindex = function () end,
-			__metatable = nil
+			__metatable = "jaas_developer_library"
 		})
 	end
 })

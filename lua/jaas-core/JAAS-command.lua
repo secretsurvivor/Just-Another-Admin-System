@@ -1,8 +1,9 @@
 if JAAS.Command then return end
 local dev = JAAS.Dev()
 local log = JAAS.Log("Command")
-if !sql.TableExists("JAAS_command") then
+if !sql.TableExists("JAAS_command") and SERVER then
 	dev.fQuery("CREATE TABLE JAAS_command(name TEXT NOT NULL, category TEXT NOT NULL, code UNSIGNED BIG INT NOT NULL DEFAULT 0, PRIMARY KEY (name, category))")
+    dev.fQuery("CREATE UNIQUE INDEX JAAS_command_primary ON JAAS_command (name, category)")
 end
 
 local argTable = {["add"]=true, ["dispense"]=true} -- Argument Table Builder, for command registering and user interface
@@ -111,6 +112,24 @@ if SERVER then
             command_table[self.category][self.name][1] = c_xor
         end
         return q
+    end
+
+    function local_command:validPowerTarget(code, rank_library)
+        if getmetatable(rank_library) == "jaas_rank_library" then
+            if isnumber(code) then
+                if self:getCode() > 0 and code > 0 then
+                    return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code)
+                elseif self:getCode() > 0 then
+                    return rank_library.getMaxPower(self:getCode()) > 0
+                end
+            elseif getmetatable(code) == "jaas_command_object" or getmetatable(code) == "jaas_permission_object" or getmetatable(code) == "jaas_player_object" then
+                if self:getCode() > 0 and code:getCode() > 0 then
+                    return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code:getCode())
+                elseif self:getCode() > 0 then
+                    return rank_library.getMaxPower(self:getCode()) > 0
+                end
+            end
+        end
     end
 
     function local_command:executeCommand(...)
@@ -271,7 +290,7 @@ JAAS.Command = setmetatable({}, {
                 return local_command(command_name, command_category)
             end
         else
-            return setmetatable({category = "default"}, {__index = command, __newindex = function () end, __metatable = nil})
+            return setmetatable({category = "default"}, {__index = command, __newindex = function () end, __metatable = "jaas_command_library"})
         end
 	end,
 	__newindex = function() end,
@@ -443,7 +462,7 @@ if SERVER then
         return var
     end
 
-    concommand.Add("JAAS", function (ply, cmd, args, argStr)
+    concommand.Add("JAAS", function (ply, cmd, args, argStr) -- Not updated
         local category, name = args[1], args[2]
         if command_table[category] ~= nil and command_table[category][name] ~= nil then
             if IsValid(ply) then

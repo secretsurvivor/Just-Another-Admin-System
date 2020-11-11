@@ -1,7 +1,7 @@
 if JAAS.Permission then return end
 local dev = JAAS.Dev()
 local log = JAAS.Log("Permission")
-if !sql.TableExists("JAAS_permission") then
+if !sql.TableExists("JAAS_permission") and SERVER then
     dev.fQuery("CREATE TABLE JAAS_permission(name TEXT NOT NULL, code UNSIGNED BIG INT NOT NULL DEFAULT 0, PRIMARY KEY (name))")
 end
 
@@ -28,6 +28,27 @@ function permission_local:xorCode(code)
         permission_table[self.name] = c_xor
     end
     return q
+end
+
+function permission_local:codeCheck(code)
+    if isnumber(code) then
+        if self:getCode() == 0 or bit.band(self:getCode(), code) then
+            return true
+        end
+    elseif getmetatable(code) == "jaas_command_object" or getmetatable(code) == "jaas_permission_object" or getmetatable(code) == "jaas_player_object" then
+        if self:getCode() == 0 or bit.band(self:getCode(), code:getCode()) then
+            return true
+        end
+    end
+end
+
+function permission_local:defaultAccess()
+    if self:getCode() == 0 then
+        return true
+    end
+end
+
+function permission_local:update()
 end
 
 setmetatable(permission_local, {
@@ -77,7 +98,7 @@ JAAS.Permission = setmetatable({}, {
         if permission_name and permission_table[permission_name] ~= nil then
             return permission_local(permission_name)
         end
-        return setmetatable({}, {__index = permission, __newindex = function () end, __metatable = nil})
+        return setmetatable({}, {__index = permission, __newindex = function () end, __metatable = "jaas_permission_library"})
     end
 })
 

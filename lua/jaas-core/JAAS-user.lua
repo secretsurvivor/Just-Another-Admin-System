@@ -1,7 +1,8 @@
 local dev = JAAS.Dev()
 local log = JAAS.Log("Player")
-if !sql.TableExists("JAAS_user") then
-	dev.fQuery("CREATE TABLE JAAS_user(steamid TEXT NOT NULL, code UNSIGNED BIG INT DEFAULT 0, PRIMARY KEY (steamid))")
+if !sql.TableExists("JAAS_user") and SERVER then
+	dev.fQuery("CREATE TABLE JAAS_user(steamid TEXT NOT NULL UNIQUE, code UNSIGNED BIG INT DEFAULT 0)")
+	dev.fQuery("CREATE INDEX JAAS_user_steamid ON JAAS_user (steamid)")
 end
 
 gameevent.Listen("player_connect")
@@ -56,6 +57,30 @@ function user_local:xorCode(code)
 	end
 end
 
+function user_local:canTarget(code, rank_library)
+	if getmetatable(rank_library) == "jaas_rank_library" then
+		if isnumber(code) then
+			if self:getCode() > 0 and code > 0 then
+				return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code)
+			elseif self:getCode() > 0 then
+				return rank_library.getMaxPower(self:getCode()) > 0
+			end
+		elseif getmetatable(code) == "jaas_command_object" or getmetatable(code) == "jaas_permission_object" or getmetatable(code) == "jaas_player_object" then
+			if self:getCode() > 0 and code:getCode() > 0 then
+				return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code:getCode())
+			elseif self:getCode() > 0 then
+				return rank_library.getMaxPower(self:getCode()) > 0
+			end
+		end
+	end
+end
+
+function user_local:defaultAccess()
+    if self:getCode() == 0 then
+        return true
+    end
+end
+
 function user.userIterator(key)
 	local a = dev.fQuery("SELECT * FROM JAAS_user")
 	local i = 0
@@ -83,11 +108,6 @@ hook.Add("JAAS_RemoveRankPosition", "JAAS_RankRemove-Player", function (func)
 	sql.Commit()
 end)
 
-setmetatable(user, {
-	__index = function () end,
-	__newindex = function () end,
-	__metatable = nil
-})
 JAAS.Player = setmetatable({}, {
 	__call = function(self, steamid)
 		local f_str, id = log:executionTraceLog("Player")
@@ -105,7 +125,7 @@ JAAS.Player = setmetatable({}, {
 		if add_to_cache(steamid) then
 			return setmetatable({steamid = steamid}, {__index = user_local, __newindex = function () end, __metatable = "jaas_player_object"})
 		else
-			return setmetatable({}, {__index = user, __newindex = function () end, __metatable = nil})
+			return setmetatable({}, {__index = user, __newindex = function () end, __metatable = "jaas_player_library"})
 		end
 	end,
 	__newindex = function () end,
