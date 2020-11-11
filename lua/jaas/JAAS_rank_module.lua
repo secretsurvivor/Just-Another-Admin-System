@@ -8,33 +8,24 @@ local ModifyUser_ArgTable = arg:add("Rank", "RANK", true):add("Target", "PLAYER"
 command:registerCommand("AddUser", function (ply, rank_object, target)
     local user = JAAS.Player(ply)
     local target_object = JAAS.Player(target)
-    if IsValid(ply) then
-        if IsValid(target) then -- Apply rank change on target
-            if ply == target or rank.getMaxPower(user:getCode()) > rank.getMaxPower(target_object:getCode()) then
-                local rank_code = rank_object:getCode()
-                if bit.band(target_object:getCode(), rank_code) == 0 then
-                    target_object:xorCode(rank_code)
-                else
-                    return target:Nick().." already has that rank"
-                end
-            else
-                return "Cannot Target "..target:Nick()
-            end
-        else -- Apply rank change on caller
-            local rank_code = rank_object:getCode()
-            if bit.band(user:getCode(), rank_code) == 0 then
-                user:xorCode(rank_code)
-            else
-                return "You already have this rank"
-            end
-        end
-    else -- Server is caller
-        if IsValid(target) then
+    if target and IsValid(target) then -- Apply rank change on target
+        if !IsValid(ply) or ply == target or user:validPowerTarget(target_object, rank) then
             local rank_code = rank_object:getCode()
             if bit.band(target_object:getCode(), rank_code) == 0 then
                 target_object:xorCode(rank_code)
             else
                 return target:Nick().." already has that rank"
+            end
+        else
+            return "Cannot Target "..target:Nick()
+        end
+    else
+        if IsValid(ply) then -- Apply rank change on caller
+            local rank_code = rank_object:getCode()
+            if bit.band(user:getCode(), rank_code) == 0 then
+                user:xorCode(rank_code)
+            else
+                return "You already have this rank"
             end
         else
             return "Target must be valid to change rank" -- Can't change server's rank
@@ -45,33 +36,24 @@ end, ModifyUser_ArgTable)
 command:registerCommand("RemoveUser", function (ply, rank_object, target)
     local user = JAAS.Player(ply)
     local target_object = JAAS.Player(target)
-    if IsValid(ply) then
-        if IsValid(target) then
-            if ply == target or rank.getMaxPower(user:getCode()) > rank.getMaxPower(target_object:getCode()) then
-                local rank_code = rank_object:getCode()
-                if bit.band(target_object:getCode(), rank_code) > 0 then
-                    target_object:xorCode(rank_code)
-                else
-                    return target:Nick().." already has that rank"
-                end
-            else
-                return "Cannot Target "..target:Nick()
-            end
-        else -- Apply rank change on caller
-            local rank_code = rank_code:getCode()
-            if bit.band(user:getCode(), rank_code) > 0 then
-                user:xorCode(rank_code)
-            else
-                return "You already have this rank"
-            end
-        end
-    else -- Server is caller
-        if IsValid(target) then
+    if target and IsValid(target) then
+        if !IsValid(ply) or ply == target or user:validPowerTarget(target_object, rank) then
             local rank_code = rank_object:getCode()
             if bit.band(target_object:getCode(), rank_code) > 0 then
                 target_object:xorCode(rank_code)
             else
                 return target:Nick().." already has that rank"
+            end
+        else
+            return "Cannot Target "..target:Nick()
+        end
+    else
+        if IsValid(ply) then -- Apply rank change on caller
+            local rank_code = rank_code:getCode()
+            if bit.band(user:getCode(), rank_code) > 0 then
+                user:xorCode(rank_code)
+            else
+                return "You already have this rank"
             end
         else
             return "Target must be valid to change rank" -- Can't change server's rank
@@ -82,6 +64,7 @@ end, ModifyUser_ArgTable)
 command:setCategory "Rank"
 
 command:registerCommand("AddRank", function (ply, name, power, invis)
+    name = sql.SQLStr(name)
     rank.addRank(name, power, invis)
 end, arg:add("Name", "STRING", true):add("Power", "INT", false, 0):add("Invisible", "BOOL", false, false):dispense())
 

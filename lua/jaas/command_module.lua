@@ -37,7 +37,7 @@ command:registerCommand("Kill", function (ply, target)
 	end
 end, argTable:add("Target", "PLAYER"):dispense())
 
-command:registerCommand("CreateBot", function (ply)
+command:registerCommand("CreateBot", function ()
 	if (!game.SinglePlayer() and player.GetCount() < game.MaxPlayers()) then
         player.CreateNextBot("Bot_"..((#player.GetBots()) + 1))
     else
@@ -48,5 +48,11 @@ end)
 command:registerCommand("SetRunSpeed", function (ply, speed, target)
 	if IsValid(target) then
 		target:SetRunSpeed(speed)
+	else
+		if IsValid(ply) then
+			ply:SetRunSpeed(speed)
+		else
+			return "Target must be specified"
+		end
 	end
 end, argTable:add("Speed", "INT"):add("Target", "PLAYER"):dispense())
