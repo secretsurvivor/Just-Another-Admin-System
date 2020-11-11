@@ -6,45 +6,42 @@ function log.getLogFile(date)
 end
 
 function log.writeToLogFile(str)
-
+    if SERVER and file.Exists("", "DATA") then
+    elseif SERVER then
+    end
 end
 
 function log:printLog(str)
-    print("[JAAS] ["..self.label.."] - "..str)
+    local str = "[JAAS] ["..self.label.."] - "..str
+    print(str)
+    log.writeToLogFile(str)
 end
 
 function log:silentLog(str)
+    log.writeToLogFile(str)
 end
 
 function log:chatLog(str)
-    PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
+    local str = "[JAAS] - "..str
+    PrintMessage(HUD_PRINTTALK, str)
+    log.writeToLogFile(str)
 end
 
-function log:error(str, level)
+function log:gameLog()
 end
 
-function log:silentError(str, level)
-end
-
-local executionTrace = {} -- [label] = {[id] = {file path, line}*}
+local executionTrace = {} -- [label] = {[id] = {file path, line}}
 local refusedTrace = {} -- [label] = {id*}
-
-local function addToExecutionTrace(label, filepath, line)
-    local duplicate = false
-    for _,v in ipairs(executionTrace[label]) do
-        if v[1] == filepath and v[2] == line then
-            duplicate = true
-        end
-    end
-    if !duplicate then
-        table.insert(executionTrace[label], {filepath, line})
-    end
-end
 
 function log:executionTraceLog()
     local info = debug.getinfo(3)
     if executionTrace[self.label] ~= nil then
-        addToExecutionTrace(self.label, info.short_src, info.currentline)
+        for _,v in ipairs(executionTrace[self.label]) do
+            if v[1] == filepath and v[2] == line then
+                return
+            end
+        end
+        table.insert(executionTrace[self.label], {info.short_src, info.currentline})
     else
         executionTrace[self.label] = {{info.short_src, info.currentline}}
     end
@@ -53,6 +50,11 @@ end
 
 function log:removeTraceLog(id)
     if refusedTrace[self.label] ~= nil then
+        for _,v in ipairs(refusedTrace[self.label]) do
+            if v == id then
+                return
+            end
+        end
         table.insert(refusedTrace[self.label], id)
     else
         refusedTrace[self.label] = {id}
@@ -118,7 +120,7 @@ JAAS.Log = setmetatable({}, {
         return setmetatable({label = label}, {
             __index = log,
             __newindex = function () end,
-            __metatable = nil
+            __metatable = "jaas_log_library"
         })
     end,
     __index = function () end,
