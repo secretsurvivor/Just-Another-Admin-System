@@ -4,6 +4,9 @@ local log = JAAS.Log("Developer")
 local dev = {}
 
 function dev.fQuery(s, ...)
+	if {...} == nil then
+		query(s)
+	end
 	return query(format(s, ...))
 end
 
@@ -134,12 +137,21 @@ function dev.mergeSort(table) -- Acc
 	return sort(table, 1, (#table) - 1)
 end
 
+function dev.isRankObject(var) return getmetatable(var) == "jaas_rank_object" end
+function dev.isPermissionObject(var) return getmetatable(var) == "jaas_permission_object" end
+function dev.isCommandObject(var) return getmetatable(var) == "jaas_command_object" end
+function dev.isPlayerObject(var) return getmetatable(var) == "jaas_player_object" end
+function dev.isRankLibrary(var) return getmetatable(var) == "jaas_rank_library" end
+function dev.isCommandLibrary(var) return getmetatable(var) == "jaas_command_library" end
+function dev.isPermissionLibrary(var) return getmetatable(var) == "jaas_permission_library" end
+function dev.isPlayerLibrary(var) return getmetatable(var) == "jaas_player_library" end
+function dev.isLogLibrary(var) return getmetatable(var) == "jaas_log_library" end
+
 JAAS.Dev = setmetatable({}, {
 	__call = function ()
 		local f_str, id = log:executionTraceLog()
 		if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-			log:removeTraceLog(id)
-			return
+			return log:removeTraceLog(id)
 		end
 		return setmetatable({}, {
 			__index = dev,

@@ -28,7 +28,7 @@ function local_rank:getCode()
     local position = dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%u", self.id)
     if position then
         position = position[1]["position"]
-        return bit.lshift(1, position)
+        return bit.lshift(1, position - 1)
     end
 end
 
@@ -58,6 +58,8 @@ function local_rank:setInvis(invis)
     return dev.fQuery("UPDATE JAAS_rank SET invisible=%s WHERE rowid=%u", invis, self.id)
 end
 
+debug.getregistry()["JAAS_RankObject"] = local_rank
+
 setmetatable(local_rank, {
     __call = function(self, rank_name)
         if isstring(rank_name) then
@@ -71,7 +73,7 @@ setmetatable(local_rank, {
 	__metatable = "jaas_rank_object"
 })
 
-local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true} -- Used for global functions, for rank table
+local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true, ["codeIterator"] = true} -- Used for global functions, for rank table
 local rank_count = dev.fQuery("SELECT COUNT(rowid) FROM JAAS_rank")[1]["COUNT(rowid)"]
 
 function rank.addRank(name, power, invis)
@@ -110,6 +112,48 @@ function rank.rankIterator(key)
     end
 end
 
+function rank.codeIterator(code)
+    if code == 0 then
+        return function () end
+    end
+    local max_bits = math.ceil(math.log(code, 2))
+    do
+        local max_shift = bit.lshift(1, max_bits - 1)
+        if code < max_shift then
+            max_bits = max_bits - 1
+        elseif code == max_shift then
+            local e = false
+            return function ()
+                if !e then
+                    return dev.fQuery("SELECT * FROM JAAS_rank WHERE position=%u", max_bits)[1]
+                else
+                    e = !e
+                end
+            end
+        end
+    end
+    local where_str
+    while max_bits >= 0 do
+        local max_shift = bit.lshift(1, max_bits - 1)
+        if bit.band(max_bits, max_shift) then
+            if where_str == nil then
+                where_str = "position="..max_bits
+            else
+                where_str = where_str.." OR position="..max_bits
+            end
+        end
+        max_bits = max_bits - 1
+    end
+    local rank_table = dev.fQuery("SELECT * FROM JAAS_rank WHERE "..where_str)
+    local i = 0
+    return function ()
+        i = 1 + i
+        if i <= (#rank_table) then
+            return rank_table[i]
+        end
+    end
+end
+
 function rank.removeRank(name)
     local q, rank_position
     if isstring(name) then
@@ -120,7 +164,7 @@ function rank.removeRank(name)
         rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", name)[1]["position"])
         q = dev.fQuery("DELETE FROM JAAS_rank WHERE rowid=%s", name)
         rank_count = rank_count - 1
-    elseif istable(name) and getmetatable(name) == "jaas_rank_object" then
+    elseif dev.isRankObject(var) then
         rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", name.id)[1]["position"])
         q = dev.fQuery("DELETE FROM JAAS_rank WHERE rowid=%s", name.id)
         rank_count = rank_count - 1
@@ -247,8 +291,8 @@ function rank.getMaxPower(code)
         return p_cache[code]
     else
         local max = 0
-        for t in rank.rankIterator() do
-            if bit.band(code, bit.lshift(1, t.position)) > 0 and t.power > max then
+        for t in rank.codeIterator(code) do
+            if t.power > max then
                 max = t.power
             end
         end
@@ -264,12 +308,13 @@ function rank.getRank(name)
     end
 end
 
+debug.getregistry()["JAAS_RankLibrary"] = rank
+
 JAAS.Rank = setmetatable({}, {
     __call = function (self, rank_name)
 		local f_str, id = log:executionTraceLog()
         if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-            log:removeTraceLog(id)
-            return
+            return log:removeTraceLog(id)
         end
         if rank_name then
             local a = dev.fQuery("SELECT rowid FROM JAAS_rank WHERE name='%s'", rank_name)
