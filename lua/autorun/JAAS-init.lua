@@ -39,7 +39,7 @@ JAAS.include = setmetatable({
 local hook_func = {}
 JAAS.hook = setmetatable({
     add = setmetatable({
-        permission = function (name) -- JAAS.hook ["add"] ["permission"] name identifier (function () end)
+        permission = function (name) -- JAAS.hook.add ["permission"] name identifier (function () end)
             return function (identifier)
                 return function (func)
                     if isfunction(func) then
@@ -54,7 +54,7 @@ JAAS.hook = setmetatable({
                 end
             end
         end,
-        command = function (category) -- JAAS.hook ["add"] ["command"] category name identifier (function () end)
+        command = function (category) -- JAAS.hook.add ["command"] category name identifier (function () end)
             return function (name)
                 return function (identifier)
                     return function (func)
@@ -75,27 +75,45 @@ JAAS.hook = setmetatable({
                 end
             end
         end
-    }, {}),
+    }, {__call = function (self, category) -- JAAS.hook.add category name identifier (function () end)
+        return function (name)
+            return function (identifier)
+                return function (func)
+                    if isfunction(func) then
+                        if hook_func.other == nil then
+                            hook_func.other = {[category] = {[name] = {[identifier] = func}}}
+                        elseif hook_func.other[category] == nil then
+                            hook_func.other[category] = {[name] = {[identifier] = func}}
+                        elseif hook_func.other[category][name] == nil then
+                            hook_func.other[category][name] = {[identifier] = func}
+                        else
+                            hook_func.other[category][name][identifier] = func
+                        end
+                    end
+                end
+            end
+        end
+    end, __newindex = function () end}),
     run = setmetatable({
-        permission = function (name) -- JAAS.hook ["run"] ["permission"] name (...)
+        permission = function (name) -- JAAS.hook.run ["permission"] name (...)
             return function (...)
                 local varArgs = ...
                 if hook_func.permission != nil and hook_func.permission[name] != nil then
                     coroutine.create(function ()
-                        for _,v in ipairs(hook_func.permission[name]) do
+                        for _,v in pairs(hook_func.permission[name]) do
                             v(varArgs)
                         end
                     end).resume()
                 end
             end
         end,
-        command = function (category) -- JAAS.hook ["run"] ["command"] category name (...)
+        command = function (category) -- JAAS.hook.run ["command"] category name (...)
             return function (name)
                 return function (...)
                 local varArgs = ...
                     if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil then
                         coroutine.create(function ()
-                            for _,v in ipairs(hook_func.command[category][name]) do
+                            for _,v in pairs(hook_func.command[category][name]) do
                                 v(varArgs)
                             end
                         end).resume()
@@ -103,9 +121,22 @@ JAAS.hook = setmetatable({
                 end
             end
         end
-    }, {}),
+    }, {__call = function (self, category) -- JAAS.hook.run category name (...)
+        return function (name)
+            return function (...)
+                local varArgs = ...
+                if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil then
+                    coroutine.create(function ()
+                        for _,v in pairs(hook_func.other[category][name]) do
+                            v(varArgs)
+                        end
+                    end).resume()
+                end
+            end
+        end
+    end, __newindex = function () end}),
     remove = setmetatable({
-        permission = function (name) -- JAAS.hook ["remove"] ["permission"] name identifier
+        permission = function (name) -- JAAS.hook.remove ["permission"] name identifier
             return function (identifier)
                 if hook_func.permission != nil and hook_func.permission[name] != nil and hook_func.permission[name][identifier] != nil then
                     if (#hook_func.permission[name]) == 1 then
@@ -120,7 +151,7 @@ JAAS.hook = setmetatable({
                 end
             end
         end,
-        command = function (category) -- JAAS.hook ["remove"] ["command"] category name identifier
+        command = function (category) -- JAAS.hook.remove ["command"] category name identifier
             return function (name)
                 return function (identifier)
                     if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil and hook_func.command[category][name][identifier] != nil then
@@ -141,7 +172,27 @@ JAAS.hook = setmetatable({
                 end
             end
         end
-    }, {})
+    }, {__call = function (self, category) -- JAAS.hook.remove category name identifier
+        return function (name)
+            return function (identifier)
+                if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil and hook_func.other[category][name][identifier] != nil then
+                    if (#hook_func.other[category][name]) == 1 then
+                        if (#hook_func.other[category]) == 1 then
+                            if (#hook_func.other) == 1 then
+                                hook_func.other = nil
+                            else
+                                hook_func.other[category] = nil
+                            end
+                        else
+                            hook_func.other[category][name]
+                        end
+                    else
+                        hook_func.other[category][name][identifier] = nil
+                    end
+                end
+            end
+        end
+    end, __newindex = function () end})
 }, {})
 
 local function includeLoop(table_)

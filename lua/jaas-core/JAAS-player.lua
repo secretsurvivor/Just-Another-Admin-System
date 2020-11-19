@@ -18,7 +18,7 @@ local user_local = {["getCode"] = true, ["setCode"] = true}
 local u_cache = {}
 local u_cache_dirty = true
 
-hook.Add("JAAS-userRank-dirty", "JAAS-userObjectCache", function()
+JAAS.hook.add "Player" "GlobalRankChange" "Player_module_cache" (function()
 	u_cache_dirty = true
 end)
 
@@ -39,7 +39,7 @@ end
 function user_local:setCode(code)
 	local a = dev.fQuery("UPDATE JAAS_player SET code=%u WHERE steamid='%s'", code, self.steamid)
 	if a then
-		hook.Run("JAAS-userRank-dirty")
+		JAAS.hook.run "Player" "GlobalRankChange" ()
 		return a
 	end
 end
@@ -51,7 +51,7 @@ function user_local:xorCode(code)
 		local xor_code = bit.bxor(current_code, code)
 		local a = dev.fQuery("UPDATE JAAS_player SET code=%u WHERE steamid='%s'", xor_code, self.steamid)
 		if a then
-			hook.Run("JAAS-userRank-dirty")
+			JAAS.hook.run "Player" "GlobalRankChange" ()
 			return a
 		end
 	end
@@ -100,7 +100,7 @@ function user.playerIterator(key)
 	end
 end
 
-hook.Add("JAAS_RemoveRankPosition", "JAAS_RankRemove-Player", function (func)
+JAAS.hook.add "Rank" "RemovePosition" "Player_module" (function (func)
 	sql.Begin()
 	for steamid, code in user.userIterator() do
 		dev.fQuery("UPDATE JAAS_player SET code=%u WHERE steamid='%s'", func(tonumber(code)), steamid)

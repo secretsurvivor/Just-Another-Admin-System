@@ -79,7 +79,7 @@ function permission.registerPermission(name, code)
     end
 end
 
-hook.Add("JAAS_RemoveRankPosition", "JAAS_RankRemove-Permission", function (func)
+JAAS.hook.add "Rank" "RemovePosition" "Permission_module" (function (func)
     sql.Begin()
     for name, code in pairs(permission_table) do
         local new_code = func(code)

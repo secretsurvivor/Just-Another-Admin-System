@@ -171,7 +171,7 @@ function rank.removeRank(name)
     end
     if q != false then
         local rank_code = bit.lshift(1, rank_position - 1)
-        hook.Run("JAAS_RemoveRankPosition", function (bit_code)
+        JAAS.hook.run "Rank" "RemovePosition" (function (bit_code)
             if bit_code > 0 then
                 local bit_length = math.ceil(math.log(bits_to_be_shifted, 2))
                 if bit.band(bit_code, rank_code) > 0 then
@@ -237,7 +237,7 @@ function rank.removeRanks(...)
             end
         end
         if (#rankPositions) > 0 then
-            hook.Run("JAAS_RemoveRankPosition", function (bit_code)
+            JAAS.hook.run "Rank" "RemovePosition" (function (bit_code)
                 if bit_code > 0 then
                     local shifted_bits = 0
                     rankPositions = dev.mergeSort(rankPositions)

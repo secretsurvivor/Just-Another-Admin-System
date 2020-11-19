@@ -84,7 +84,6 @@ function command.argumentTableBuilder()
 end
 
 if SERVER then
-
     function local_command:getName()
         return self.name
     end
@@ -103,6 +102,7 @@ if SERVER then
             local before = command_table[self.category][self.name][1]
             command_table[self.category][self.name][1] = code
             JAAS.hook.run.command(self.category)(self.name)(before, code)
+            JAAS.hook.run "Command" "GlobalRankChange" (self.category, self.name, code)
         end
         return q
     end
@@ -114,6 +114,7 @@ if SERVER then
         if q then
             command_table[self.category][self.name][1] = c_xor
             JAAS.hook.run.command(self.category)(self.name)(before, c_xor)
+            JAAS.hook.run "Command" "GlobalRankChange" (self.category, self.name, c_xor)
         end
         return q
     end
@@ -499,7 +500,7 @@ if SERVER then
         end
     end, commandAutoComplete)
 
-    hook.Add("JAAS_RemoveRankPosition", "JAAS_RankRemove-Command", function (func)
+    JAAS.hook.add "Rank" "RemovePosition" "Command_module" (function (func)
         sql.Begin()
         for category, c_t in pairs(command_table) do
             for name, n_t in pairs(c_t) do
@@ -513,18 +514,25 @@ if SERVER then
             RefreshClientCodes(_,ply)
         end
     end)
-elseif CLIENT then
 
+    JAAS.hook.add "Command" "GlobalRankChange" "ClientUpdate" (function (category, name, code)
+        for _,ply in ipairs(player.GetAll()) do
+            net.Start("JAAS_ClientCommand")
+            net.WriteTable({[category] = {[name] = code}})
+            net.Send(ply)
+        end
+    end)
+elseif CLIENT then
     net.Receive("JAAS_ClientCommand", function()
         local code = net.ReadInt(4)
         local category, name, message = net.ReadString(), net.ReadString()
         if code == 4 then
             message = net.ReadString()
         end
-        hook.Run("JAAS_CommandFeedback", code, category, name, message)
+        JAAS.hook.run "Command" "CommandFeedback" (code, category, name, message)
     end)
 
-    hook.Add("JAAS_CommandFeedback", "JAAS_CommandFeedback_ConsoleEcho", function(code, category, name, message) -- ToDo Use Log Module
+    JAAS.hook.add "Command" "CommandFeedback" "ConsoleEcho" (function(code, category, name, message)
         if code == 0 then -- Successful Command Execution
             log:printLog(category.." "..name.." Successfully Executed")
         elseif code == 1 then -- Invalid Command Category or Name
