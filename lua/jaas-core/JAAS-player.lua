@@ -111,7 +111,7 @@ end)
 JAAS.Player = setmetatable({}, {
 	__call = function(self, steamid)
 		local f_str, id = log:executionTraceLog("Player")
-		if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+		if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
 			return log:removeTraceLog(id)
 		end
 		if u_cache_dirty then
@@ -134,7 +134,7 @@ JAAS.Player = setmetatable({}, {
 local meta = FindMetaTable("Player")
 function meta:getJAASObject()
 	local f_str, id = log:executionTraceLog("Player")
-	if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+	if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
 		return log:removeTraceLog(id)
 	end
 	if add_to_cache(steamid) then

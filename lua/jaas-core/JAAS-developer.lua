@@ -12,44 +12,46 @@ end
 
 function dev.verifyFilepath(filepath, verify_str)
 	-- Verify String example: addons/*/lua/jaas/*
-	local filepath_func = gmatch(filepath, ".")
-	local verify_func = gmatch(verify_str, ".")
-	local count = 0
-	local wild_card,verified,incorrect = false, false, false
-	local f_c, v_c = filepath_func(), verify_func()
-	while !verified and !incorrect do
-		if wild_card then
-			if v_c == "*" then
+	if filepath and verify_str then
+		local filepath_func = gmatch(filepath, ".")
+		local verify_func = gmatch(verify_str, ".")
+		local count = 0
+		local wild_card,verified,incorrect = false, false, false
+		local f_c, v_c = filepath_func(), verify_func()
+		while !verified and !incorrect do
+			if wild_card then
+				if v_c == "*" then
+					v_c = verify_func()
+					count = 1 + count
+				end
+				if v_c == nil then
+					verified = true
+				end
+				if f_c == "/" then
+					wild_card = false
+					v_c = verify_func()
+				end
+				if count == (#verify_str) + 1 then
+					verified = true
+				end
+				f_c = filepath_func()
+			else
+				if f_c == v_c then
+				elseif v_c == "*" then
+					wild_card = true
+				else
+					incorrect = true
+				end
+				f_c = filepath_func()
 				v_c = verify_func()
 				count = 1 + count
 			end
-			if v_c == nil then
-				verified = true
-			end
-			if f_c == "/" then
-				wild_card = false
-				v_c = verify_func()
-			end
-			if count == (#verify_str) + 1 then
-				verified = true
-			end
-			f_c = filepath_func()
-		else
-			if f_c == v_c then
-			elseif v_c == "*" then
-				wild_card = true
-			else
+			if f_c == nil then
 				incorrect = true
 			end
-			f_c = filepath_func()
-			v_c = verify_func()
-			count = 1 + count
 		end
-		if f_c == nil then
-			incorrect = true
-		end
+		return verified
 	end
-	return verified
 end
 
 /*function dev.verifyFilepath2(filepath, verify_pattern)
@@ -150,7 +152,7 @@ function dev.isLogLibrary(var) return getmetatable(var) == "jaas_log_library" en
 JAAS.Dev = setmetatable({}, {
 	__call = function ()
 		local f_str, id = log:executionTraceLog()
-		if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+		if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
 			return log:removeTraceLog(id)
 		end
 		return setmetatable({}, {

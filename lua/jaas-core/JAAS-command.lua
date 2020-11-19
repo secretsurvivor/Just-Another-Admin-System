@@ -285,7 +285,7 @@ setmetatable(command, {
 JAAS.Command = setmetatable({}, {
     __call = function(self, command_name, command_category)
 		local f_str, id = log:executionTraceLog("Command")
-        if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+        if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
             return log:removeTraceLog(id)
         end
 		if SERVER and command_name and command_category then

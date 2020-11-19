@@ -92,7 +92,7 @@ end)
 JAAS.Permission = setmetatable({}, {
     __call = function (self, permission_name)
 		local f_str, id = log:executionTraceLog("Command")
-        if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+        if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
             return log:removeTraceLog(id)
         end
         if permission_name and permission_table[permission_name] ~= nil then

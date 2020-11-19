@@ -313,7 +313,7 @@ debug.getregistry()["JAAS_RankLibrary"] = rank
 JAAS.Rank = setmetatable({}, {
     __call = function (self, rank_name)
 		local f_str, id = log:executionTraceLog()
-        if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+        if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
             return log:removeTraceLog(id)
         end
         if rank_name then

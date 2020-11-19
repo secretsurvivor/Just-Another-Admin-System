@@ -34,6 +34,9 @@ local executionTrace = {} -- [label] = {[id] = {file path, line}}
 local refusedTrace = {} -- [label] = {id*}
 
 function log:executionTraceLog()
+    if !JAAS.Var.TraceExecution then
+        return
+    end
     local info = debug.getinfo(3)
     if executionTrace[self.label] ~= nil then
         for _,v in ipairs(executionTrace[self.label]) do
@@ -49,6 +52,9 @@ function log:executionTraceLog()
 end
 
 function log:removeTraceLog(id)
+    if !JAAS.Var.TraceExecution then
+        return
+    end
     if refusedTrace[self.label] ~= nil then
         for _,v in ipairs(refusedTrace[self.label]) do
             if v == id then
@@ -114,7 +120,7 @@ end
 JAAS.Log = setmetatable({}, {
     __call = function (_, label)
         local f_str, id = log.executionTraceLog({label = "Log"})
-        if !verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+        if f_str and !verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
             return log.removeTraceLog({label = "Log"}, id)
         end
         return setmetatable({label = label}, {
