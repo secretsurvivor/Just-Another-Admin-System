@@ -18,12 +18,10 @@ end)
 
 local editVariables = permission.registerPermission("Can Edit Variables")
 hook.Add("CanEditVariable", "JAAS_canEditVariablesPermission", function (ent, ply, key, val, editor)
-    local code = ply:getJAASCode()
-
-end)
-
-local gravGunPickup = permission.registerPermission("Gravity Gun Pickup")
-hook.Add("GravGunPickupAllowed", "JAAS_gravGunPickupPermission", function (ply, ent)
+    if editVariables:codeCheck(ply:getJAASCode()) then
+        return true
+    end
+    return false
 end)
 
 local physgunPickupAllow = permission.registerPermission("Physgun Player Pickup Allow")
@@ -43,18 +41,34 @@ end)
 
 local canPlayerTaunt = permission.registerPermission("Can Player Taunt")
 hook.Add("PlayerShouldTaunt", "JAAS_canPlayerTauntPermission", function (ply, act)
+    if canPlayerTaunt:codeCheck(ply:getJAASCode()) then
+        return true
+    end
+    return false
 end)
 
 local canPlayerSpray = permission.registerPermission("Can Player Spray")
 hook.Add("PlayerSpray", "JAAS_canPlayerSprayPermission", function (ply)
+    if canPlayerSpray:codeCheck(ply:getJAASCode()) then
+        return true
+    end
+    return false
 end)
 
 local canPickupItem = permission.registerPermission("Can Pickup Item")
 hook.Add("PlayerCanPickupItem", "JAAS_canPickupItemPermission", function (ply, item)
+    if canPickupItem:codeCheck(ply:getJAASCode()) then
+        return true
+    end
+    return false
 end)
 
 local canPickupWeapon = permission.registerPermission("Can Pickup Weapon")
 hook.Add("PlayerCanPickupWeapon", "JAAS_canPickupWeaponPermission", function (ply, wep)
+    if canPickupWeapon:codeCheck(ply:getJAASCode()) then
+        return true
+    end
+    return false
 end)
 
 local meta = FindMetaTable("Player")
