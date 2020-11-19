@@ -59,6 +59,7 @@ function log:removeTraceLog(id)
     else
         refusedTrace[self.label] = {id}
     end
+    return false
 end
 
 local function verifyFilepath_table(filepath, verify_str_table) -- From Developer Module
@@ -114,8 +115,7 @@ JAAS.Log = setmetatable({}, {
     __call = function (_, label)
         local f_str, id = log.executionTraceLog({label = "Log"})
         if !verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-            log.removeTraceLog({label = "Log"}, id)
-            return
+            return log.removeTraceLog({label = "Log"}, id)
         end
         return setmetatable({label = label}, {
             __index = log,
