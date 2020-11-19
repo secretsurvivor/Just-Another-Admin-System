@@ -2,8 +2,7 @@ local permission = JAAS.Permission()
 
 local noclip = permission.registerPermission("Noclip")
 hook.Add("PlayerNoClip", "JAAS_noclipPermission", function (ply, desiredNoClipState)
-    local code = JAAS.Player(ply):getCode()
-    if noclip:codeCheck(code) or !desiredNoClipState then
+    if noclip:codeCheck(ply:getJAASCode()) or !desiredNoClipState then
         return true
     end
     return false
@@ -11,8 +10,7 @@ end)
 
 local pickup = permission.registerPermission("Pickup")
 hook.Add("AllowPlayerPickup", "JAAS_pickupPermission", function (ply)
-    local code = JAAS.Player(ply):getCode()
-    if pickup:codeCheck(code) then
+    if pickup:codeCheck(ply:getJAASCode()) then
         return true
     end
     return false
@@ -20,7 +18,7 @@ end)
 
 local editVariables = permission.registerPermission("Can Edit Variables")
 hook.Add("CanEditVariable", "JAAS_canEditVariablesPermission", function (ent, ply, key, val, editor)
-    local code = JAAS.Player(ply):getCode()
+    local code = ply:getJAASCode()
 
 end)
 
@@ -31,10 +29,9 @@ end)
 local physgunPickupAllow = permission.registerPermission("Physgun Player Pickup Allow")
 local rank = JAAS.Rank()
 hook.Add("PhysgunPickup", "JAAS_physgunPickupAllowPermission", function (ply, ent)
-    local user = JAAS.Player(ply)
+    local user = ply:getJAASObject()
     if ent:IsPlayer() then
-        local target = JAAS.Player(ent)
-        if physgunPickupAllow:codeCheck(user:getCode()) and user:canTarget(target:getCode(), rank) then
+        if physgunPickupAllow:codeCheck(user:getCode()) and user:canTarget(ent:getJAASCode(), rank) then
             return true
         end
     elseif ent:IsBot() then
@@ -60,5 +57,13 @@ local canPickupWeapon = permission.registerPermission("Can Pickup Weapon")
 hook.Add("PlayerCanPickupWeapon", "JAAS_canPickupWeaponPermission", function (ply, wep)
 end)
 
+local meta = FindMetaTable("Player")
 local isAdmin = permission.registerPermission("Is Admin")
+function meta:IsAdmin()
+    return isAdmin:codeCheck(self:getJAASCode()) and true
+end
+
 local isSuperadmin = permission.registerPermission("Is Superadmin")
+function meta:IsSuperAdmin()
+    return isSuperadmin:codeCheck(self:getJAASCode()) and true
+end
