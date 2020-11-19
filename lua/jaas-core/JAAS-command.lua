@@ -100,29 +100,33 @@ if SERVER then
     function local_command:setCode(code)
         local q = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", code, self.name, self.category) and nil
         if q then
+            local before = command_table[self.category][self.name][1]
             command_table[self.category][self.name][1] = code
+            JAAS.hook.run.command(self.category)(self.name)(before, code)
         end
         return q
     end
 
     function local_command:xorCode(code)
-        local c_xor = bit.bxor(command_table[self.category][self.name][1], code)
+        local before = command_table[self.category][self.name][1]
+        local c_xor = bit.bxor(before, code)
         local q = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", c_xor, self.name, self.category) and nil
         if q then
             command_table[self.category][self.name][1] = c_xor
+            JAAS.hook.run.command(self.category)(self.name)(before, c_xor)
         end
         return q
     end
 
     function local_command:validPowerTarget(code, rank_library)
-        if getmetatable(rank_library) == "jaas_rank_library" then
+        if dev.isRankLibrary(rank_library) then
             if isnumber(code) then
                 if self:getCode() > 0 and code > 0 then
                     return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code)
                 elseif self:getCode() > 0 then
                     return rank_library.getMaxPower(self:getCode()) > 0
                 end
-            elseif getmetatable(code) == "jaas_command_object" or getmetatable(code) == "jaas_permission_object" or getmetatable(code) == "jaas_player_object" then
+            elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
                 if self:getCode() > 0 and code:getCode() > 0 then
                     return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code:getCode())
                 elseif self:getCode() > 0 then
@@ -232,7 +236,7 @@ elseif CLIENT then
                 net.WriteTable(v)
             elseif a == 9 then -- Option
                 if isstring(v) then
-                    v = argumentTable[i][4][v] or nil
+                    v = argumentTable[i][4][v] or 1
                 end
                 if isnumber(v) then
                     net.WriteInt(v, math.ceil(math.log(#argumentTable[i][4], 2)))
@@ -243,7 +247,7 @@ elseif CLIENT then
                 end
                 for k,va in ipairs(v) do
                     if isstring(va) then
-                        v[k] = argumentTable[i][4][v] or nil
+                        v[k] = argumentTable[i][4][v] or 1
                     end
                 end
                 net.WriteTable(v)
@@ -282,8 +286,7 @@ JAAS.Command = setmetatable({}, {
     __call = function(self, command_name, command_category)
 		local f_str, id = log:executionTraceLog("Command")
         if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-            log:removeTraceLog(id)
-            return
+            return log:removeTraceLog(id)
         end
 		if SERVER and command_name and command_category then
             if command_table[category] ~= nil and command_table[category][name] ~= nil then

@@ -16,26 +16,133 @@ end})
 function include.server(_) if SERVER then include(_) end end
 function include.client(_) AddCSLuaFile(_) if CLIENT then include(_) end end
 function include.shared(_) AddCSLuaFile(_) include(_) end
-local stageMeta, stateMeta =
-    {__call = function (self, _) rawset(self, #self + 1, _) end, __index = function () end, __newindex = function () end},
-    {__call = function (self, _) self.init(_) end}
+
+local stageMeta = {__call = function (self, _) rawset(self, #self + 1, _) end, __index = function () end, __newindex = function () end, __metatable = "JAAS_include_stage"}
 JAAS.include = setmetatable({
     shared = setmetatable({
         pre = setmetatable({}, stageMeta),
         init = setmetatable({}, stageMeta),
         post = setmetatable({}, stageMeta)
-    }, {__call = function (self, _) self.init(_) end}),
+    }, {__call = function (self, _) self.init(_) end, __metatable = "JAAS_include_state_shared"}),
     server = setmetatable({
         pre = setmetatable({}, stageMeta),
         init = setmetatable({}, stageMeta),
         post = setmetatable({}, stageMeta)
-    }, {__call = function (self, _) self.init(_) end}),
+    }, {__call = function (self, _) self.init(_) end, __metatable = "JAAS_include_state_server"}),
     client = setmetatable({
         pre = setmetatable({}, stageMeta),
         init = setmetatable({}, stageMeta),
         post = setmetatable({}, stageMeta)
-    }, {__call = function (self, _) self.init(_) end}),
-}, {__call = function (self, _) self.shared.init(_) end})
+    }, {__call = function (self, _) self.init(_) end, __metatable = "JAAS_include_state_client"}),
+}, {__call = function (self, _) self.shared.init(_) end, __metatable = "JAAS_include_table"})
+
+local hook_func = {}
+JAAS.hook = setmetatable({
+    add = setmetatable({
+        permission = function (name) -- JAAS.hook ["add"] ["permission"] name identifier (function () end)
+            return function (identifier)
+                return function (func)
+                    if isfunction(func) then
+                        if hook_func.permission == nil then
+                            hook_func.permission = {[name] = {[identifier] = func}}
+                        elseif hook_func.permission[name] == nil then
+                            hook_func.permission[name] = {[identifier] = func}
+                        else
+                            hook_func.permission[name][identifier] = func
+                        end
+                    end
+                end
+            end
+        end,
+        command = function (category) -- JAAS.hook ["add"] ["command"] category name identifier (function () end)
+            return function (name)
+                return function (identifier)
+                    return function (func)
+                        if isfunction(func) then
+                            if hook_func.command == nil then
+                                hook_func.command = {[category] = {[name] = {[identifier] = func}}}
+                            elseif hook_func.command[category] == nil then
+                                hook_func.command[category] = {[name] = {[identifier] = func}}
+                            elseif hook_func.command[category][name] == nil then
+                                hook_func.command[category][name] = {[identifier] = func}
+                            else
+                                hook_func.command[category][name][identifier] = func
+                            end
+                        else
+                            return false
+                        end
+                    end
+                end
+            end
+        end
+    }, {}),
+    run = setmetatable({
+        permission = function (name) -- JAAS.hook ["run"] ["permission"] name (...)
+            return function (...)
+                local varArgs = ...
+                if hook_func.permission != nil and hook_func.permission[name] != nil then
+                    coroutine.create(function ()
+                        for _,v in ipairs(hook_func.permission[name]) do
+                            v(varArgs)
+                        end
+                    end).resume()
+                end
+            end
+        end,
+        command = function (category) -- JAAS.hook ["run"] ["command"] category name (...)
+            return function (name)
+                return function (...)
+                local varArgs = ...
+                    if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil then
+                        coroutine.create(function ()
+                            for _,v in ipairs(hook_func.command[category][name]) do
+                                v(varArgs)
+                            end
+                        end).resume()
+                    end
+                end
+            end
+        end
+    }, {}),
+    remove = setmetatable({
+        permission = function (name) -- JAAS.hook ["remove"] ["permission"] name identifier
+            return function (identifier)
+                if hook_func.permission != nil and hook_func.permission[name] != nil and hook_func.permission[name][identifier] != nil then
+                    if (#hook_func.permission[name]) == 1 then
+                        if (#hook_func.permission) == 1 then
+                            hook_func.permission = nil
+                        else
+                            hook_func.permission[name] = nil
+                        end
+                    else
+                        hook_func.permission[name][identifier] = nil
+                    end
+                end
+            end
+        end,
+        command = function (category) -- JAAS.hook ["remove"] ["command"] category name identifier
+            return function (name)
+                return function (identifier)
+                    if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil and hook_func.command[category][name][identifier] != nil then
+                        if (#hook_func.command[category][name]) == 1 then
+                            if (#hook_func.command[category]) == 1 then
+                                if (#hook_func.command) == 1 then
+                                    hook_func.command = nil
+                                else
+                                    hook_func.command[category] = nil
+                                end
+                            else
+                                hook_func.command[category][name] = nil
+                            end
+                        else
+                            hook_func.command[category][name][identifier] = nil
+                        end
+                    end
+                end
+            end
+        end
+    }, {})
+}, {})
 
 local function includeLoop(table_)
     local message = false
@@ -80,7 +187,7 @@ include ["shared"] {
 }
 
 include ["server"] {
-    "jaas-core/JAAS-user.lua",
+    "jaas-core/JAAS-player.lua",
     "jaas-core/JAAS-rank.lua",
     "jaas-core/JAAS-permission.lua"
 }

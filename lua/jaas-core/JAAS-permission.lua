@@ -2,7 +2,8 @@ if JAAS.Permission then return end
 local dev = JAAS.Dev()
 local log = JAAS.Log("Permission")
 if !sql.TableExists("JAAS_permission") and SERVER then
-    dev.fQuery("CREATE TABLE JAAS_permission(name TEXT NOT NULL, code UNSIGNED BIG INT NOT NULL DEFAULT 0, PRIMARY KEY (name))")
+    dev.fQuery("CREATE TABLE JAAS_permission(name TEXT NOT NULL UNIQUE, code UNSIGNED BIG INT NOT NULL DEFAULT 0)")
+    dev.fQuery("CREATE UNIQUE INDEX JAAS_permission_name ON JAAS_permission (name)")
 end
 
 local permission_table = {} -- [name] = code
@@ -16,16 +17,20 @@ end
 function permission_local:setCode(code)
     local q = dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", code, self.name)
     if q then
+        local before = permission_table[self.name]
         permission_table[self.name] = code
+        JAAS.hook.run.permission(self.name)(before, code)
     end
     return q
 end
 
 function permission_local:xorCode(code)
-    local c_xor = bit.bxor(permission_table[self.name], code)
+    local before = permission_table[self.name]
+    local c_xor = bit.bxor(before, code)
     local q = dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", c_xor, self.name)
     if q then
         permission_table[self.name] = c_xor
+        JAAS.hook.run.permission(self.name)(before, c_xor)
     end
     return q
 end
@@ -35,7 +40,7 @@ function permission_local:codeCheck(code)
         if self:getCode() == 0 or bit.band(self:getCode(), code) then
             return true
         end
-    elseif getmetatable(code) == "jaas_command_object" or getmetatable(code) == "jaas_permission_object" or getmetatable(code) == "jaas_player_object" then
+    elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
         if self:getCode() == 0 or bit.band(self:getCode(), code:getCode()) then
             return true
         end
@@ -48,14 +53,10 @@ function permission_local:defaultAccess()
     end
 end
 
-function permission_local:update()
-end
-
 setmetatable(permission_local, {
     __call = function (self, name)
         return setmetatable({name = name}, {
             __index = permission_local,
-            __newindex = function () end,
             __metatable = "jaas_permission_object"
         })
     end
@@ -92,8 +93,7 @@ JAAS.Permission = setmetatable({}, {
     __call = function (self, permission_name)
 		local f_str, id = log:executionTraceLog("Command")
         if !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-            log:removeTraceLog(id)
-            return
+            return log:removeTraceLog(id)
         end
         if permission_name and permission_table[permission_name] ~= nil then
             return permission_local(permission_name)
