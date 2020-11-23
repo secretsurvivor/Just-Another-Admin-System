@@ -37,9 +37,9 @@ JAAS.include = setmetatable({
 }, {__call = function (self, _) self.shared.init(_) end, __metatable = "JAAS_include_table"})
 
 local hook_func = {}
-JAAS.hook = setmetatable({
-    add = setmetatable({
-        permission = function (name) -- JAAS.hook.add ["permission"] name identifier (function () end)
+JAAS.Hook = setmetatable({
+    Add = setmetatable({
+        Permission = function (name) -- JAAS.Hook.Add ["Permission"] name identifier (function () end)
             return function (identifier)
                 return function (func)
                     if isfunction(func) then
@@ -50,11 +50,14 @@ JAAS.hook = setmetatable({
                         else
                             hook_func.permission[name][identifier] = func
                         end
+                        return true
+                    else
+                        return false
                     end
                 end
             end
         end,
-        command = function (category) -- JAAS.hook.add ["command"] category name identifier (function () end)
+        Command = function (category) -- JAAS.Hook.Add ["Command"] category name identifier (function () end)
             return function (name)
                 return function (identifier)
                     return function (func)
@@ -68,6 +71,29 @@ JAAS.hook = setmetatable({
                             else
                                 hook_func.command[category][name][identifier] = func
                             end
+                            return true
+                        else
+                            return false
+                        end
+                    end
+                end
+            end
+        end,
+        GlobalVar = function (category) -- JAAS.Hook.Add ["GlobalVar"] category name identifier (function () end)
+            return function (name)
+                return function (identifier)
+                    return function (func)
+                        if isfunction(func) then
+                            if hook_func.globalvar == nil then
+                                hook_func.globalvar = {[category] = {[name] = {[identifier] = func}}}
+                            elseif hook_func.globalvar[category] == nil then
+                                hook_func.globalvar[category] = {[name] = {[identifier] = func}}
+                            elseif hook_func.globalvar[category][name] == nil then
+                                hook_func.globalvar[category][name] = {[identifier] = func}
+                            else
+                                hook_func.globalvar[category][name][identifier] = func
+                            end
+                            return true
                         else
                             return false
                         end
@@ -75,7 +101,7 @@ JAAS.hook = setmetatable({
                 end
             end
         end
-    }, {__call = function (self, category) -- JAAS.hook.add category name identifier (function () end)
+    }, {__call = function (self, category) -- JAAS.Hook.Add category name identifier (function () end)
         return function (name)
             return function (identifier)
                 return function (func)
@@ -89,13 +115,16 @@ JAAS.hook = setmetatable({
                         else
                             hook_func.other[category][name][identifier] = func
                         end
+                        return true
+                    else
+                        return false
                     end
                 end
             end
         end
     end, __newindex = function () end}),
-    run = setmetatable({
-        permission = function (name) -- JAAS.hook.run ["permission"] name (...)
+    Run = setmetatable({
+        Permission = function (name) -- JAAS.Hook.Run ["Permission"] name (...)
             return function (...)
                 local varArgs = ...
                 if hook_func.permission != nil and hook_func.permission[name] != nil then
@@ -107,10 +136,10 @@ JAAS.hook = setmetatable({
                 end
             end
         end,
-        command = function (category) -- JAAS.hook.run ["command"] category name (...)
+        Command = function (category) -- JAAS.Hook.Run ["Command"] category name (...)
             return function (name)
                 return function (...)
-                local varArgs = ...
+                    local varArgs = ...
                     if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil then
                         coroutine.create(function ()
                             for _,v in pairs(hook_func.command[category][name]) do
@@ -120,8 +149,22 @@ JAAS.hook = setmetatable({
                     end
                 end
             end
+        end,
+        GlobalVar = function (category) -- JAAS.Hook.Run ["GlobalVar"] category name (...)
+            return function (name)
+                return function (...)
+                    local varArgs = ...
+                    if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil then
+                        coroutine.create(function ()
+                            for _,v in pairs(hook_func.other[category][name]) do
+                                v(varArgs)
+                            end
+                        end).resume()
+                    end
+                end
+            end
         end
-    }, {__call = function (self, category) -- JAAS.hook.run category name (...)
+    }, {__call = function (self, category) -- JAAS.Hook.Run category name (...)
         return function (name)
             return function (...)
                 local varArgs = ...
@@ -135,12 +178,13 @@ JAAS.hook = setmetatable({
             end
         end
     end, __newindex = function () end}),
-    remove = setmetatable({
-        permission = function (name) -- JAAS.hook.remove ["permission"] name identifier
+    Remove = setmetatable({
+        Permission = function (name) -- JAAS.Hook.Remove ["Permission"] name identifier
             return function (identifier)
                 if hook_func.permission != nil and hook_func.permission[name] != nil and hook_func.permission[name][identifier] != nil then
-                    if (#hook_func.permission[name]) == 1 then
-                        if (#hook_func.permission) == 1 then
+                    local r = hook_func.permission[name][identifier]
+                    if #hook_func.permission[name] == 1 then
+                        if #hook_func.permission == 1 then
                             hook_func.permission = nil
                         else
                             hook_func.permission[name] = nil
@@ -148,16 +192,18 @@ JAAS.hook = setmetatable({
                     else
                         hook_func.permission[name][identifier] = nil
                     end
+                    return r
                 end
             end
         end,
-        command = function (category) -- JAAS.hook.remove ["command"] category name identifier
+        Command = function (category) -- JAAS.Hook.Remove ["Command"] category name identifier
             return function (name)
                 return function (identifier)
                     if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil and hook_func.command[category][name][identifier] != nil then
-                        if (#hook_func.command[category][name]) == 1 then
-                            if (#hook_func.command[category]) == 1 then
-                                if (#hook_func.command) == 1 then
+                        local r = hook_func.command[category][name][identifier]
+                        if #hook_func.command[category][name] == 1 then
+                            if #hook_func.command[category] == 1 then
+                                if #hook_func.command == 1 then
                                     hook_func.command = nil
                                 else
                                     hook_func.command[category] = nil
@@ -168,23 +214,47 @@ JAAS.hook = setmetatable({
                         else
                             hook_func.command[category][name][identifier] = nil
                         end
+                        return r
+                    end
+                end
+            end
+        end,
+        GlobalVar = function (category) -- JAAS.Hook.Remove ["GlobalVar"] category name identifier
+            return function (name)
+                return function (identifier)
+                    if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil and hook_func.other[category][name][identifier] != nil then
+                        local r = hook_func.other[category][name][identifier]
+                        if #hook_func.other[category][name] == 1 then
+                            if #hook_func.other[category] == 1 then
+                                if #hook_func.other == 1 then
+                                    hook_func.other = nil
+                                else
+                                    hook_func.other[category] = nil
+                                end
+                            else
+                                hook_func.other[category][name] = nil
+                            end
+                        else
+                            hook_func.other[category][name][identifier] = nil
+                        end
+                        return r
                     end
                 end
             end
         end
-    }, {__call = function (self, category) -- JAAS.hook.remove category name identifier
+    }, {__call = function (self, category) -- JAAS.Hook.Remove category name identifier
         return function (name)
             return function (identifier)
                 if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil and hook_func.other[category][name][identifier] != nil then
-                    if (#hook_func.other[category][name]) == 1 then
-                        if (#hook_func.other[category]) == 1 then
-                            if (#hook_func.other) == 1 then
+                    if #hook_func.other[category][name] == 1 then
+                        if #hook_func.other[category] == 1 then
+                            if #hook_func.other == 1 then
                                 hook_func.other = nil
                             else
                                 hook_func.other[category] = nil
                             end
                         else
-                            hook_func.other[category][name]
+                            hook_func.other[category][name] = nil
                         end
                     else
                         hook_func.other[category][name][identifier] = nil
@@ -193,6 +263,31 @@ JAAS.hook = setmetatable({
             end
         end
     end, __newindex = function () end})
+}, {})
+
+local globalvar_table = {}
+JAAS.GlobalVar = setmetatable({
+    Set = function (category) -- JAAS.GlobalVar.Set category name (var)
+        return function (name)
+            return function (var)
+                local before = nil
+                if globalvar_table[category] == nil then
+                    globalvar_table[category] = {[name] = var}
+                else
+                    before = globalvar_table[category][name]
+                    globalvar_table[category][name] = var
+                end
+                JAAS.Hook.Run.GlobalVar(category)(name)(before, var)
+            end
+        end
+    end,
+    Get = function (category) -- JAAS.GlobalVar.Get category name
+        return function (name)
+            if globalvar_table[category] != nil then
+                return globalvar_table[category][name]
+            end
+        end
+    end
 }, {})
 
 local function includeLoop(table_)
@@ -244,6 +339,8 @@ include ["server"] {
 }
 
 include ["shared"] "jaas-core/JAAS-command.lua"
+
+include ["client"] "jaas-core/JAAS-panel.lua"
 
 if CLIENT then print "------------------------------" end
 

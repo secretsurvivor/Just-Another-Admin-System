@@ -19,7 +19,7 @@ function permission_local:setCode(code)
     if q then
         local before = permission_table[self.name]
         permission_table[self.name] = code
-        JAAS.hook.run.permission(self.name)(before, code)
+        JAAS.Hook.Run.Permission(self.name)(before, code)
     end
     return q
 end
@@ -30,7 +30,7 @@ function permission_local:xorCode(code)
     local q = dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", c_xor, self.name)
     if q then
         permission_table[self.name] = c_xor
-        JAAS.hook.run.permission(self.name)(before, c_xor)
+        JAAS.Hook.Run.Permission(self.name)(before, c_xor)
     end
     return q
 end
@@ -79,7 +79,7 @@ function permission.registerPermission(name, code)
     end
 end
 
-JAAS.hook.add "Rank" "RemovePosition" "Permission_module" (function (func)
+JAAS.Hook.Add "Rank" "RemovePosition" "Permission_module" (function (func)
     sql.Begin()
     for name, code in pairs(permission_table) do
         local new_code = func(code)

@@ -39,7 +39,7 @@ end
 function user_local:setCode(code)
 	local a = dev.fQuery("UPDATE JAAS_player SET code=%u WHERE steamid='%s'", code, self.steamid)
 	if a then
-		JAAS.hook.run "Player" "GlobalRankChange" ()
+		JAAS.Hook.Run "Player" "GlobalRankChange" ()
 		return a
 	end
 end
@@ -51,7 +51,7 @@ function user_local:xorCode(code)
 		local xor_code = bit.bxor(current_code, code)
 		local a = dev.fQuery("UPDATE JAAS_player SET code=%u WHERE steamid='%s'", xor_code, self.steamid)
 		if a then
-			JAAS.hook.run "Player" "GlobalRankChange" ()
+			JAAS.Hook.Run "Player" "GlobalRankChange" ()
 			return a
 		end
 	end
@@ -100,7 +100,7 @@ function user.playerIterator(key)
 	end
 end
 
-JAAS.hook.add "Rank" "RemovePosition" "Player_module" (function (func)
+JAAS.Hook.Add "Rank" "RemovePosition" "Player_module" (function (func)
 	sql.Begin()
 	for steamid, code in user.userIterator() do
 		dev.fQuery("UPDATE JAAS_player SET code=%u WHERE steamid='%s'", func(tonumber(code)), steamid)

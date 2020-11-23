@@ -64,7 +64,7 @@ setmetatable(argTable, {
 	__metatable = nil
 })
 
-local command_table = {} -- SERVER -- [category][name] = {code, funcArgs, function} -- CLIENT -- [category][name] = {code, funcArgs}
+local command_table = {} -- SERVER -- [category][name] = {code, funcArgs, function, description} -- CLIENT -- [category][name] = {code, funcArgs, description}
 
 local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] = true, ["setCode"] = true} -- Used for local functions, for command data
 local command = {["registerCommand"] = true, ["setCategory"] = true, ["clearCategory"] = true, ["argumentTableBuilder"] = true} -- Used for global functions, for command table
@@ -101,8 +101,8 @@ if SERVER then
         if q then
             local before = command_table[self.category][self.name][1]
             command_table[self.category][self.name][1] = code
-            JAAS.hook.run.command(self.category)(self.name)(before, code)
-            JAAS.hook.run "Command" "GlobalRankChange" (self.category, self.name, code)
+            JAAS.Hook.Run.Command(self.category)(self.name)(before, code)
+            JAAS.Hook.Run "Command" "GlobalRankChange" (self.category, self.name, code)
         end
         return q
     end
@@ -113,8 +113,8 @@ if SERVER then
         local q = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", c_xor, self.name, self.category) and nil
         if q then
             command_table[self.category][self.name][1] = c_xor
-            JAAS.hook.run.command(self.category)(self.name)(before, c_xor)
-            JAAS.hook.run "Command" "GlobalRankChange" (self.category, self.name, c_xor)
+            JAAS.Hook.Run.Command(self.category)(self.name)(before, c_xor)
+            JAAS.Hook.Run "Command" "GlobalRankChange" (self.category, self.name, c_xor)
         end
         return q
     end
@@ -149,7 +149,7 @@ if SERVER then
         __metatable = "jaas_command_object"
     })
 
-    function command:registerCommand(name, func, funcArgs, code)
+    function command:registerCommand(name, func, funcArgs, description, code)
         local q = dev.fQuery("SELECT code FROM JAAS_command WHERE name='%s' AND category='%s'", name, self.category)
         if q then
             code = tonumber(q[1]["code"])
@@ -163,21 +163,21 @@ if SERVER then
         if q then
             funcArgs = funcArgs or {}
             if command_table[self.category] ~= nil then
-                command_table[self.category][name] = {code, funcArgs, func}
+                command_table[self.category][name] = {code, funcArgs, func, description}
             else
-                command_table[self.category] = {[name]={code, funcArgs, func}}
+                command_table[self.category] = {[name]={code, funcArgs, func, description}}
             end
             return local_command(name, self.category)
         end
     end
 elseif CLIENT then
-    function command:registerCommand(name, func, funcArgs, code)
+    function command:registerCommand(name, func, funcArgs, description, code)
         funcArgs = funcArgs or {}
         if isstring(name) and istable(funcArgs) then
             if command_table[self.category] ~= nil then
-                command_table[self.category][name] = {code, funcArgs}
+                command_table[self.category][name] = {code, funcArgs, description}
             else
-                command_table[self.category] = {[name]={code, funcArgs}}
+                command_table[self.category] = {[name]={code, funcArgs, description}}
             end
         end
     end
@@ -500,7 +500,7 @@ if SERVER then
         end
     end, commandAutoComplete)
 
-    JAAS.hook.add "Rank" "RemovePosition" "Command_module" (function (func)
+    JAAS.Hook.Add "Rank" "RemovePosition" "Command_module" (function (func)
         sql.Begin()
         for category, c_t in pairs(command_table) do
             for name, n_t in pairs(c_t) do
@@ -515,7 +515,7 @@ if SERVER then
         end
     end)
 
-    JAAS.hook.add "Command" "GlobalRankChange" "ClientUpdate" (function (category, name, code)
+    JAAS.Hook.Add "Command" "GlobalRankChange" "ClientUpdate" (function (category, name, code)
         for _,ply in ipairs(player.GetAll()) do
             net.Start("JAAS_ClientCommand")
             net.WriteTable({[category] = {[name] = code}})
@@ -529,10 +529,10 @@ elseif CLIENT then
         if code == 4 then
             message = net.ReadString()
         end
-        JAAS.hook.run "Command" "CommandFeedback" (code, category, name, message)
+        JAAS.Hook.run "Command" "CommandFeedback" (code, category, name, message)
     end)
 
-    JAAS.hook.add "Command" "CommandFeedback" "ConsoleEcho" (function(code, category, name, message)
+    JAAS.Hook.Add "Command" "CommandFeedback" "ConsoleEcho" (function(code, category, name, message)
         if code == 0 then -- Successful Command Execution
             log:printLog(category.." "..name.." Successfully Executed")
         elseif code == 1 then -- Invalid Command Category or Name
