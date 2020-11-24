@@ -5,7 +5,7 @@ local arg = command.argumentTableBuilder()
 command:setCategory "User"
 
 local ModifyUser_ArgTable = arg:add("Rank", "RANK", true):add("Target", "PLAYER"):dispense()
-command:registerCommand("AddUser", function (ply, rank_object, target)
+command:registerCommand("Add", function (ply, rank_object, target)
     local user = JAAS.Player(ply)
     local target_object = JAAS.Player(target)
     if target and IsValid(target) then -- Apply rank change on target
@@ -33,7 +33,7 @@ command:registerCommand("AddUser", function (ply, rank_object, target)
     end
 end, ModifyUser_ArgTable)
 
-command:registerCommand("RemoveUser", function (ply, rank_object, target)
+command:registerCommand("Remove", function (ply, rank_object, target)
     local user = JAAS.Player(ply)
     local target_object = JAAS.Player(target)
     if target and IsValid(target) then
@@ -63,24 +63,24 @@ end, ModifyUser_ArgTable)
 
 command:setCategory "Rank"
 
-command:registerCommand("AddRank", function (ply, name, power, invis)
+command:registerCommand("Add", function (ply, name, power, invis)
     name = sql.SQLStr(name)
     rank.addRank(name, power, invis)
 end, arg:add("Name", "STRING", true):add("Power", "INT", false, 0):add("Invisible", "BOOL", false, false):dispense())
 
-command:registerCommand("RemoveRank", function (ply, rank_object)
+command:registerCommand("Remove", function (ply, rank_object)
     if !rank.removeRank(rank_object) then
         return "Unknown Rank"
     end
 end, arg:add("Rank", "RANK", true):dispense())
 
-command:registerCommand("RemoveRanks", function (ply, rank_table)
+command:registerCommand("Remove_Ranks", function (ply, rank_table)
     if !rank.removeRanks(rank_table) then
         return "All Ranks Unknown"
     end
 end, arg:add("Ranks", "RANKS", true):dispense())
 
-command:registerCommand("SetPower", function (ply, rank_object, power)
+command:registerCommand("Set_Power", function (ply, rank_object, power)
     rank_object:setPower(power)
 end, arg:add("Rank", "RANK", true):add("Power", "INT", true, 0):dispense())
 
