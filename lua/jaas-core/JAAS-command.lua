@@ -96,6 +96,10 @@ if SERVER then
         return command_table[self.category][self.name][1]
     end
 
+    function local_command:getDescription()
+        return command_table[self.category][self.name][4]
+    end
+
     function local_command:setCode(code)
         local q = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", code, self.name, self.category) and nil
         if q then
@@ -163,9 +167,9 @@ if SERVER then
         if q then
             funcArgs = funcArgs or {}
             if command_table[self.category] ~= nil then
-                command_table[self.category][name] = {code, funcArgs, func, description}
+                command_table[self.category][name] = {code, funcArgs, func}
             else
-                command_table[self.category] = {[name]={code, funcArgs, func, description}}
+                command_table[self.category] = {[name]={code, funcArgs, func}}
             end
             return local_command(name, self.category)
         end
@@ -173,6 +177,7 @@ if SERVER then
 elseif CLIENT then
     function command:registerCommand(name, func, funcArgs, description, code)
         funcArgs = funcArgs or {}
+        description = description or ""
         if isstring(name) and istable(funcArgs) then
             if command_table[self.category] ~= nil then
                 command_table[self.category][name] = {code, funcArgs, description}

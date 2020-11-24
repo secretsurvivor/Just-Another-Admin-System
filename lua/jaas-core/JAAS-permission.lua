@@ -6,30 +6,38 @@ if !sql.TableExists("JAAS_permission") and SERVER then
     dev.fQuery("CREATE UNIQUE INDEX JAAS_permission_name ON JAAS_permission (name)")
 end
 
-local permission_table = {} -- [name] = code
+local permission_table = {} -- [name] = {code, description}
 local permission_local = {["getCode"] = true, ["setCode"] = true}
 local permission = {["registerPermission"] = true}
 
+function permission_local:getName()
+    return self.name
+end
+
 function permission_local:getCode()
-    return permission_table[self.name]
+    return permission_table[self.name][1]
+end
+
+function permission_local:getDescription()
+    return permission_table[self.name][2]
 end
 
 function permission_local:setCode(code)
     local q = dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", code, self.name)
     if q then
-        local before = permission_table[self.name]
-        permission_table[self.name] = code
+        local before = permission_table[self.name][1]
+        permission_table[self.name][1] = code
         JAAS.Hook.Run.Permission(self.name)(before, code)
     end
     return q
 end
 
 function permission_local:xorCode(code)
-    local before = permission_table[self.name]
+    local before = permission_table[self.name][1]
     local c_xor = bit.bxor(before, code)
     local q = dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", c_xor, self.name)
     if q then
-        permission_table[self.name] = c_xor
+        permission_table[self.name][1] = c_xor
         JAAS.Hook.Run.Permission(self.name)(before, c_xor)
     end
     return q
@@ -62,7 +70,7 @@ setmetatable(permission_local, {
     end
 })
 
-function permission.registerPermission(name, code)
+function permission.registerPermission(name, description, code)
     local q = dev.fQuery("SELECT code FROM JAAS_permission WHERE name='%s'", name)
     if q then
         code = tonumber(q[1]["code"])
@@ -74,16 +82,16 @@ function permission.registerPermission(name, code)
         q = true
     end
     if q then
-        permission_table[name] = code
+        permission_table[name] = {code, description}
         return permission_local(name)
     end
 end
 
 JAAS.Hook.Add "Rank" "RemovePosition" "Permission_module" (function (func)
     sql.Begin()
-    for name, code in pairs(permission_table) do
-        local new_code = func(code)
-        permission_table[name] = new_code
+    for name, t in pairs(permission_table) do
+        local new_code = func(t[1])
+        permission_table[name][1] = new_code
         dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", new_code, name)
     end
     sql.Commit()
@@ -104,7 +112,7 @@ JAAS.Permission = setmetatable({}, {
 
 concommand.Add("JAAS_printPermissions", function ()
     for k,v in pairs(permission_table) do
-        print(k,v)
+        print(k, v[1], v[2])
     end
 end)
 
