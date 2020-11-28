@@ -108,28 +108,24 @@ JAAS.Hook.Add "Rank" "RemovePosition" "Player_module" (function (func)
 	sql.Commit()
 end)
 
-JAAS.Player = setmetatable({}, {
-	__call = function(self, steamid)
-		local f_str, id = log:executionTraceLog("Player")
-		if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-			return log:removeTraceLog(id)
-		end
-		if u_cache_dirty then
-			u_cache = {}
-			u_cache_dirty = true
-		end
-		if !isstring(steamid) and IsValid(steamid) then
-			steamid = steamid:SteamID()
-		end
-		if add_to_cache(steamid) then
-			return setmetatable({steamid = steamid}, {__index = user_local, __newindex = function () end, __metatable = "jaas_player_object"})
-		else
-			return setmetatable({}, {__index = user, __newindex = function () end, __metatable = "jaas_player_library"})
-		end
-	end,
-	__newindex = function () end,
-	__metatable = nil
-})
+function JAAS.Player(steamid)
+	local f_str, id = log:executionTraceLog("Player")
+	if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+		return log:removeTraceLog(id)
+	end
+	if u_cache_dirty then
+		u_cache = {}
+		u_cache_dirty = true
+	end
+	if !isstring(steamid) and IsValid(steamid) then
+		steamid = steamid:SteamID()
+	end
+	if add_to_cache(steamid) then
+		return setmetatable({steamid = steamid}, {__index = user_local, __newindex = function () end, __metatable = "jaas_player_object"})
+	else
+		return setmetatable({}, {__index = user, __newindex = function () end, __metatable = "jaas_player_library"})
+	end
+end
 
 local meta = FindMetaTable("Player")
 function meta:getJAASObject()

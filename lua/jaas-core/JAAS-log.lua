@@ -5,7 +5,7 @@ local log = {}
 function log.getLogFile(date)
 end
 
-function log.writeToLogFile(str)
+function log.writeToLogFile(...)
     if SERVER and file.Exists("", "DATA") then
     elseif SERVER then
     end
@@ -27,7 +27,7 @@ function log:chatLog(str)
     log.writeToLogFile(str)
 end
 
-function log:gameLog()
+function log:gameLog(action, str)
 end
 
 local executionTrace = {} -- [label] = {[id] = {file path, line}}
@@ -53,7 +53,7 @@ end
 
 function log:removeTraceLog(id)
     if !JAAS.Var.TraceExecution then
-        return
+        return false
     end
     if refusedTrace[self.label] ~= nil then
         for _,v in ipairs(refusedTrace[self.label]) do
@@ -65,7 +65,7 @@ function log:removeTraceLog(id)
     else
         refusedTrace[self.label] = {id}
     end
-    return false
+    return true
 end
 
 local function verifyFilepath_table(filepath, verify_str_table) -- From Developer Module
@@ -117,22 +117,17 @@ local function verifyFilepath_table(filepath, verify_str_table) -- From Develope
 	return false
 end
 
-JAAS.Log = setmetatable({}, {
-    __call = function (_, label)
-        local f_str, id = log.executionTraceLog({label = "Log"})
-        if f_str and !verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-            return log.removeTraceLog({label = "Log"}, id)
-        end
-        return setmetatable({label = label}, {
-            __index = log,
-            __newindex = function () end,
-            __metatable = "jaas_log_library"
-        })
-    end,
-    __index = function () end,
-    __newindex = function () end,
-    __metatable = nil
-})
+function JAAS.Log(label)
+    local f_str, id = log.executionTraceLog({label = "Log"})
+    if f_str and !verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+        return log.removeTraceLog({label = "Log"}, id)
+    end
+    return setmetatable({label = label}, {
+        __index = log,
+        __newindex = function () end,
+        __metatable = "jaas_log_library"
+    })
+end
 
 concommand.Add("JAAS_readTraceLogs", function ()
     PrintTable(executionTrace)

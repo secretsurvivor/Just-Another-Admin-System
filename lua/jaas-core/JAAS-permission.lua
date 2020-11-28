@@ -97,18 +97,16 @@ JAAS.Hook.Add "Rank" "RemovePosition" "Permission_module" (function (func)
     sql.Commit()
 end)
 
-JAAS.Permission = setmetatable({}, {
-    __call = function (self, permission_name)
-		local f_str, id = log:executionTraceLog("Command")
-        if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-            return log:removeTraceLog(id)
-        end
-        if permission_name and permission_table[permission_name] ~= nil then
-            return permission_local(permission_name)
-        end
-        return setmetatable({}, {__index = permission, __newindex = function () end, __metatable = "jaas_permission_library"})
+function JAAS.Permission(permission_name)
+    local f_str, id = log:executionTraceLog("Command")
+    if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+        return log:removeTraceLog(id)
     end
-})
+    if permission_name and permission_table[permission_name] ~= nil then
+        return permission_local(permission_name)
+    end
+    return setmetatable({}, {__index = permission, __newindex = function () end, __metatable = "jaas_permission_library"})
+end
 
 concommand.Add("JAAS_printPermissions", function ()
     for k,v in pairs(permission_table) do

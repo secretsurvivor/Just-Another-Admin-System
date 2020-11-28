@@ -42,7 +42,7 @@ end
 function local_rank:setPower(power)
     local a = dev.fQuery("UPDATE JAAS_rank SET power=%u WHERE rowid=%u", power, self.id)
     if a then
-        hook.Run("JAAS-rankPowerCache-dirty")
+        JAAS.Hook.Run "Rank" "GlobalPowerChange" ()
         return a
     end
 end
@@ -275,7 +275,7 @@ end
 local p_cache = {}
 local p_cache_dirty = true
 
-hook.Add("JAAS-rankPowerCache-dirty", "JAAS-maxPower-function", function()
+JAAS.Hook.Add "Rank" "GlobalPowerChange" "MaxPowerCacheClean" (function()
     p_cache_dirty = true
 end)
 
@@ -310,24 +310,19 @@ end
 
 debug.getregistry()["JAAS_RankLibrary"] = rank
 
-JAAS.Rank = setmetatable({}, {
-    __call = function (self, rank_name)
-		local f_str, id = log:executionTraceLog()
-        if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-            return log:removeTraceLog(id)
+function JAAS.Rank(rank_name)
+    local f_str, id = log:executionTraceLog()
+    if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+        return log:removeTraceLog(id)
+    end
+    if rank_name then
+        local a = dev.fQuery("SELECT rowid FROM JAAS_rank WHERE name='%s'", rank_name)
+        if a then
+            return local_rank(tonumber(a[1]["id"]))
         end
-        if rank_name then
-            local a = dev.fQuery("SELECT rowid FROM JAAS_rank WHERE name='%s'", rank_name)
-            if a then
-                return local_rank(tonumber(a[1]["id"]))
-            end
-        else
-            return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})
-        end
-    end,
-    __index = function () end,
-    __newindex = function () end,
-    __metatable = nil
-})
+    else
+        return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})
+    end
+end
 
 log:printLog "Module Loaded"

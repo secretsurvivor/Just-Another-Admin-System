@@ -51,6 +51,10 @@ function argTable:add(name, dataType, required, default)
     end
 end
 
+function argTable.typeMap(typeStr)
+    return typeMap(typeStr)
+end
+
 function argTable:dispense()
 	local old = self.internal
 	self.internal = {} -- {Name, Datatype, Required, Default} -- If OPTION or OPTIONS then {Name, Datatype, Required, {List_of_options}}
@@ -72,6 +76,7 @@ local command = {["registerCommand"] = true, ["setCategory"] = true, ["clearCate
 function command:setCategory(name)
     if isstring(name) then
         self.category = name
+        return true
     end
 end
 
@@ -288,23 +293,20 @@ setmetatable(command, {
 	__newindex = function() end,
 	__metatable = nil
 })
-JAAS.Command = setmetatable({}, {
-    __call = function(self, command_name, command_category)
-		local f_str, id = log:executionTraceLog("Command")
-        if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-            return log:removeTraceLog(id)
+
+function JAAS.Command(command_name, command_category)
+    local f_str, id = log:executionTraceLog("Command")
+    if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+        return log:removeTraceLog(id)
+    end
+    if SERVER and command_name and command_category then
+        if command_table[category] ~= nil and command_table[category][name] ~= nil then
+            return local_command(command_name, command_category)
         end
-		if SERVER and command_name and command_category then
-            if command_table[category] ~= nil and command_table[category][name] ~= nil then
-                return local_command(command_name, command_category)
-            end
-        else
-            return setmetatable({category = "default"}, {__index = command, __newindex = function () end, __metatable = "jaas_command_library"})
-        end
-	end,
-	__newindex = function() end,
-	__metatable = nil
-})
+    else
+        return setmetatable({category = "default"}, {__index = command, __newindex = function () end, __metatable = "jaas_command_library"})
+    end
+end
 
 local function commandAutoComplete(cmd, args_str)
     local args = string.Explode(" ", string.Trim(args_str))

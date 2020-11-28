@@ -5,7 +5,7 @@ local dev = {}
 
 function dev.fQuery(s, ...)
 	if {...} == nil then
-		query(s)
+		return query(s)
 	end
 	return query(format(s, ...))
 end
@@ -148,19 +148,18 @@ function dev.isCommandLibrary(var) return getmetatable(var) == "jaas_command_lib
 function dev.isPermissionLibrary(var) return getmetatable(var) == "jaas_permission_library" end
 function dev.isPlayerLibrary(var) return getmetatable(var) == "jaas_player_library" end
 function dev.isLogLibrary(var) return getmetatable(var) == "jaas_log_library" end
+function dev.isDevLibrary(var) return getmetatable(var) == "jaas_developer_library" end
 
-JAAS.Dev = setmetatable({}, {
-	__call = function ()
-		local f_str, id = log:executionTraceLog()
-		if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-			return log:removeTraceLog(id)
-		end
-		return setmetatable({}, {
-			__index = dev,
-			__newindex = function () end,
-			__metatable = "jaas_developer_library"
-		})
+function JAAS.Dev()
+	local f_str, id = log:executionTraceLog()
+	if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+		return log:removeTraceLog(id)
 	end
-})
+	return setmetatable({}, {
+		__index = dev,
+		__newindex = function () end,
+		__metatable = "jaas_developer_library"
+	})
+end
 
 log:printLog "Module Loaded"
