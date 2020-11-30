@@ -7,8 +7,8 @@ command:setCategory "User"
 local ModifyUser_ArgTable = arg:add("Rank", "RANK", true):add("Target", "PLAYER"):dispense()
 command:registerCommand("Add", function (ply, rank_object, target)
     local user = JAAS.Player(ply)
-    local target_object = JAAS.Player(target)
     if target and IsValid(target) then -- Apply rank change on target
+        local target_object = target:getJAASObject()
         if !IsValid(ply) or ply == target or user:validPowerTarget(target_object, rank) then
             local rank_code = rank_object:getCode()
             if bit.band(target_object:getCode(), rank_code) == 0 then
@@ -35,8 +35,8 @@ end, ModifyUser_ArgTable)
 
 command:registerCommand("Remove", function (ply, rank_object, target)
     local user = JAAS.Player(ply)
-    local target_object = JAAS.Player(target)
-    if target and IsValid(target) then
+    if target and IsValid(target) then -- Apply rank change on target
+        local target_object = target:getJAASObject()
         if !IsValid(ply) or ply == target or user:validPowerTarget(target_object, rank) then
             local rank_code = rank_object:getCode()
             if bit.band(target_object:getCode(), rank_code) > 0 then

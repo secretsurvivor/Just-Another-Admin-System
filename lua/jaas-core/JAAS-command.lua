@@ -1,4 +1,3 @@
-if JAAS.Command then return end
 local dev = JAAS.Dev()
 local log = JAAS.Log("Command")
 if !sql.TableExists("JAAS_command") and SERVER then
@@ -68,7 +67,7 @@ setmetatable(argTable, {
 	__metatable = nil
 })
 
-local command_table = {} -- SERVER -- [category][name] = {code, funcArgs, function, description} -- CLIENT -- [category][name] = {code, funcArgs, description}
+local command_table = command_table or {} -- SERVER -- [category][name] = {code, funcArgs, function, description} -- CLIENT -- [category][name] = {code, funcArgs, description}
 
 local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] = true, ["setCode"] = true} -- Used for local functions, for command data
 local command = {["registerCommand"] = true, ["setCategory"] = true, ["clearCategory"] = true, ["argumentTableBuilder"] = true} -- Used for global functions, for command table
@@ -126,24 +125,6 @@ if SERVER then
             JAAS.Hook.Run "Command" "GlobalRankChange" (self.category, self.name, c_xor)
         end
         return q
-    end
-
-    function local_command:validPowerTarget(code, rank_library)
-        if dev.isRankLibrary(rank_library) then
-            if isnumber(code) then
-                if self:getCode() > 0 and code > 0 then
-                    return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code)
-                elseif self:getCode() > 0 then
-                    return rank_library.getMaxPower(self:getCode()) > 0
-                end
-            elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
-                if self:getCode() > 0 and code:getCode() > 0 then
-                    return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code:getCode())
-                elseif self:getCode() > 0 then
-                    return rank_library.getMaxPower(self:getCode()) > 0
-                end
-            end
-        end
     end
 
     function local_command:executeCommand(...)
@@ -295,7 +276,7 @@ setmetatable(command, {
 })
 
 function JAAS.Command(command_name, command_category)
-    local f_str, id = log:executionTraceLog("Command")
+    local f_str, id = log:executionTraceLog()
     if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
         return log:removeTraceLog(id)
     end

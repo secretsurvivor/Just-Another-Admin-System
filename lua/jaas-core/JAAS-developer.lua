@@ -1,7 +1,7 @@
 local query, format, type = sql.Query, string.format, type
 local ipairs, gmatch, net = ipairs, string.gmatch, net
 local log = JAAS.Log("Developer")
-local dev = {}
+local dev = {["fQuery"] = true, ["verifyFilepath"] = true, ["verifyFilepath_table"] = true, ["sharedSync"] = true, ["mergeSort"] = true}
 
 function dev.fQuery(s, ...)
 	if {...} == nil then
@@ -34,7 +34,6 @@ function dev.verifyFilepath(filepath, verify_str)
 				if count == (#verify_str) + 1 then
 					verified = true
 				end
-				f_c = filepath_func()
 			else
 				if f_c == v_c then
 				elseif v_c == "*" then
@@ -42,10 +41,10 @@ function dev.verifyFilepath(filepath, verify_str)
 				else
 					incorrect = true
 				end
-				f_c = filepath_func()
 				v_c = verify_func()
 				count = 1 + count
 			end
+			f_c = filepath_func()
 			if f_c == nil then
 				incorrect = true
 			end
@@ -74,8 +73,8 @@ function dev.verifyFilepath_table(filepath, verify_str_table)
 	return false
 end
 
-function dev.sharedSync(networkString, server_func, hook_identifier, client_func)
-	if SERVER then
+if SERVER then
+	function dev.sharedSync(networkString, server_func)
 		util.AddNetworkString(networkString)
 		local receive_func = function (_, ply)
 			local table_ = server_func(_, ply)
@@ -87,13 +86,15 @@ function dev.sharedSync(networkString, server_func, hook_identifier, client_func
 		end
 		net.Receive(networkString, receive_func)
 		return receive_func
-	elseif CLIENT then
+	end
+elseif CLIENT then
+	function dev.sharedSync(networkString, _, hook_identifier, client_func)
 		net.Receive(networkString, function (_, ply)
 			client_func(_, ply, net.ReadTable())
 		end)
 		hook.Add("InitPostEntity", hook_identifier, function ()
 			net.Start(networkString)
-        	net.SendToServer()
+			net.SendToServer()
 		end)
 	end
 end

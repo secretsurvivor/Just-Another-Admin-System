@@ -185,7 +185,7 @@ function rank.removeRank(name)
                     bit_code = bit.ror(bit_code, rank_position)
                     bit_code = bit.rshift(bit_code, bit_length - rank_position)
                     bit_code = bit.rol(bit_code, bit_length)
-                    return shifted_bits + bit_code
+                    return bit.bor(shifted_bits, bit_code)
                 end
             end
             return bit_code or 0
@@ -252,7 +252,7 @@ function rank.removeRanks(...)
                         bit_code = bit.ror(bit_code, rankPositions[1])
                         bit_code = bit.rshift(bit_code, bit_length - rankPositions[1])
                         bit_code = bit.rol(bit_code, bit_length)
-                        return shifted_bits + bit_code
+                        return bit.bor(shifted_bits, bit_code)
                     else
                         return shifted_bits
                     end

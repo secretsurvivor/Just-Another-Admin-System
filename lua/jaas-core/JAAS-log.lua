@@ -1,6 +1,4 @@
-if JAAS.Log then return end
-
-local log = {}
+local log = {["getLogFile"] = true, ["writeToLogFile"] = true, ["printLog"] = true, ["silentLog"] = true}
 
 function log.getLogFile(date)
 end
@@ -30,8 +28,8 @@ end
 function log:gameLog(action, str)
 end
 
-local executionTrace = {} -- [label] = {[id] = {file path, line}}
-local refusedTrace = {} -- [label] = {id*}
+local executionTrace = executionTrace or {} -- [label][id] = {file path, line}
+local refusedTrace = refusedTrace or {} -- [label] = {id*}
 
 function log:executionTraceLog()
     if !JAAS.Var.TraceExecution then

@@ -13,16 +13,16 @@ hook.Add("player_connect", "JAAS-player-registration", function(data) -- To be l
 end)
 
 local user = {["userIterator"] = true}
-local user_local = {["getCode"] = true, ["setCode"] = true}
+local user_local = {["getCode"] = true, ["setCode"] = true, ["xorCode"] = true, ["canTarget"] = true}
 
 local u_cache = {}
 local u_cache_dirty = true
 
-JAAS.hook.add "Player" "GlobalRankChange" "Player_module_cache" (function()
+JAAS.Hook.Add "Player" "GlobalRankChange" "Player_module_cache" (function()
 	u_cache_dirty = true
 end)
 
-local add_to_cache = function(steamid)
+local function add_to_cache(steamid)
 	if steamid then
 		local a = dev.fQuery("SELECT code FROM JAAS_player WHERE steamid='%s'", steamid)
 		if a then
@@ -30,10 +30,27 @@ local add_to_cache = function(steamid)
 			return true
 		end
 	end
+	return false
+end
+
+local function get_from_cache(steamid)
+	if steamid then
+		if u_cache_dirty then
+			u_cache = {}
+			u_cache_dirty = false
+			add_to_cache(steamid)
+		end
+		if u_cache[steamid] ~= nil then
+			if !add_to_cache(steamid) then
+				error("SteamID must have been removed from database", 3)
+			end
+		end
+		return u_cache[steamid]
+	end
 end
 
 function user_local:getCode()
-	return u_cache[self.steamid]
+	return get_from_cache(self.steamid)
 end
 
 function user_local:setCode(code)
@@ -109,13 +126,13 @@ JAAS.Hook.Add "Rank" "RemovePosition" "Player_module" (function (func)
 end)
 
 function JAAS.Player(steamid)
-	local f_str, id = log:executionTraceLog("Player")
+	local f_str, id = log:executionTraceLog()
 	if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
 		return log:removeTraceLog(id)
 	end
 	if u_cache_dirty then
 		u_cache = {}
-		u_cache_dirty = true
+		u_cache_dirty = false
 	end
 	if !isstring(steamid) and IsValid(steamid) then
 		steamid = steamid:SteamID()
@@ -139,9 +156,7 @@ function meta:getJAASObject()
 end
 
 function meta:getJAASCode()
-	if add_to_cache(steamid) then
-		return u_cache[self.SteamID()]
-	end
+	return get_from_cache(self.SteamID())
 end
 
 log:printLog "Module Loaded"

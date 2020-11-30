@@ -1,4 +1,3 @@
-if JAAS.Permission then return end
 local dev = JAAS.Dev()
 local log = JAAS.Log("Permission")
 if !sql.TableExists("JAAS_permission") and SERVER then
@@ -6,8 +5,8 @@ if !sql.TableExists("JAAS_permission") and SERVER then
     dev.fQuery("CREATE UNIQUE INDEX JAAS_permission_name ON JAAS_permission (name)")
 end
 
-local permission_table = {} -- [name] = {code, description}
-local permission_local = {["getCode"] = true, ["setCode"] = true}
+local permission_table = permission_table or {} -- [name] = {code, description}
+local permission_local = {["getCode"] = true, ["setCode"] = true, ["getName"] = true, ["xorCode"] = true}
 local permission = {["registerPermission"] = true}
 
 function permission_local:getName()
@@ -44,15 +43,20 @@ function permission_local:xorCode(code)
 end
 
 function permission_local:codeCheck(code)
-    if isnumber(code) then
-        if self:getCode() == 0 or bit.band(self:getCode(), code) then
-            return true
-        end
-    elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
-        if self:getCode() == 0 or bit.band(self:getCode(), code:getCode()) then
-            return true
+    if self:defaultAccess() then
+        return true
+    else
+        if isnumber(code) then
+            if bit.band(self:getCode(), code) then
+                return true
+            end
+        elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
+            if bit.band(self:getCode(), code:getCode()) then
+                return true
+            end
         end
     end
+    return false
 end
 
 function permission_local:defaultAccess()
@@ -98,7 +102,7 @@ JAAS.Hook.Add "Rank" "RemovePosition" "Permission_module" (function (func)
 end)
 
 function JAAS.Permission(permission_name)
-    local f_str, id = log:executionTraceLog("Command")
+    local f_str, id = log:executionTraceLog()
     if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
         return log:removeTraceLog(id)
     end
