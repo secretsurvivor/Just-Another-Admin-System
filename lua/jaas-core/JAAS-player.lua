@@ -1,14 +1,15 @@
-local dev = JAAS.Dev()
-local log = JAAS.Log("Player")
-if !sql.TableExists("JAAS_player") and SERVER then
-	dev.fQuery("CREATE TABLE JAAS_player(steamid TEXT NOT NULL UNIQUE, code UNSIGNED BIG INT DEFAULT 0)")
-	dev.fQuery("CREATE INDEX JAAS_player_steamid ON JAAS_player (steamid)")
+local MODULE, log, dev, SQL = JAAS:RegisterModule "Player"
+SQL = SQL"JAAS_player"
+
+if !SQL.EXISTS and SERVER then
+	SQL.CREATE.TABLE {steamid = "TEXT NOT NULL UNIQUE", code = "UNSIGNED BIG INT DEFAULT 0"}
+	SQL.CREATE.INDEX "JAAS_player_steamid" "steamid"
 end
 
 gameevent.Listen("player_connect")
 hook.Add("player_connect", "JAAS-player-registration", function(data) -- To be logged
 	if data.bot == 0 then
-		dev.fQuery("INSERT INTO JAAS_player(steamid) VALUES ('%s')", data.networkid)
+		SQL.INSERT {steamid = data.networkid}
 	end
 end)
 
@@ -24,7 +25,7 @@ end)
 
 local function add_to_cache(steamid)
 	if steamid then
-		local a = dev.fQuery("SELECT code FROM JAAS_player WHERE steamid='%s'", steamid)
+		local a = SQL.SELECT "code" {steamid = steamid}
 		if a then
 			u_cache[steamid] = a[1]["code"]
 			return true
@@ -54,7 +55,7 @@ function user_local:getCode()
 end
 
 function user_local:setCode(code)
-	local a = dev.fQuery("UPDATE JAAS_player SET code=%u WHERE steamid='%s'", code, self.steamid)
+	local a = SQL.UPDATE {code = code} {steamid = self.steamid}
 	if a then
 		JAAS.Hook.Run "Player" "GlobalRankChange" ()
 		return a
@@ -62,11 +63,11 @@ function user_local:setCode(code)
 end
 
 function user_local:xorCode(code)
-	local current_code = dev.fQuery("SELECT code FROM JAAS_player WHERE steamid='%s'", self.steamid)
+	local current_code = SQL.SELECT "code" {steamid = self.steamid}
 	if current_code then
 		current_code = current_code[1]["code"]
 		local xor_code = bit.bxor(current_code, code)
-		local a = dev.fQuery("UPDATE JAAS_player SET code=%u WHERE steamid='%s'", xor_code, self.steamid)
+		local a = SQL.UPDATE {code = xor_code} {steamid = self.steamid}
 		if a then
 			JAAS.Hook.Run "Player" "GlobalRankChange" ()
 			return a
@@ -99,7 +100,7 @@ function user_local:defaultAccess()
 end
 
 function user.playerIterator(key)
-	local a = dev.fQuery("SELECT * FROM JAAS_player")
+	local a = SQL.SELECT()
 	local i = 0
 	if key then
 		return function ()
@@ -120,21 +121,17 @@ end
 JAAS.Hook.Add "Rank" "RemovePosition" "Player_module" (function (func)
 	sql.Begin()
 	for steamid, code in user.userIterator() do
-		dev.fQuery("UPDATE JAAS_player SET code=%u WHERE steamid='%s'", func(tonumber(code)), steamid)
+		SQL.UPDATE {code = func(tonumber(code))} {steamid = steamid}
 	end
 	sql.Commit()
 end)
 
-function JAAS.Player(steamid)
-	local f_str, id = log:executionTraceLog()
-	if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-		return log:removeTraceLog(id)
-	end
+MODULE.Access(function (steamid)
 	if u_cache_dirty then
 		u_cache = {}
 		u_cache_dirty = false
 	end
-	if !isstring(steamid) and IsValid(steamid) then
+	if isentity(steamid) and IsValid(steamid) and steamid:IsPlayer() then
 		steamid = steamid:SteamID()
 	end
 	if add_to_cache(steamid) then
@@ -142,7 +139,7 @@ function JAAS.Player(steamid)
 	else
 		return setmetatable({}, {__index = user, __newindex = function () end, __metatable = "jaas_player_library"})
 	end
-end
+end, true)
 
 local meta = FindMetaTable("Player")
 function meta:getJAASObject()

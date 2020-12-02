@@ -1,8 +1,9 @@
-local dev = JAAS.Dev()
-local log = JAAS.Log("Permission")
-if !sql.TableExists("JAAS_permission") and SERVER then
-    dev.fQuery("CREATE TABLE JAAS_permission(name TEXT NOT NULL UNIQUE, code UNSIGNED BIG INT NOT NULL DEFAULT 0)")
-    dev.fQuery("CREATE UNIQUE INDEX JAAS_permission_name ON JAAS_permission (name)")
+local MODULE, log, dev, SQL = JAAS:RegisterModule "Permission"
+SQL = SQL"JAAS_permission"
+
+if !SQL.EXISTS and SERVER then
+    SQL.CREATE.TABLE {name = "NOT NULL UNIQUE", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0"}
+    SQL.CREATE.INDEX "JAAS_permission_name" "name"
 end
 
 local permission_table = permission_table or {} -- [name] = {code, description}
@@ -22,7 +23,7 @@ function permission_local:getDescription()
 end
 
 function permission_local:setCode(code)
-    local q = dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", code, self.name)
+    local q = SQL.UPDATE {code = code} {name = self.name}
     if q then
         local before = permission_table[self.name][1]
         permission_table[self.name][1] = code
@@ -34,7 +35,7 @@ end
 function permission_local:xorCode(code)
     local before = permission_table[self.name][1]
     local c_xor = bit.bxor(before, code)
-    local q = dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", c_xor, self.name)
+    local q = SQL.UPDATE {code = c_xor} {name = self.name}
     if q then
         permission_table[self.name][1] = c_xor
         JAAS.Hook.Run.Permission(self.name)(before, c_xor)
@@ -75,14 +76,14 @@ setmetatable(permission_local, {
 })
 
 function permission.registerPermission(name, description, code)
-    local q = dev.fQuery("SELECT code FROM JAAS_permission WHERE name='%s'", name)
+    local q = SQL.SELECT "code" {name = name}
     if q then
         code = tonumber(q[1]["code"])
     elseif code == nil then
         code = 0
     end
     if !q then
-        dev.fQuery("INSERT INTO JAAS_permission (name, code) VALUES ('%s', %u)", name, code)
+        SQL.INSERT {name = name, code = code}
         q = true
     end
     if q then
@@ -96,21 +97,17 @@ JAAS.Hook.Add "Rank" "RemovePosition" "Permission_module" (function (func)
     for name, t in pairs(permission_table) do
         local new_code = func(t[1])
         permission_table[name][1] = new_code
-        dev.fQuery("UPDATE JAAS_permission SET code=%u WHERE name='%s'", new_code, name)
+        SQL.UPDATE {code = new_code} {name = name}
     end
     sql.Commit()
 end)
 
-function JAAS.Permission(permission_name)
-    local f_str, id = log:executionTraceLog()
-    if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-        return log:removeTraceLog(id)
-    end
+MODULE.Access(function (permission_name)
     if permission_name and permission_table[permission_name] ~= nil then
         return permission_local(permission_name)
     end
     return setmetatable({}, {__index = permission, __newindex = function () end, __metatable = "jaas_permission_library"})
-end
+end, true)
 
 concommand.Add("JAAS_printPermissions", function ()
     for k,v in pairs(permission_table) do

@@ -328,8 +328,8 @@ print "-------- JAAS Modules --------"
 
 include ["shared"] {
     "JAAS_variables.lua",
-    "jaas-core/JAAS-log.lua",
-    "jaas-core/JAAS-developer.lua"
+    "jaas-core/JAAS-module.lua",
+    "jaas-core/JAAS-command.lua"
 }
 
 include ["server"] {
@@ -338,9 +338,9 @@ include ["server"] {
     "jaas-core/JAAS-permission.lua"
 }
 
-include ["shared"] "jaas-core/JAAS-command.lua"
-
 include ["client"] "jaas-core/JAAS-panel.lua"
+
+JAAS:PostInitialise()
 
 if CLIENT then print "------------------------------" end
 

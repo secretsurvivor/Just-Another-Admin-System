@@ -1,31 +1,32 @@
-local dev = JAAS.Dev()
-local log = JAAS.Log("Rank")
-if !sql.TableExists("JAAS_rank") and SERVER then
-	dev.fQuery("CREATE TABLE JAAS_rank(name TEXT NOT NULL UNIQUE, position UNSIGNED TINYINT(255) NOT NULL UNIQUE CHECK (position != 0 AND position <= 64), power UNSIGNED TINYINT(255) DEFAULT 0, invisible BOOL DEFAULT FALSE)")
+local MODULE, log, dev, SQL = JAAS:RegisterModule "Rank"
+SQL = SQL"JAAS_rank"
+
+if !SQL.EXISTS and SERVER then
+    SQL.CREATE.TABLE {name = "TEXT NOT NULL UNIQUE", position = "UNSIGNED TINYINT NOT NULL UNIQUE CHECK (position != 0 AND position <= 64)", power = "UNSIGNED TINYINT DEFAULT 0", invisible = "BOOL DEFAULT FALSE"}
 end
 
 local local_rank = {["getName"] = true, ["setName"] = true, ["getCodePosition"] = true, ["getCode"] = true} -- Used for local functions, for rank data
 
 function local_rank:getName()
-    local name = dev.fQuery("SELECT name FROM JAAS_rank WHERE rowid=%u", self.id)
+    local name = SQL.SELECT "name" {rowid = self.id}
     if name then
         return name[1]["name"]
     end
 end
 
 function local_rank:setName(name)
-    return dev.fQuery("UPDATE JAAS_rank SET name='%s' WHERE rowid=%u", name, self.id)
+    return SQL.UPDATE {name = name} {rowid = self.id}
 end
 
 function local_rank:getCodePosition()
-    local position = dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%u", self.id)
+    local position = SQL.SELECT "position" {rowid = self.id}
     if position then
         return position[1]["position"]
     end
 end
 
 function local_rank:getCode()
-    local position = dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%u", self.id)
+    local position = SQL.SELECT "position" {rowid = self.id}
     if position then
         position = position[1]["position"]
         return bit.lshift(1, position - 1)
@@ -33,14 +34,14 @@ function local_rank:getCode()
 end
 
 function local_rank:getPower()
-    local power = dev.fQuery("SELECT power FROM JAAS_rank WHERE rowid=%u", self.id)
+    local power = SQL.SELECT "power" {rowid = self.id}
     if power then
         return power[1]["power"]
     end
 end
 
 function local_rank:setPower(power)
-    local a = dev.fQuery("UPDATE JAAS_rank SET power=%u WHERE rowid=%u", power, self.id)
+    local a = SQL.UPDATE {power = power} {rowid = self.id}
     if a then
         JAAS.Hook.Run "Rank" "GlobalPowerChange" ()
         return a
@@ -48,22 +49,20 @@ function local_rank:setPower(power)
 end
 
 function local_rank:getInvis()
-    local invis = dev.fQuery("SELECT invisible FROM JAAS_rank WHERE rowid=%u", self.id)
+    local invis = SQL.SELECT "invisible" {rowid = self.id}
     if invis then
         return invis[1]["invisible"]
     end
 end
 
 function local_rank:setInvis(invis)
-    return dev.fQuery("UPDATE JAAS_rank SET invisible=%s WHERE rowid=%u", invis, self.id)
+    return SQL.UPDATE {invisible = invis} {rowid = self.id}
 end
-
-debug.getregistry()["JAAS_RankObject"] = local_rank
 
 setmetatable(local_rank, {
     __call = function(self, rank_name)
         if isstring(rank_name) then
-            local a = dev.fQuery("SELECT rowid FROM JAAS_rank WHERE name='%s'", rank_name)
+            local a = SQL.SELECT "rowid" {name = rank_name}
             return setmetatable({id = a[1]["rowid"]}, {__index = local_rank})
         elseif isnumber(rank_name) then
             return setmetatable({id = rank_name}, {__index = local_rank})
@@ -74,15 +73,15 @@ setmetatable(local_rank, {
 })
 
 local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true, ["codeIterator"] = true} -- Used for global functions, for rank table
-local rank_count = rank_count or dev.fQuery("SELECT COUNT(rowid) FROM JAAS_rank")[1]["COUNT(rowid)"]
+local rank_count = rank_count or SQL.SELECT "COUNT(rowid)"()["COUNT(rowid)"]
 
 function rank.addRank(name, power, invis)
     if rank_count < 64 then
-        local t = dev.fQuery("SELECT MAX(position) FROM JAAS_rank")[1]
+        local t = SQL.SELECT "MAX(position)"()
         if t then
             local next_position = t["MAX(position)"]
             if next_position == "NULL" then next_position = 0 end
-            local a = dev.fQuery("INSERT INTO JAAS_rank(name, position, power, invisible) VALUES (%u, '%s', %u, %u, %s)", name, 1 + next_position, power, invis)
+            local a = SQL.INSERT {name = name, position = 1 + next_position, power = power, invisible = invis}
             if a != false then
                 rank_count = 1 + rank_count
                 return local_rank(name)
@@ -92,7 +91,7 @@ function rank.addRank(name, power, invis)
 end
 
 function rank.rankIterator(key)
-    local a = dev.fQuery("SELECT * FROM JAAS_rank")
+    local a = SQL.SELECT()
     local i = 0
     if a then
         if key then
@@ -125,7 +124,7 @@ function rank.codeIterator(code)
             local e = false
             return function ()
                 if !e then
-                    return dev.fQuery("SELECT * FROM JAAS_rank WHERE position=%u", max_bits)[1]
+                    return SQL.SELECT "*" {position = max_bits}
                 else
                     e = !e
                 end
@@ -157,16 +156,16 @@ end
 function rank.removeRank(name)
     local q, rank_position
     if isstring(name) then
-        rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE name='%s'", name)[1]["position"])
-        q = dev.fQuery("DELETE FROM JAAS_rank WHERE name='%s'", name)
+        rank_position = tonumber(SQL.SELECT "position" {name = name}["position"])
+        q = SQL.DELETE {name = name}
         rank_count = rank_count - 1
     elseif isnumber(name) then
-        rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", name)[1]["position"])
-        q = dev.fQuery("DELETE FROM JAAS_rank WHERE rowid=%s", name)
+        rank_position = tonumber(SQL.SELECT "position" {rowid = name}["position"])
+        q = SQL.DELETE {rowid = name}
         rank_count = rank_count - 1
     elseif dev.isRankObject(var) then
-        rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", name.id)[1]["position"])
-        q = dev.fQuery("DELETE FROM JAAS_rank WHERE rowid=%s", name.id)
+        rank_position = tonumber(SQL.SELECT "position" {rowid = name.id}["position"])
+        q = SQL.DELETE {rowid = name.id}
         rank_count = rank_count - 1
     end
     if q != false then
@@ -193,7 +192,7 @@ function rank.removeRank(name)
         sql.Begin()
         for t in rank.rankIterator() do
             if tonumber(t["position"]) > rank_position then
-                dev.fQuery("UPDATE JAAS_rank SET position=%u WHERE rowid=%s", t["position"]-1, t["id"])
+                SQL.UPDATE {position = t["position"] - 1} {rowid = t["id"]}
             end
         end
         sql.Commit()
@@ -209,22 +208,22 @@ function rank.removeRanks(...)
             for k,v in ipairs(rankPositions) do
                 local q, rank_position
                 if isstring(v) then
-                    rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE name='%s'", v)[1]["position"])
-                    if dev.fQuery("DELETE FROM JAAS_rank WHERE name='%s'", v) then
+                    rank_position = tonumber(SQL.SELECT "position" {name = v}["position"])
+                    if SQL.DELETE {name = v} then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
                         rank_count = rank_count - 1
                     end
                 elseif isnumber(v) then
-                    rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", v)[1]["position"])
-                    if dev.fQuery("DELETE FROM JAAS_rank WHERE id=%s", v) then
+                    rank_position = tonumber(SQL.SELECT "position" {rowid = v}["position"])
+                    if SQL.DELETE {id = v} then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
                         rank_count = rank_count - 1
                     end
                 elseif istable(v) and getmetatable(v) == "jaas_rank_object" then
-                    rank_position = tonumber(dev.fQuery("SELECT position FROM JAAS_rank WHERE rowid=%s", v.id)[1]["position"])
-                    if dev.fQuery("DELETE FROM JAAS_rank WHERE rowid=%s", v.id) then
+                    rank_position = tonumber(SQL.SELECT "position" {rowid = v.id}["position"])
+                    if SQL.DELETE {rowid = v.id} then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
                         rank_count = rank_count - 1
@@ -262,7 +261,7 @@ function rank.removeRanks(...)
             local i = 1
             for t in rank.rankIterator() do
                 if rankPositions[i] < tonumber(t["position"]) then
-                    dev.fQuery("UPDATE JAAS_rank SET position=%u WHERE rowid=%s", t["position"]-i, t["id"])
+                    SQL.UPDATE {position = t["position"] - i} {rowid = t["id"]}
                     i = 1 + i
                 end
             end
@@ -302,27 +301,21 @@ function rank.getMaxPower(code)
 end
 
 function rank.getRank(name)
-    local a = dev.fQuery("SELECT rowid FROM JAAS_rank WHERE name='%s'", rank_name)
+    local a = SQL.SELECT "rowid" {name = rank_name}
     if a then
         return local_rank(tonumber(a[1]["id"]))
     end
 end
 
-debug.getregistry()["JAAS_RankLibrary"] = rank
-
-function JAAS.Rank(rank_name)
-    local f_str, id = log:executionTraceLog()
-    if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-        return log:removeTraceLog(id)
-    end
+MODULE.Access(function (rank_name)
     if rank_name then
-        local a = dev.fQuery("SELECT rowid FROM JAAS_rank WHERE name='%s'", rank_name)
+        local a = SQL.SELECT "rowid" {name = rank_name}
         if a then
             return local_rank(tonumber(a[1]["id"]))
         end
     else
         return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})
     end
-end
+end, true)
 
 log:printLog "Module Loaded"

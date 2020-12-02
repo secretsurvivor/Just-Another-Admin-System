@@ -1,8 +1,9 @@
-local dev = JAAS.Dev()
-local log = JAAS.Log("Command")
-if !sql.TableExists("JAAS_command") and SERVER then
-	dev.fQuery("CREATE TABLE JAAS_command(name TEXT NOT NULL, category TEXT NOT NULL, code UNSIGNED BIG INT NOT NULL DEFAULT 0, PRIMARY KEY (name, category))")
-    dev.fQuery("CREATE UNIQUE INDEX JAAS_command_primary ON JAAS_command (name, category)")
+local MODULE, log, dev, SQL = JAAS:RegisterModule "Command"
+SQL = SQL"JAAS_command"
+
+if !SQL.EXISTS and SERVER then
+    SQL.CREATE.TABLE {name = "TEXT NOT NULL", category = "TEXT NOT NULL", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0", "PRIMARY KEY (name, category)"}
+    SQL.CREATE.INDEX "JAAS_command_primary" {name, category}
 end
 
 local argTable = {["add"]=true, ["dispense"]=true} -- Argument Table Builder, for command registering and user interface
@@ -105,7 +106,7 @@ if SERVER then
     end
 
     function local_command:setCode(code)
-        local q = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", code, self.name, self.category) and nil
+        local q = SQL.UPDATE {code = code} {name = self.name, category = self.category} and nil
         if q then
             local before = command_table[self.category][self.name][1]
             command_table[self.category][self.name][1] = code
@@ -118,7 +119,7 @@ if SERVER then
     function local_command:xorCode(code)
         local before = command_table[self.category][self.name][1]
         local c_xor = bit.bxor(before, code)
-        local q = dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", c_xor, self.name, self.category) and nil
+        local q = SQL.UPDATE {code = c_xor} {name = self.name, category = self.category} and nil
         if q then
             command_table[self.category][self.name][1] = c_xor
             JAAS.Hook.Run.Command(self.category)(self.name)(before, c_xor)
@@ -140,14 +141,14 @@ if SERVER then
     })
 
     function command:registerCommand(name, func, funcArgs, description, code)
-        local q = dev.fQuery("SELECT code FROM JAAS_command WHERE name='%s' AND category='%s'", name, self.category)
+        local a = SQL.SELECT "code" {name = name, category = self.category}
         if q then
             code = tonumber(q[1]["code"])
         elseif code == nil then
             code = 0
         end
         if !q then
-            dev.fQuery("INSERT INTO JAAS_command (name, category, code) VALUES ('%s', '%s', %u)", name, self.category, code)
+            SQL.INSERT {name = name, category = self.category, code = code}
             q = true
         end
         if q then
@@ -269,11 +270,7 @@ end, "JAAS_ClientCommand", function (_, ply, code_table)
     end
 end)
 
-function JAAS.Command(command_name, command_category)
-    local f_str, id = log:executionTraceLog()
-    if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-        return log:removeTraceLog(id)
-    end
+MODULE.Access(function (command_name, command_category)
     if SERVER and command_name and command_category then
         if command_table[category] ~= nil and command_table[category][name] ~= nil then
             return local_command(command_name, command_category)
@@ -281,7 +278,7 @@ function JAAS.Command(command_name, command_category)
     else
         return setmetatable({category = "default"}, {__index = command, __newindex = function () end, __metatable = "jaas_command_library"})
     end
-end
+end, true)
 
 local function commandAutoComplete(cmd, args_str)
     local args = string.Explode(" ", string.Trim(args_str))
@@ -488,7 +485,7 @@ if SERVER then
             for name, n_t in pairs(c_t) do
                 local new_code = func(n_t[1])
                 n_t[1] = new_code
-                dev.fQuery("UPDATE JAAS_command SET code=%u WHERE name='%s' AND category='%s'", new_code, name, category)
+                SQL.UPDATE {code = new_code} {name = name, category = category}
             end
         end
         sql.Commit()
