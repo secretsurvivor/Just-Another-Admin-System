@@ -1,5 +1,6 @@
 local var = {
-    TraceExecution = false, -- This will also disable access refusal
+    TraceExecution = true,
+    ExecutionRefusal = false,
     ValidFilepaths = {
         "addons/*/lua/jaas/*",
         "addons/just-another-admin-system/lua/*"

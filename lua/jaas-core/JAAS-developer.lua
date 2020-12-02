@@ -30,6 +30,7 @@ function dev.verifyFilepath(filepath, verify_str)
 				if f_c == "/" then
 					wild_card = false
 					v_c = verify_func()
+					count = 1 + count
 				end
 				if count == (#verify_str) + 1 then
 					verified = true
@@ -138,6 +139,10 @@ function dev.mergeSort(table) -- Acc
 		end
 	end
 	return sort(table, 1, (#table) - 1)
+end
+
+function dev.quickSort()
+
 end
 
 function dev.isRankObject(var) return getmetatable(var) == "jaas_rank_object" end

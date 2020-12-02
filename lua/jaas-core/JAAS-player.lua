@@ -8,7 +8,7 @@ end
 gameevent.Listen("player_connect")
 hook.Add("player_connect", "JAAS-player-registration", function(data) -- To be logged
 	if data.bot == 0 then
-		dev.fQuery("INSERT INTO JAAS_player(steamid) VALUES ('%s') WHERE NOT (SELECT * FROM JAAS_player WHERE steamid='%s)'", data.networkid, data.networkid)
+		dev.fQuery("INSERT INTO JAAS_player(steamid) VALUES ('%s')", data.networkid)
 	end
 end)
 
@@ -146,7 +146,7 @@ end
 
 local meta = FindMetaTable("Player")
 function meta:getJAASObject()
-	local f_str, id = log:executionTraceLog("Player")
+	local f_str, id = log:executionTraceLog()
 	if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
 		return log:removeTraceLog(id)
 	end

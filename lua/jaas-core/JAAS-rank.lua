@@ -74,7 +74,7 @@ setmetatable(local_rank, {
 })
 
 local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true, ["codeIterator"] = true} -- Used for global functions, for rank table
-local rank_count = dev.fQuery("SELECT COUNT(rowid) FROM JAAS_rank")[1]["COUNT(rowid)"]
+local rank_count = rank_count or dev.fQuery("SELECT COUNT(rowid) FROM JAAS_rank")[1]["COUNT(rowid)"]
 
 function rank.addRank(name, power, invis)
     if rank_count < 64 then

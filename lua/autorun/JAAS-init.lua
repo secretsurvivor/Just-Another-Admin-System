@@ -270,7 +270,7 @@ JAAS.GlobalVar = setmetatable({
     Set = function (category) -- JAAS.GlobalVar.Set category name (var)
         return function (name)
             return function (var)
-                local before = nil
+                local before
                 if globalvar_table[category] == nil then
                     globalvar_table[category] = {[name] = var}
                 else

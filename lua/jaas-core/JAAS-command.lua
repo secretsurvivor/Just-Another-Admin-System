@@ -269,12 +269,6 @@ end, "JAAS_ClientCommand", function (_, ply, code_table)
     end
 end)
 
-setmetatable(command, {
-	__index = function() end,
-	__newindex = function() end,
-	__metatable = nil
-})
-
 function JAAS.Command(command_name, command_category)
     local f_str, id = log:executionTraceLog()
     if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
