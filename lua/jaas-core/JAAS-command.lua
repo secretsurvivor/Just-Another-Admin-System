@@ -141,7 +141,7 @@ if SERVER then
     })
 
     function command:registerCommand(name, func, funcArgs, description, code)
-        local a = SQL.SELECT "code" {name = name, category = self.category}
+        local q = SQL.SELECT "code" {name = name, category = self.category}
         if q then
             code = tonumber(q[1]["code"])
         elseif code == nil then

@@ -22,7 +22,7 @@ local function class(table, metatable, properties)
     else
         return setmetatable({}, {__call = function ()
             return setmetatable({}, {__index = table, __newindex = table, __metatable = metatable})
-        end, __newindex = function () end, __index = table}})
+        end, __newindex = function () end, __index = table})
     end
 end
 
@@ -282,16 +282,16 @@ do
         local function table_to_str(t) local q,c = "",1
             for k,v in pairs(t) do
                 if isnumber(v)  then q = q .. k .. "=" .. v
-                elseif isstring(v) q = q .. k .. "=" .. "'" .. v .. "'"
+                elseif isstring(v) then q = q .. k .. "=" .. "'" .. v .. "'"
                 end
                 if c < #t then q = q .. "," end
                 c = 1 + c
             end return q
         end
         local function table_to_WHERE(t) local q,c = "",1
-            for k,v in pairs(where) do
-                if isnumber(v)  then q = q .. k .. "=" .. v
-                elseif isstring(v) q = q .. k .. "=" .. "'" .. v .. "'"
+            for k,v in pairs(t) do
+                if isnumber(v) then q = q .. k .. "=" .. v
+                elseif isstring(v) then q = q .. k .. "=" .. "'" .. v .. "'"
                 end
                 if c < #t then q = q .. " AND " end
                 c = 1 + c
@@ -303,9 +303,9 @@ do
             EXISTS = sql.TableExists(table),
             CREATE = setmetatable({
                 TABLE = function (columns)
-                    if columns and isstring(columns) then
+                    if isstring(columns) then
                         return QUERY("CREATE TABLE " .. table .. " (" .. columns .. ")")
-                    elseif columns and istable(columns) then
+                    elseif istable(columns) then
                         local q,c = "",1
                         for k,v in pairs(columns) do
                             if isstring(k) then
@@ -323,9 +323,9 @@ do
                 end,
                 INDEX = function (index_name)
                     return function (columns)
-                        if columns and isstring(columns) then
+                        if isstring(columns) then
                             return QUERY("CREATE INDEX " .. index_name .. " ON " .. table .. " (" .. columns .. ")")
-                        elseif columns and istable(columns) then
+                        elseif istable(columns) then
                             return QUERY("CREATE INDEX " .. index_name .. " ON (" .. table.concat(columns, ",") .. ")")
                         end
                     end
@@ -339,9 +339,9 @@ do
                         column = table.concat(column, ",")
                     end
                     return function (where)
-                        if where and isstring(where) then
+                        if isstring(where) then
                             return QUERY("SELECT " .. column .. " FROM " .. table .. " WHERE " .. where)
-                        elseif where and istable(where) then
+                        elseif istable(where) then
                             return QUERY("SELECT " .. column .. " FROM " .. table .. " WHERE " .. table_to_WHERE(where))
                         else
                             return QUERY("SELECT " .. column .. " FROM " .. table)
@@ -356,9 +356,9 @@ do
                     set = table_to_str(set)
                 end
                 return function (where)
-                    if where and isstring(where) then
+                    if isstring(where) then
                         return QUERY("UPDATE " .. table .. " SET " .. set .. " WHERE " .. where)
-                    elseif where and istable(where) then
+                    elseif istable(where) then
                         return QUERY("UPDATE " .. table .. " SET " .. set .. " WHERE " .. table_to_WHERE(where))
                     else
                         return QUERY("UPDATE " .. table .. " SET " .. set)
@@ -366,11 +366,11 @@ do
                 end
             end,
             INSERT = function (set)
-                if set and isstring(set) then
+                if isstring(set) then
                     return function (values)
                         return QUERY("INSERT INTO " .. table .. "(" .. set .. ") VALUES (" .. values .. ")")
                     end
-                elseif set and istable(set) then
+                elseif istable(set) then
                     local cat,val,c = "","",1
                     for k,v in pairs(set) do
                         cat = cat .. k
@@ -389,18 +389,59 @@ do
                 end
             end,
             DELETE = function (where)
-                if where and isstring(where) then
+                if isstring(where) then
                     return QUERY("DELETE FROM " .. table .. " WHERE " .. where)
-                elseif where and istable(where) then
+                elseif istable(where) then
                     return QUERY("DELETE FROM " .. table .. " WHERE " .. table_to_WHERE(where))
                 else
                     return QUERY("DELETE FROM " .. table)
                 end
-            end
+            end,
+            DROP = {
+                TABLE = function (name) -- To make sure that they know they're dropping the table
+                    if name == table then return QUERY("DROP TABLE " .. table) end
+                end,
+                INDEX = function (name)
+                    return QUERY("DROP INDEX " .. name)
+                end
+            }
         }, {__call = function (self, str)
             return QUERY(str)
         end})
     end
+
+    /*   TEST 1
+        Module SQL:     0.0030246275247499
+        fQuery SQL:     0.0038082836274652
+        Module SQL is   0.0007836561027153 seconds faster and 22.9% faster
+         TEST 2
+        Module SQL:     0.0038284250674659
+        fQuery SQL:     0.0041772511323763
+        Module SQL is   0.00034882606491038 seconds faster and 8.7% faster
+         TEST 3
+        Module SQL:     0.0044253088625228
+        fQuery SQL:     0.0038262876559714
+        fQuery SQL is   0.00059902120655145 seconds faster and 14.5% faster
+         TEST 4
+        Module SQL:     0.0032171184375652
+        fQuery SQL:     0.003427164767123
+        Module SQL is   0.00021004632955776 seconds faster and 6.3% faster
+         TEST 5
+        Module SQL:     0.0032568432510215
+        fQuery SQL:     0.0030948519395239
+        fQuery SQL is   0.0001619913114976 seconds faster and 5.1% faster
+         TEST 6
+        Module SQL:     0.0034483948663395
+        fQuery SQL:     0.0033343231579222
+        fQuery SQL is   0.00011407170841739 seconds faster and 3.3% faster
+
+        So in some cases Module's SQL has been shown to be
+        faster but I would overall say that fQuery is the faster
+        function sadly but I would say the syntax of the
+        Module's SQL is much more useful and easier to use.
+        I will have to look into techniques to make the Module
+        SQL faster.
+    */
 end
 
 local modules = {}
@@ -417,21 +458,6 @@ function JAAS:RegisterModule(name)
             if istable(index) then
                 if access_name then
                     if execution_log then
-                        jaas[name] = function (...)
-                            local f_str, id = l:executionTraceLog()
-                            if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-                                return l:removeTraceLog(id)
-                            end
-                            return index(...)
-                        end
-                    else
-                        jaas[name] = function (...)
-                            return index(...)
-                        end
-                    end
-                    modules[name] = index
-                else
-                    if execution_log then
                         jaas[access_name] = function (...)
                             local f_str, id = l:executionTraceLog()
                             if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
@@ -445,9 +471,7 @@ function JAAS:RegisterModule(name)
                         end
                     end
                     modules[access_name] = index
-                end
-            elseif isfunction(index) then
-                if access_name then
+                else
                     if execution_log then
                         jaas[name] = function (...)
                             local f_str, id = l:executionTraceLog()
@@ -457,10 +481,14 @@ function JAAS:RegisterModule(name)
                             return index(...)
                         end
                     else
-                        jaas[name] = index
+                        jaas[name] = function (...)
+                            return index(...)
+                        end
                     end
                     modules[name] = index
-                else
+                end
+            elseif isfunction(index) then
+                if access_name then
                     if execution_log then
                         jaas[access_name] = function (...)
                             local f_str, id = l:executionTraceLog()
@@ -473,6 +501,19 @@ function JAAS:RegisterModule(name)
                         jaas[access_name] = index
                     end
                     modules[access_name] = index
+                else
+                    if execution_log then
+                        jaas[name] = function (...)
+                            local f_str, id = l:executionTraceLog()
+                            if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+                                return l:removeTraceLog(id)
+                            end
+                            return index(...)
+                        end
+                    else
+                        jaas[name] = index
+                    end
+                    modules[name] = index
                 end
             end
         end,
@@ -495,19 +536,17 @@ end
 function JAAS:PostInitialise()
     if SERVER then
         for k,v in ipairs(handles.server) do
-            v(setmetatable({}, __index = modules), SQL)
+            v(setmetatable({}, {__index = modules}), SQL)
             handles[k] = nil
         end
     elseif CLIENT then
         for k,v in ipairs(handles.client) do
-            v(setmetatable({}, __index = modules), SQL)
+            v(setmetatable({}, {__index = modules}), SQL)
             handles[k] = nil
         end
     end
 end
 
-local MODULE = JAAS:RegisterModule "Log"
-MODULE.Access(log, true)
-
-MODULE = JAAS:RegisterModule "Developer"
-MODULE.Access(dev, true, "Dev")
+JAAS:RegisterModule"Log".Access(log, true)
+JAAS:RegisterModule"Developer".Access(dev, true, "Dev")
+JAAS:RegisterModule"SQL".Access(SQL)

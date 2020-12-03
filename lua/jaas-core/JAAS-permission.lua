@@ -78,7 +78,7 @@ setmetatable(permission_local, {
 function permission.registerPermission(name, description, code)
     local q = SQL.SELECT "code" {name = name}
     if q then
-        code = tonumber(q[1]["code"])
+        code = tonumber(q["code"])
     elseif code == nil then
         code = 0
     end
