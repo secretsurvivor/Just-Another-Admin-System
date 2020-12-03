@@ -129,56 +129,12 @@ do -- Developer Module Initialisation
         end
     end
 
-    function devFunctions.mergeSort(table) -- Acc
-        local function sort(table, lower, upper)
-            if lower < upper then
-                local mid = math.ceil((lower + upper)/2)
-                sort(table, lower, mid)
-                sort(table, mid + 1, upper)
-                do
-                    local sub1_l, sub2_l = mid - lower + 1, upper - mid
-                    local left, right = {}, {}
-                    for i=1, sub1_l do
-                        left[i] = table[lower + i]
-                    end
-                    for i=0, sub2_l do
-                        right[i] = table[1 + mid + i]
-                    end
-                    local i,j,k = 0,0,l
-                    while(i < sub1_l && j < sub2_l) do
-                        if left[i] <= right[j] then
-                            table[k] = left[i]
-                            i = 1 + i
-                        else
-                            table[k] = right[j]
-                            j = 1 + j
-                        end
-                    end
-                    while i < sub1_l do
-                        table[k] = left[i]
-                        i = 1 + i
-                        k = 1 + k
-                    end
-                    while j < sub2_l do
-                        table[k] = right[j]
-                        j = 1 + j
-                        k = 1 + k
-                    end
-                end
-            end
-        end
-        return sort(table, 1, (#table) - 1)
-    end
-
-    function devFunctions.quickSort()
-
-    end
-
     function devFunctions:isTypeFunc(name, metatable)
         self["is" .. name] = function (v)
             return getmetatable(v) == metatable
         end
     end
+
     for k,v in ipairs({
         {"RankObject","jaas_rank_object"},
         {"PermissionObject","jaas_permission_object"},
@@ -192,6 +148,10 @@ do -- Developer Module Initialisation
         {"DevLibrary","jaas_developer_library"}
     }) do
         devFunctions:isTypeFunc(v[1], v[2])
+    end
+
+    function math.PercentageDif(a, b)
+        return (math.abs(a - b) / ((a + b) / 2)) * 100
     end
 
     dev = class(devFunctions, "jaas_developer_library")
@@ -271,36 +231,90 @@ end
 
 local SQL
 do
-    local q,isS,isT = sql.Query,isstring,istable
-    SQL = function (table)
-        local function QUERY(str)
+    local q,isS,isT,pairs,isnumber,isstring,t = sql.Query,isstring,istable,pairs,isnumber,isstring,table
+    local QUERY,db
+    if JAAS.Var.MySQLServer then
+        require("mysqloo")
+        db = mysqloo.connect(JAAS.Var.MySQLServerInformation.host, JAAS.Var.MySQLServerInformation.username, JAAS.Var.MySQLServerInformation.password, JAAS.Var.MySQLServerInformation.database)
+        db.onConnected = function ()
+            print("MySQL Database Connected")
+        end
+        db.onConnectionFailed = function (db, err)
+            ErrorNoHalt("JAAS MySQL Connection Failed - Reverting back to SQLite\n" .. err)
+            QUERY = function (str)
+                local r = q(str)
+                if r and #r == 1 then
+                    return r[1]
+                end
+                return r
+            end
+        end
+        hook.Add("Initialize", "JAAS_MySQLServerConnect", function ()
+            db:connect()
+        end)
+        QUERY = function (str)
+            local c = coroutine.create(function ()
+                local q = db:query(str)
+                q.onSuccess = function (q, data)
+                    coroutine.yield(data)
+                end
+                q.onError = function ()
+                    coroutine.yield(false)
+                end
+                q:start()
+                coroutine.yield()
+            end)
+            coroutine.resume(c)
+            local r = coroutine.resume(c)
+            if r and #r == 1 then
+                return r[1]
+            end
+            return r
+        end
+    else
+        QUERY = function (str)
             local r = q(str)
             if r and #r == 1 then
                 return r[1]
-            end return r
+            end
+            return r
         end
-        local function table_to_str(t) local q,c = "",1
-            for k,v in pairs(t) do
-                if isnumber(v)  then q = q .. k .. "=" .. v
-                elseif isstring(v) then q = q .. k .. "=" .. "'" .. v .. "'"
-                end
-                if c < #t then q = q .. "," end
-                c = 1 + c
-            end return q
+    end
+    local function table_to_str(t)
+        local q,c = "",1
+        for k,v in pairs(t) do
+            if isnumber(v) then
+                q = q .. k .. "=" .. v
+            elseif isstring(v) then
+                q = q .. k .. "=" .. "'" .. v .. "'"
+            end
+            if c < #t then
+                q = q .. ","
+            end
+            c = 1 + c
         end
-        local function table_to_WHERE(t) local q,c = "",1
-            for k,v in pairs(t) do
-                if isnumber(v) then q = q .. k .. "=" .. v
-                elseif isstring(v) then q = q .. k .. "=" .. "'" .. v .. "'"
-                end
-                if c < #t then q = q .. " AND " end
-                c = 1 + c
-            end return q
+        return q
+    end
+    local function table_to_WHERE(t)
+        local q,c = "",1
+        for k,v in pairs(t) do
+            if isnumber(v) then
+                q = q .. k .. "=" .. v
+            elseif isstring(v) then
+                q = q .. k .. "=" .. "'" .. v .. "'"
+            end
+            if c < #t then
+                q = q .. " AND "
+            end
+            c = 1 + c
         end
-        local function isstring(v) return v and isS(v) end
-        local function istable(v) return v and isT(v) end
+        return q
+    end
+    local function isstring(v) return v and isS(v) end
+    local function istable(v) return v and isT(v) end
+    SQL = function (table)
         return setmetatable({
-            EXISTS = sql.TableExists(table),
+            EXISTS = JAAS.Var.MySQLServer and QUERY("select * from information_schema.tables where table_name='".. table .."'") or sql.TableExists(table),
             CREATE = setmetatable({
                 TABLE = function (columns)
                     if isstring(columns) then
@@ -326,7 +340,7 @@ do
                         if isstring(columns) then
                             return QUERY("CREATE INDEX " .. index_name .. " ON " .. table .. " (" .. columns .. ")")
                         elseif istable(columns) then
-                            return QUERY("CREATE INDEX " .. index_name .. " ON (" .. table.concat(columns, ",") .. ")")
+                            return QUERY("CREATE INDEX " .. index_name .. " ON " .. table .. " (" .. t.concat(columns, ",") .. ")")
                         end
                     end
                 end
@@ -336,7 +350,7 @@ do
             SELECT = function (column)
                 if column then
                     if istable(column) then
-                        column = table.concat(column, ",")
+                        column = t.concat(column, ",")
                     end
                     return function (where)
                         if isstring(where) then
@@ -398,8 +412,8 @@ do
                 end
             end,
             DROP = {
-                TABLE = function (name) -- To make sure that they know they're dropping the table
-                    if name == table then return QUERY("DROP TABLE " .. table) end
+                TABLE = function ()
+                    return QUERY("DROP TABLE " .. table)
                 end,
                 INDEX = function (name)
                     return QUERY("DROP INDEX " .. name)
@@ -440,7 +454,7 @@ do
         function sadly but I would say the syntax of the
         Module's SQL is much more useful and easier to use.
         I will have to look into techniques to make the Module
-        SQL faster.
+        SQL faster. Module SQL is -14.5% to 22.9% faster.
     */
 end
 

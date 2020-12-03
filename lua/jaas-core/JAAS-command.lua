@@ -1,7 +1,7 @@
 local MODULE, log, dev, SQL = JAAS:RegisterModule "Command"
 SQL = SQL"JAAS_command"
 
-if !SQL.EXISTS and SERVER then
+if SERVER then
     SQL.CREATE.TABLE {name = "TEXT NOT NULL", category = "TEXT NOT NULL", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0", "PRIMARY KEY (name, category)"}
     SQL.CREATE.INDEX "JAAS_command_primary" {name, category}
 end

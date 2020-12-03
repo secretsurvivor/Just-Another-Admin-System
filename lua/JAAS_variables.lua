@@ -1,4 +1,11 @@
 local var = {
+    MySQLServer = false,
+    MySQLServerInformation = {
+        host="",
+        username="",
+        password="",
+        database=""
+    },
     TraceExecution = true,
     ExecutionRefusal = false,
     ValidFilepaths = {

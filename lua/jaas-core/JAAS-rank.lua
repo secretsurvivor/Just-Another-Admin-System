@@ -1,7 +1,7 @@
 local MODULE, log, dev, SQL = JAAS:RegisterModule "Rank"
 SQL = SQL"JAAS_rank"
 
-if !SQL.EXISTS and SERVER then
+if SERVER then
     SQL.CREATE.TABLE {name = "TEXT NOT NULL UNIQUE", position = "UNSIGNED TINYINT NOT NULL UNIQUE CHECK (position != 0 AND position <= 64)", power = "UNSIGNED TINYINT DEFAULT 0", invisible = "BOOL DEFAULT FALSE"}
 end
 
@@ -10,7 +10,7 @@ local local_rank = {["getName"] = true, ["setName"] = true, ["getCodePosition"] 
 function local_rank:getName()
     local name = SQL.SELECT "name" {rowid = self.id}
     if name then
-        return name[1]["name"]
+        return name["name"]
     end
 end
 
@@ -21,7 +21,7 @@ end
 function local_rank:getCodePosition()
     local position = SQL.SELECT "position" {rowid = self.id}
     if position then
-        return position[1]["position"]
+        return position["position"]
     end
 end
 
@@ -36,7 +36,7 @@ end
 function local_rank:getPower()
     local power = SQL.SELECT "power" {rowid = self.id}
     if power then
-        return power[1]["power"]
+        return power["power"]
     end
 end
 
@@ -51,7 +51,7 @@ end
 function local_rank:getInvis()
     local invis = SQL.SELECT "invisible" {rowid = self.id}
     if invis then
-        return invis[1]["invisible"]
+        return invis["invisible"]
     end
 end
 
@@ -63,7 +63,7 @@ setmetatable(local_rank, {
     __call = function(self, rank_name)
         if isstring(rank_name) then
             local a = SQL.SELECT "rowid" {name = rank_name}
-            return setmetatable({id = a[1]["rowid"]}, {__index = local_rank})
+            return setmetatable({id = a["rowid"]}, {__index = local_rank})
         elseif isnumber(rank_name) then
             return setmetatable({id = rank_name}, {__index = local_rank})
         end
@@ -239,7 +239,7 @@ function rank.removeRanks(...)
             JAAS.Hook.Run "Rank" "RemovePosition" (function (bit_code)
                 if bit_code > 0 then
                     local shifted_bits = 0
-                    rankPositions = dev.mergeSort(rankPositions)
+                    rankPositions = table.sort(rankPositions)
                     local bit_length = math.ceil(math.log(bit_code, 2))
                     for i=#rankPositions, 1, -1 do
                         if bit_length > rankPositions[i] then
@@ -303,7 +303,7 @@ end
 function rank.getRank(name)
     local a = SQL.SELECT "rowid" {name = rank_name}
     if a then
-        return local_rank(tonumber(a[1]["id"]))
+        return local_rank(tonumber(a["id"]))
     end
 end
 
@@ -311,7 +311,7 @@ MODULE.Access(function (rank_name)
     if rank_name then
         local a = SQL.SELECT "rowid" {name = rank_name}
         if a then
-            return local_rank(tonumber(a[1]["id"]))
+            return local_rank(tonumber(a["id"]))
         end
     else
         return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})

@@ -1,7 +1,7 @@
 local MODULE, log, dev, SQL = JAAS:RegisterModule "Player"
 SQL = SQL"JAAS_player"
 
-if !SQL.EXISTS and SERVER then
+if SERVER then
 	SQL.CREATE.TABLE {steamid = "TEXT NOT NULL UNIQUE", code = "UNSIGNED BIG INT DEFAULT 0"}
 	SQL.CREATE.INDEX "JAAS_player_steamid" "steamid"
 end
@@ -27,7 +27,7 @@ local function add_to_cache(steamid)
 	if steamid then
 		local a = SQL.SELECT "code" {steamid = steamid}
 		if a then
-			u_cache[steamid] = a[1]["code"]
+			u_cache[steamid] = a["code"]
 			return true
 		end
 	end
@@ -65,7 +65,7 @@ end
 function user_local:xorCode(code)
 	local current_code = SQL.SELECT "code" {steamid = self.steamid}
 	if current_code then
-		current_code = current_code[1]["code"]
+		current_code = current_code["code"]
 		local xor_code = bit.bxor(current_code, code)
 		local a = SQL.UPDATE {code = xor_code} {steamid = self.steamid}
 		if a then
