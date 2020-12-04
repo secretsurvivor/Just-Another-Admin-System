@@ -320,12 +320,13 @@ end, true)
 
 MODULE.Handle.Shared(function (jaas)
     local command = jaas.Command()
+    local arg = command.argumentTableBuilder()
 
     command:setCategory "Rank"
 
     command:registerCommand("Add", function (ply, name, power, invis)
         name = sql.SQLStr(name)
-        if !rank.addRank(name, power, invis)
+        if !rank.addRank(name, power, invis) then
             return "Adding Rank has failed"
         end
     end, arg:add("Name", "STRING", true):add("Power", "INT", false, 0):add("Invisible", "BOOL", false, false):dispense())
