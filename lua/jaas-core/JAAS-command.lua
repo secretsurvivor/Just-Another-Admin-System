@@ -1,8 +1,8 @@
 local MODULE, log, dev, SQL = JAAS:RegisterModule "Command"
 SQL = SQL"JAAS_command"
 
-if SERVER then
-    SQL.CREATE.TABLE {name = "TEXT NOT NULL", category = "TEXT NOT NULL", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0", "PRIMARY KEY (name, category)"}
+if !SQL.EXIST and SERVER then
+    SQL.CREATE.TABLE {name = "TEXT NOT NULL", category = "TEXT NOT NULL", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0", "PRIMARY KEY(name, category)"}
     SQL.CREATE.INDEX "JAAS_command_primary" {name, category}
 end
 
@@ -148,8 +148,7 @@ if SERVER then
             code = 0
         end
         if !q then
-            SQL.INSERT {name = name, category = self.category, code = code}
-            q = true
+            q = SQL.INSERT {name = name, category = self.category, code = code} and false or true
         end
         if q then
             funcArgs = funcArgs or {}

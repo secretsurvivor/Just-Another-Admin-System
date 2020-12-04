@@ -1,7 +1,7 @@
 local MODULE, log, dev, SQL = JAAS:RegisterModule "Rank"
 SQL = SQL"JAAS_rank"
 
-if SERVER then
+if !SQL.EXIST and SERVER then
     SQL.CREATE.TABLE {name = "TEXT NOT NULL UNIQUE", position = "UNSIGNED TINYINT NOT NULL UNIQUE CHECK (position != 0 AND position <= 64)", power = "UNSIGNED TINYINT DEFAULT 0", invisible = "BOOL DEFAULT FALSE"}
 end
 
@@ -26,10 +26,9 @@ function local_rank:getCodePosition()
 end
 
 function local_rank:getCode()
-    local position = SQL.SELECT "position" {rowid = self.id}
+    local position = SQL.SELECT "1 << (position - 1)" {rowid = self.id}
     if position then
-        position = position[1]["position"]
-        return bit.lshift(1, position - 1)
+        return position["position"]
     end
 end
 
@@ -73,7 +72,10 @@ setmetatable(local_rank, {
 })
 
 local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true, ["codeIterator"] = true} -- Used for global functions, for rank table
-local rank_count = rank_count or SQL.SELECT "COUNT(rowid)"()["COUNT(rowid)"]
+local rank_count = rank_count or SQL.SELECT "COUNT(rowid)"() or 0
+if istable(rank_count) then
+    rank_count = rank_count["COUNT(rowid)"]
+end
 
 function rank.addRank(name, power, invis)
     if rank_count < 64 then

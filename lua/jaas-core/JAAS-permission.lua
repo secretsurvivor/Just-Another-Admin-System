@@ -1,7 +1,7 @@
 local MODULE, log, dev, SQL = JAAS:RegisterModule "Permission"
 SQL = SQL"JAAS_permission"
 
-if SERVER then
+if !SQL.EXIST and SERVER then
     SQL.CREATE.TABLE {name = "NOT NULL UNIQUE", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0"}
     SQL.CREATE.INDEX "JAAS_permission_name" "name"
 end
@@ -83,8 +83,7 @@ function permission.registerPermission(name, description, code)
         code = 0
     end
     if !q then
-        SQL.INSERT {name = name, code = code}
-        q = true
+        q = SQL.INSERT {name = name, code = code} and false or true
     end
     if q then
         permission_table[name] = {code, description}

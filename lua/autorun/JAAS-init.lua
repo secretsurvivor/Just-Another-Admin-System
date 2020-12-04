@@ -293,22 +293,22 @@ local function includeLoop(table_)
             if table_[state].Pre ~= nil then
                 if !message then print "-------- JAAS Register --------" message = true end
                 for k,v in ipairs(table_[state].Pre) do
-                    include[state](v)
                     print("  [".. state .."] "..v)
+                    include[state](v)
                 end
             end
             if table_[state].Init ~= nil then
                 if !message then print "-------- JAAS Register --------" message = true end
                 for k,v in ipairs(table_[state].Init) do
-                    include[state](v)
                     print("  [".. state .."] "..v)
+                    include[state](v)
                 end
             end
             if table_[state].Post ~= nil then
                 if !message then print "-------- JAAS Register --------" message = true end
                 for k,v in ipairs(table_[state].Post) do
-                    include[state](v)
                     print("  [".. state .."] "..v)
+                    include[state](v)
                 end
             end
         end

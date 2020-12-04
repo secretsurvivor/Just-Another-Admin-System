@@ -310,66 +310,79 @@ do
         end
     end
     local function table_to_str(t)
-        local q,c = "",1
+        local q,first = "",true
         for k,v in pairs(t) do
             if isnumber(v) then
-                q = q .. k .. "=" .. v
+                if first then
+                    q = q .. k .. "=" .. v
+                    first = false
+                else
+                    q = q .. "," .. k .. "=" .. v
+                end
             elseif isstring(v) then
-                q = q .. k .. "=" .. "'" .. v .. "'"
+                if first then
+                    q = q .. k .. "=" .. "'" .. v .. "'"
+                    first = false
+                else
+                    q = q .. "," .. k .. "=" .. "'" .. v .. "'"
+                end
             end
-            if c < #t then
-                q = q .. ","
-            end
-            c = 1 + c
         end
         return q
     end
     local function table_to_WHERE(t)
-        local q,c = "",1
+        local q,first = "",true
         for k,v in pairs(t) do
             if isnumber(v) then
-                q = q .. k .. "=" .. v
+                if first then
+                    q = q .. k .. "=" .. v
+                    first = false
+                else
+                    q = q .. " AND " .. k .. "=" .. v
+                end
             elseif isstring(v) then
-                q = q .. k .. "=" .. "'" .. v .. "'"
+                if first then
+                    q = q .. k .. "=" .. "'" .. v .. "'"
+                    first = false
+                else
+                    q = q .. " AND " .. k .. "=" .. "'" .. v .. "'"
+                end
             end
-            if c < #t then
-                q = q .. " AND "
-            end
-            c = 1 + c
         end
         return q
     end
     local function isstring(v) return v and isS(v) end
     local function istable(v) return v and isT(v) end
-    SQL = function (table)
+    SQL = function (sql_table)
         return setmetatable({
-            EXISTS = JAAS.Var.MySQLServer and QUERY("select * from information_schema.tables where table_name='".. table .."'") or sql.TableExists(table),
+            EXISTS = JAAS.Var.MySQLServer and QUERY("select * from information_schema.tables where table_name='".. sql_table .."'") or sql.TableExists(table),
             CREATE = setmetatable({
                 TABLE = function (columns)
                     if isstring(columns) then
-                        return QUERY("CREATE TABLE " .. table .. " (" .. columns .. ")")
+                        return QUERY("CREATE TABLE " .. sql_table .. " (" .. columns .. ")")
                     elseif istable(columns) then
-                        local q,c = "",1
+                        local q,eq,first = "","",true
                         for k,v in pairs(columns) do
                             if isstring(k) then
-                                q = q .. k .. " " .. v
+                                if first then
+                                    q = q .. k .. " " .. v
+                                    first = false
+                                else
+                                    q = q .. "," .. k .. " " .. v
+                                end
                             else
-                                q = q .. v
+                                eq = eq .. "," .. v
                             end
-                            if c < #columns then
-                                q = q .. ","
-                            end
-                            c = 1 + c
                         end
-                        return QUERY("CREATE TABLE " .. table .. " (" .. q .. ")")
+                        return QUERY("CREATE TABLE " .. sql_table .. " (" .. q .. eq .. ")")
                     end
                 end,
                 INDEX = function (index_name)
                     return function (columns)
                         if isstring(columns) then
-                            return QUERY("CREATE INDEX " .. index_name .. " ON " .. table .. " (" .. columns .. ")")
+                            return QUERY("CREATE INDEX " .. index_name .. " ON " .. sql_table .. " (" .. columns .. ")")
                         elseif istable(columns) then
-                            return QUERY("CREATE INDEX " .. index_name .. " ON " .. table .. " (" .. t.concat(columns, ",") .. ")")
+                            return QUERY("CREATE INDEX " .. index_name .. " ON " .. sql_table .. " (" .. t.concat(columns, ",") .. ")")
                         end
                     end
                 end
@@ -383,15 +396,15 @@ do
                     end
                     return function (where)
                         if isstring(where) then
-                            return QUERY("SELECT " .. column .. " FROM " .. table .. " WHERE " .. where)
+                            return QUERY("SELECT " .. column .. " FROM " .. sql_table .. " WHERE " .. where)
                         elseif istable(where) then
-                            return QUERY("SELECT " .. column .. " FROM " .. table .. " WHERE " .. table_to_WHERE(where))
+                            return QUERY("SELECT " .. column .. " FROM " .. sql_table .. " WHERE " .. table_to_WHERE(where))
                         else
-                            return QUERY("SELECT " .. column .. " FROM " .. table)
+                            return QUERY("SELECT " .. column .. " FROM " .. sql_table)
                         end
                     end
                 else
-                    QUERY("SELECT * FROM " .. table)
+                    QUERY("SELECT * FROM " .. sql_table)
                 end
             end,
             UPDATE = function (set)
@@ -400,49 +413,60 @@ do
                 end
                 return function (where)
                     if isstring(where) then
-                        return QUERY("UPDATE " .. table .. " SET " .. set .. " WHERE " .. where)
+                        return QUERY("UPDATE " .. sql_table .. " SET " .. set .. " WHERE " .. where)
                     elseif istable(where) then
-                        return QUERY("UPDATE " .. table .. " SET " .. set .. " WHERE " .. table_to_WHERE(where))
+                        return QUERY("UPDATE " .. sql_table .. " SET " .. set .. " WHERE " .. table_to_WHERE(where))
                     else
-                        return QUERY("UPDATE " .. table .. " SET " .. set)
+                        return QUERY("UPDATE " .. sql_table .. " SET " .. set)
                     end
                 end
             end,
             INSERT = function (set)
                 if isstring(set) then
                     return function (values)
-                        return QUERY("INSERT INTO " .. table .. "(" .. set .. ") VALUES (" .. values .. ")")
+                        return QUERY("INSERT INTO " .. sql_table .. "(" .. set .. ") VALUES (" .. values .. ")")
                     end
                 elseif istable(set) then
-                    local cat,val,c = "","",1
+                    local cat,val,first_c,first_v = "","",true,true
                     for k,v in pairs(set) do
-                        cat = cat .. k
-                        if isstring(v) then
-                            val = val .. "'" .. v .. "'"
+                        if first_c then
+                            cat = cat .. k
+                            first_c = false
                         else
-                            val = val .. v
+                            cat = cat .. "," .. k
                         end
-                        if c < #set then
-                            cat = cat .. ","
-                            val = val .. ","
+                        if isstring(v) then
+                            if first_v then
+                                val = val .. "'" .. v .. "'"
+                                first_v = false
+                            else
+                                val = val .. ",'" .. v .. "'"
+                            end
+                        else
+                            if first_v then
+                                val = val .. v
+                                first_v = false
+                            else
+                                val = val .. "," .. v
+                            end
                         end
-                        c = 1 + c
                     end
-                    return QUERY("INSERT INTO " .. table .. "(" .. cat .. ") VALUES (" .. val .. ")")
+                    print("INSERT INTO " .. sql_table .. "(" .. cat .. ") VALUES (" .. val .. ")")
+                    return QUERY("INSERT INTO " .. sql_table .. "(" .. cat .. ") VALUES (" .. val .. ")")
                 end
             end,
             DELETE = function (where)
                 if isstring(where) then
-                    return QUERY("DELETE FROM " .. table .. " WHERE " .. where)
+                    return QUERY("DELETE FROM " .. sql_table .. " WHERE " .. where)
                 elseif istable(where) then
-                    return QUERY("DELETE FROM " .. table .. " WHERE " .. table_to_WHERE(where))
+                    return QUERY("DELETE FROM " .. sql_table .. " WHERE " .. table_to_WHERE(where))
                 else
-                    return QUERY("DELETE FROM " .. table)
+                    return QUERY("DELETE FROM " .. sql_table)
                 end
             end,
             DROP = {
                 TABLE = function ()
-                    return QUERY("DROP TABLE " .. table)
+                    return QUERY("DROP TABLE " .. sql_table)
                 end,
                 INDEX = function (name)
                     return QUERY("DROP INDEX " .. name)

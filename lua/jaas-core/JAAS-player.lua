@@ -1,15 +1,14 @@
 local MODULE, log, dev, SQL = JAAS:RegisterModule "Player"
 SQL = SQL"JAAS_player"
 
-if SERVER then
-	SQL.CREATE.TABLE {steamid = "TEXT NOT NULL UNIQUE", code = "UNSIGNED BIG INT DEFAULT 0"}
-	SQL.CREATE.INDEX "JAAS_player_steamid" "steamid"
+if !SQL.EXIST and SERVER then
+	SQL.CREATE.TABLE {steamid = "UNSIGNED BIG INT PRIMARY KEY", code = "UNSIGNED BIG INT DEFAULT 0"}
 end
 
 gameevent.Listen("player_connect")
 hook.Add("player_connect", "JAAS-player-registration", function(data) -- To be logged
 	if data.bot == 0 then
-		SQL.INSERT {steamid = data.networkid}
+		SQL.INSERT {steamid = Entity(data.index):SteamID64()}
 	end
 end)
 
@@ -61,15 +60,10 @@ function user_local:setCode(code)
 end
 
 function user_local:xorCode(code)
-	local current_code = SQL.SELECT "code" {steamid = self.steamid}
-	if current_code then
-		current_code = current_code["code"]
-		local xor_code = bit.bxor(current_code, code)
-		local a = SQL.UPDATE {code = xor_code} {steamid = self.steamid}
-		if a then
-			JAAS.Hook.Run "Player" "GlobalRankChange" ()
-			return a
-		end
+	local q = SQL.UPDATE ("code = (code | " .. code .. ") & (~code | ~" .. code .. ")") {steamid = self.steamid}
+	if q then
+		JAAS.Hook.Run "Player" "GlobalRankChange" ()
+		return q
 	end
 end
 
@@ -134,7 +128,7 @@ MODULE.Access(function (steamid)
 		u_cache_dirty = false
 	end
 	if isentity(steamid) and IsValid(steamid) and steamid:IsPlayer() then
-		steamid = steamid:SteamID()
+		steamid = steamid:SteamID64()
 	end
 	if add_to_cache(steamid) then
 		return setmetatable({steamid = steamid}, {__index = user_local, __newindex = function () end, __metatable = "jaas_player_object"})
@@ -154,7 +148,7 @@ function meta:getJAASObject()
 end
 
 function meta:getJAASCode()
-	return get_from_cache(self.SteamID())
+	return get_from_cache(self.SteamID64())
 end
 
 log:printLog "Module Loaded"
