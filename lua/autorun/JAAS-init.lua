@@ -13,153 +13,138 @@ local AddCSLuaFile = setmetatable({}, {__call = function (self, _)
         AddCSLuaFile(_)
     end
 end})
-function include.server(_) if SERVER then include(_) end end
-function include.client(_) AddCSLuaFile(_) if CLIENT then include(_) end end
-function include.shared(_) AddCSLuaFile(_) include(_) end
+function include.Server(_) if SERVER then include(_) end end
+function include.Client(_) AddCSLuaFile(_) if CLIENT then include(_) end end
+function include.Shared(_) AddCSLuaFile(_) include(_) end
 
-local stageMeta = {__call = function (self, _) rawset(self, #self + 1, _) end, __index = function () end, __newindex = function () end, __metatable = "JAAS_include_stage"}
-JAAS.include = setmetatable({
-    shared = setmetatable({
-        pre = setmetatable({}, stageMeta),
-        init = setmetatable({}, stageMeta),
-        post = setmetatable({}, stageMeta)
-    }, {__call = function (self, _) self.init(_) end, __metatable = "JAAS_include_state_shared"}),
-    server = setmetatable({
-        pre = setmetatable({}, stageMeta),
-        init = setmetatable({}, stageMeta),
-        post = setmetatable({}, stageMeta)
-    }, {__call = function (self, _) self.init(_) end, __metatable = "JAAS_include_state_server"}),
-    client = setmetatable({
-        pre = setmetatable({}, stageMeta),
-        init = setmetatable({}, stageMeta),
-        post = setmetatable({}, stageMeta)
-    }, {__call = function (self, _) self.init(_) end, __metatable = "JAAS_include_state_client"}),
-}, {__call = function (self, _) self.shared.init(_) end, __metatable = "JAAS_include_table"})
+local function registerAdd(t, state, stage, f)
+    if istable(f) then
+        for k,v in ipairs(f) do
+            registerAdd(t, state, stage, v)
+        end
+    elseif file.Exists(f, "LUA") then
+        if t[state] == nil then
+            t[state] = {[stage] = {f}}
+        elseif t[state][stage] == nil then
+            t[state][stage] = {f}
+        else
+            table.insert(t[state][stage], f)
+        end
+        return true
+    else
+        error("File " .. f .. " does not exist", 2)
+    end
+end
+
+JAAS.include = setmetatable({}, {
+    __call = function (self, state)
+        if state == "Client" or state == "Server" or state == "Shared" then
+            return function (stage)
+                if stage == "Pre" or stage == "Init" or stage == "Post" then
+                    return function (f)
+                        return registerAdd(self, state, stage, f)
+                    end
+                end
+            end
+        end
+    end
+})
+
+local function hookNewFunction(table)
+    return setmetatable({},{
+        __call = function (self, k, v)
+            if isfunction(v) then
+                table[k] = v
+                return true
+            end
+            return false
+        end,
+        __index = function (self, v)
+            if table[v] ~= nil then
+                return table[v]
+            end
+        end,
+        __newindex = function (self, k, v)
+            if isfunction(v) then
+                table[k] = v
+            end
+            return false
+        end,
+        __metatable = "jaas_hook_add"
+    })
+end
 
 local hook_func = {}
 JAAS.Hook = setmetatable({
-    Add = setmetatable({
-        Permission = function (name) -- JAAS.Hook.Add ["Permission"] name identifier (function () end)
-            return function (identifier)
-                return function (func)
-                    if isfunction(func) then
-                        if hook_func.permission == nil then
-                            hook_func.permission = {[name] = {[identifier] = func}}
-                        elseif hook_func.permission[name] == nil then
-                            hook_func.permission[name] = {[identifier] = func}
-                        else
-                            hook_func.permission[name][identifier] = func
-                        end
-                        return true
-                    else
-                        return false
-                    end
-                end
-            end
-        end,
-        Command = function (category) -- JAAS.Hook.Add ["Command"] category name identifier (function () end)
-            return function (name)
-                return function (identifier)
-                    return function (func)
-                        if isfunction(func) then
-                            if hook_func.command == nil then
-                                hook_func.command = {[category] = {[name] = {[identifier] = func}}}
-                            elseif hook_func.command[category] == nil then
-                                hook_func.command[category] = {[name] = {[identifier] = func}}
-                            elseif hook_func.command[category][name] == nil then
-                                hook_func.command[category][name] = {[identifier] = func}
-                            else
-                                hook_func.command[category][name][identifier] = func
-                            end
-                            return true
-                        else
-                            return false
-                        end
-                    end
-                end
-            end
-        end,
-        GlobalVar = function (category) -- JAAS.Hook.Add ["GlobalVar"] category name identifier (function () end)
-            return function (name)
-                return function (identifier)
-                    return function (func)
-                        if isfunction(func) then
-                            if hook_func.globalvar == nil then
-                                hook_func.globalvar = {[category] = {[name] = {[identifier] = func}}}
-                            elseif hook_func.globalvar[category] == nil then
-                                hook_func.globalvar[category] = {[name] = {[identifier] = func}}
-                            elseif hook_func.globalvar[category][name] == nil then
-                                hook_func.globalvar[category][name] = {[identifier] = func}
-                            else
-                                hook_func.globalvar[category][name][identifier] = func
-                            end
-                            return true
-                        else
-                            return false
-                        end
-                    end
-                end
-            end
+    Permission = function (name) -- JAAS.Hook.Permission name [identifier] = function () end
+        if hook_func.permission == nil then
+            hook_func.permission = {[name] = {}}
+        elseif hook_func.permission[name] == nil then
+            hook_func.permission[name] = {}
         end
-    }, {__call = function (self, category) -- JAAS.Hook.Add category name identifier (function () end)
+        return hookNewFunction(hook_func.permission[name])
+    end,
+    Command = function (category) -- JAAS.Hook.Command category name [identifier] = function () end
         return function (name)
-            return function (identifier)
-                return function (func)
-                    if isfunction(func) then
-                        if hook_func.other == nil then
-                            hook_func.other = {[category] = {[name] = {[identifier] = func}}}
-                        elseif hook_func.other[category] == nil then
-                            hook_func.other[category] = {[name] = {[identifier] = func}}
-                        elseif hook_func.other[category][name] == nil then
-                            hook_func.other[category][name] = {[identifier] = func}
-                        else
-                            hook_func.other[category][name][identifier] = func
-                        end
-                        return true
-                    else
-                        return false
-                    end
-                end
+            if hook_func.command == nil then
+                hook_func.command = {[category] = {[name] = {}}}
+            elseif hook_func.command[category] == nil then
+                hook_func.command[category] = {[name] = {}}
+            elseif hook_func.command[category][name] == nil then
+                hook_func.command[category][name] = {}
             end
+            return hookNewFunction(hook_func.command[category][name])
         end
-    end, __newindex = function () end}),
+    end,
+    GlobalVar = function (category) -- JAAS.Hook.GlobalVar category name [identifier] = function () end
+        return function (name)
+            if hook_func.globalvar == nil then
+                hook_func.globalvar = {[category] = {[name] = {}}}
+            elseif hook_func.globalvar[category] == nil then
+                hook_func.globalvar[category] = {[name] = {}}
+            elseif hook_func.globalvar[category][name] == nil then
+                hook_func.globalvar[category][name] = {}
+            end
+            return hookNewFunction(hook_func.globalvar[category][name])
+        end
+    end,
     Run = setmetatable({
-        Permission = function (name) -- JAAS.Hook.Run ["Permission"] name (...)
+        Permission = function (name) -- JAAS.Hook.Run.Permission name (...)
             return function (...)
                 local varArgs = ...
                 if hook_func.permission != nil and hook_func.permission[name] != nil then
-                    coroutine.create(function ()
+                    coroutine.resume(coroutine.create(function ()
                         for _,v in pairs(hook_func.permission[name]) do
                             v(varArgs)
                         end
-                    end).resume()
+                    end))
                 end
             end
         end,
-        Command = function (category) -- JAAS.Hook.Run ["Command"] category name (...)
+        Command = function (category) -- JAAS.Hook.Run.Command category name (...)
             return function (name)
                 return function (...)
                     local varArgs = ...
                     if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil then
-                        coroutine.create(function ()
+                        coroutine.resume(coroutine.create(function ()
                             for _,v in pairs(hook_func.command[category][name]) do
                                 v(varArgs)
                             end
-                        end).resume()
+                        end))
                     end
                 end
             end
         end,
-        GlobalVar = function (category) -- JAAS.Hook.Run ["GlobalVar"] category name (...)
+        GlobalVar = function (category) -- JAAS.Hook.Run.GlobalVar category name (...)
             return function (name)
                 return function (...)
                     local varArgs = ...
                     if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil then
-                        coroutine.create(function ()
+                        coroutine.resume(coroutine.create(function ()
                             for _,v in pairs(hook_func.other[category][name]) do
                                 v(varArgs)
                             end
-                        end).resume()
+                        end))
                     end
                 end
             end
@@ -169,17 +154,17 @@ JAAS.Hook = setmetatable({
             return function (...)
                 local varArgs = ...
                 if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil then
-                    coroutine.create(function ()
+                    coroutine.resume(coroutine.create(function ()
                         for _,v in pairs(hook_func.other[category][name]) do
                             v(varArgs)
                         end
-                    end).resume()
+                    end))
                 end
             end
         end
     end, __newindex = function () end}),
     Remove = setmetatable({
-        Permission = function (name) -- JAAS.Hook.Remove ["Permission"] name identifier
+        Permission = function (name) -- JAAS.Hook.Remove.Permission name identifier
             return function (identifier)
                 if hook_func.permission != nil and hook_func.permission[name] != nil and hook_func.permission[name][identifier] != nil then
                     local r = hook_func.permission[name][identifier]
@@ -196,7 +181,7 @@ JAAS.Hook = setmetatable({
                 end
             end
         end,
-        Command = function (category) -- JAAS.Hook.Remove ["Command"] category name identifier
+        Command = function (category) -- JAAS.Hook.Remove.Command category name identifier
             return function (name)
                 return function (identifier)
                     if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil and hook_func.command[category][name][identifier] != nil then
@@ -219,7 +204,7 @@ JAAS.Hook = setmetatable({
                 end
             end
         end,
-        GlobalVar = function (category) -- JAAS.Hook.Remove ["GlobalVar"] category name identifier
+        GlobalVar = function (category) -- JAAS.Hook.Remove.GlobalVar category name identifier
             return function (name)
                 return function (identifier)
                     if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil and hook_func.other[category][name][identifier] != nil then
@@ -263,7 +248,18 @@ JAAS.Hook = setmetatable({
             end
         end
     end, __newindex = function () end})
-}, {})
+}, {__call = function (self, category) -- JAAS.Hook category name [identifier] = function () end
+    return function (name)
+        if hook_func.other == nil then
+            hook_func.other = {[category] = {[name] = {}}}
+        elseif hook_func.other[category] == nil then
+            hook_func.other[category] = {[name] = {}}
+        elseif hook_func.other[category][name] == nil then
+            hook_func.other[category][name] = {}
+        end
+        return hookNewFunction(hook_func.other[category][name])
+    end
+end, __newindex = function () end})
 
 local globalvar_table = {}
 JAAS.GlobalVar = setmetatable({
@@ -292,53 +288,63 @@ JAAS.GlobalVar = setmetatable({
 
 local function includeLoop(table_)
     local message = false
-    for _,v in ipairs{"pre", "init", "post"} do
-        local a = 0
-        if CLIENT then
-            a = (#table_.shared[v]) + (#table_.client[v])
-        else
-            a = (#table_.shared[v]) + (#table_.server[v]) + (#table_.client[v])
-        end
-        if a > 0 then
-            if !message then print "-------- JAAS Autorun --------" message = true end
-            for _, file_ in ipairs(table_.shared[v]) do
-                include.shared(file_)
-                print("  [shared] "..file_)
-            end
-            if SERVER then
-                for _, file_ in ipairs(table_.server[v]) do
-                    include.server(file_)
-                    print("  [server] "..file_)
+    local function stateInclude(state)
+        if table_[state] ~= nil then
+            if table_[state].Pre ~= nil then
+                if !message then print "-------- JAAS Register --------" message = true end
+                for k,v in ipairs(table_[state].Pre) do
+                    include[state](v)
+                    print("  [".. state .."] "..v)
                 end
             end
-            for _, file_ in ipairs(table_.client[v]) do
-                include.client(file_)
-                print("  [client] "..file_)
+            if table_[state].Init ~= nil then
+                if !message then print "-------- JAAS Register --------" message = true end
+                for k,v in ipairs(table_[state].Init) do
+                    include[state](v)
+                    print("  [".. state .."] "..v)
+                end
+            end
+            if table_[state].Post ~= nil then
+                if !message then print "-------- JAAS Register --------" message = true end
+                for k,v in ipairs(table_[state].Post) do
+                    include[state](v)
+                    print("  [".. state .."] "..v)
+                end
             end
         end
     end
-    print "------------------------------"
+    stateInclude("Shared")
+    if SERVER then
+        stateInclude("Server")
+    else
+        stateInclude("Client")
+    end
+    if CLIENT and message then
+        print "-------------------------------"
+    elseif !CLIENT then
+        print "-------------------------------"
+    end
 end
 
 for _, file_ in ipairs(file.Find("jaas/autorun/*.lua", "lsv")) do
-    include.server("jaas/autorun/"..file_)
+    include.Server("jaas/autorun/"..file_)
 end
 
 print "-------- JAAS Modules --------"
 
-include ["shared"] {
+include.Shared {
     "JAAS_variables.lua",
     "jaas-core/JAAS-module.lua",
     "jaas-core/JAAS-command.lua"
 }
 
-include ["server"] {
+include.Server {
     "jaas-core/JAAS-player.lua",
     "jaas-core/JAAS-rank.lua",
     "jaas-core/JAAS-permission.lua"
 }
 
-include ["client"] "jaas-core/JAAS-panel.lua"
+include.Client "jaas-core/JAAS-panel.lua"
 
 JAAS:PostInitialise()
 
@@ -346,15 +352,9 @@ if CLIENT then print "------------------------------" end
 
 local dev = JAAS.Dev()
 local RefreshClientInclude = dev.sharedSync("JAAS_InitTableSync", function (_, ply)
-    local includeTable, count = {
-        shared = {pre = {}, init = {}, post = {}},
-        client = {pre = {}, init = {}, post = {}}
-    }, 0
-    for _, key1 in ipairs{"shared", "client"} do
-        for _, key2 in ipairs{"pre", "init", "post"} do
-            includeTable[key1][key2] = JAAS.include[key1][key2]
-            count = count + (#JAAS.include[key1][key2])
-        end
+    local includeTable, count = {}, 0
+    for state,stage in pairs(JAAS.include) do
+        includeTable[state] = stage
     end
     if count > 0 then
         return includeTable

@@ -92,7 +92,7 @@ function permission.registerPermission(name, description, code)
     end
 end
 
-JAAS.Hook.Add "Rank" "RemovePosition" "Permission_module" (function (func)
+JAAS.Hook "Rank" "RemovePosition" ["Permission_module"] = function (func)
     sql.Begin()
     for name, t in pairs(permission_table) do
         local new_code = func(t[1])
@@ -100,7 +100,7 @@ JAAS.Hook.Add "Rank" "RemovePosition" "Permission_module" (function (func)
         SQL.UPDATE {code = new_code} {name = name}
     end
     sql.Commit()
-end)
+end
 
 MODULE.Access(function (permission_name)
     if permission_name and permission_table[permission_name] ~= nil then

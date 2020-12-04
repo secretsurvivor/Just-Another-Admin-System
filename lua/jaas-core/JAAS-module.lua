@@ -1,10 +1,18 @@
-local function class(table, metatable, properties)
+local function readOnlyFunction()
+    error("Class Cannot be modified", 2)
+end
+
+local function class(table, metatable, readonly, properties)
     if properties then
         if isstring(properties) then
             return setmetatable({}, {__call = function (self, p)
                 local o = {}
                 o[properties] = p
-                return setmetatable(o, {__index = table, __newindex = table, __metatable = metatable})
+                if readonly then
+                    return setmetatable(o, {__index = table, __newindex = readOnlyFunction, __metatable = metatable})
+                else
+                    return setmetatable(o, {__index = table, __newindex = table, __metatable = metatable})
+                end
             end, __newindex = function () end, __index = table})
         elseif istable(properties) then
             return setmetatable({}, {__call = function (self, ...)
@@ -16,12 +24,20 @@ local function class(table, metatable, properties)
                         error("Class Initialisation missing property: " .. v, 2)
                     end
                 end
-                return setmetatable(o, {__index = table, __newindex = table, __metatable = metatable})
+                if readonly then
+                    return setmetatable(o, {__index = table, __newindex = readOnlyFunction, __metatable = metatable})
+                else
+                    return setmetatable(o, {__index = table, __newindex = table, __metatable = metatable})
+                end
             end, __newindex = function () end, __index = table})
         end
     else
         return setmetatable({}, {__call = function ()
-            return setmetatable({}, {__index = table, __newindex = table, __metatable = metatable})
+            if readonly then
+                return setmetatable({}, {__index = table, __newindex = readOnlyFunction, __metatable = metatable})
+            else
+                return setmetatable({}, {__index = table, __newindex = table, __metatable = metatable})
+            end
         end, __newindex = function () end, __index = table})
     end
 end
@@ -103,7 +119,7 @@ do -- Developer Module Initialisation
         return false
     end
 
-    if SERVER then
+    if SERVER then -- SHARED -> dev.sharedSync(networkString, server_func, hook_identifier, client_func)
         function devFunctions.sharedSync(networkString, server_func)
             util.AddNetworkString(networkString)
             local receive_func = function (_, ply)
@@ -185,17 +201,30 @@ do -- Log Module Initialisation
         log.writeToLogFile(str)
     end
 
+    function logFunctions:adminPrintLog()
+    end
+
+    function logFunctions:superadminPrintLog()
+    end
+
+    function logFunctions:adminChatLog()
+    end
+
+    function logFunctions:superadminChatLog()
+    end
+
     function logFunctions:gameLog(action, str)
     end
 
     local executionTrace = executionTrace or {} -- [label][id] = {file path, line}
     local refusedTrace = refusedTrace or {} -- [label] = {id*}
 
-    function logFunctions:executionTraceLog()
+    function logFunctions:executionTraceLog(offset)
         if !JAAS.Var.TraceExecution then
             return
         end
-        local info = debug.getinfo(3)
+        offset = offset or 0
+        local info = debug.getinfo(3 + offset)
         if executionTrace[self.label] ~= nil then
             for _,v in ipairs(executionTrace[self.label]) do
                 if v[1] == filepath and v[2] == line then
@@ -226,7 +255,7 @@ do -- Log Module Initialisation
         return true
     end
 
-    log = class(logFunctions, "jaas_log_library", "label")
+    log = class(logFunctions, "jaas_log_library", false, "label")
 end
 
 local SQL
@@ -532,30 +561,39 @@ function JAAS:RegisterModule(name)
             end
         end,
         Class = class,
-        Handle = {
-            server = function (func)
+        Handle = setmetatable({
+            Server = function (func)
                 table.insert(handles.server, func)
             end,
-            client = function (func)
+            Client = function (func)
                 table.insert(handles.client, func)
             end,
-            shared = function (func)
+            Shared = function (func)
                 table.insert(handles.server, func)
                 table.insert(handles.client, func)
             end
-        }
+        }, {__call = function (self, func)
+            self.Shared(func)
+        end}),
+        ExecutionTrace = function ()
+            local f_str, id = l:executionTraceLog(1)
+            if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+                return !l:removeTraceLog(id)
+            end
+            return true
+        end
     }, l, d, SQL
 end
 
 function JAAS:PostInitialise()
     if SERVER then
         for k,v in ipairs(handles.server) do
-            v(setmetatable({}, {__index = modules}), SQL)
+            v(setmetatable({}, {__index = modules}))
             handles[k] = nil
         end
     elseif CLIENT then
         for k,v in ipairs(handles.client) do
-            v(setmetatable({}, {__index = modules}), SQL)
+            v(setmetatable({}, {__index = modules}))
             handles[k] = nil
         end
     end
@@ -563,4 +601,4 @@ end
 
 JAAS:RegisterModule"Log".Access(log, true)
 JAAS:RegisterModule"Developer".Access(dev, true, "Dev")
-JAAS:RegisterModule"SQL".Access(SQL)
+JAAS:RegisterModule"SQL".Access(SQL, false)

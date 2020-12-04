@@ -143,7 +143,7 @@ function rank.codeIterator(code)
         end
         max_bits = max_bits - 1
     end
-    local rank_table = dev.fQuery("SELECT * FROM JAAS_rank WHERE "..where_str)
+    local rank_table = SQL.SELECT "*" (where_str)
     local i = 0
     return function ()
         i = 1 + i
@@ -274,9 +274,9 @@ end
 local p_cache = {}
 local p_cache_dirty = true
 
-JAAS.Hook.Add "Rank" "GlobalPowerChange" "MaxPowerCacheClean" (function()
+JAAS.Hook "Rank" "GlobalPowerChange" ["MaxPowerCacheClean"] = function()
     p_cache_dirty = true
-end)
+end
 
 function rank.getMaxPower(code)
     if code == 0 then
@@ -317,5 +317,71 @@ MODULE.Access(function (rank_name)
         return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})
     end
 end, true)
+
+MODULE.Handle.Shared(function (jaas)
+    local command = jaas.Command()
+
+    command:setCategory "Rank"
+
+    command:registerCommand("Add", function (ply, name, power, invis)
+        name = sql.SQLStr(name)
+        if !rank.addRank(name, power, invis)
+            return "Adding Rank has failed"
+        end
+    end, arg:add("Name", "STRING", true):add("Power", "INT", false, 0):add("Invisible", "BOOL", false, false):dispense())
+
+    command:registerCommand("Remove", function (ply, rank_object)
+        if !rank.removeRank(rank_object) then
+            return "Unknown Rank"
+        end
+    end, arg:add("Rank", "RANK", true):dispense())
+
+    command:registerCommand("Remove_Ranks", function (ply, rank_table)
+        if !rank.removeRanks(rank_table) then
+            return "All Ranks Unknown"
+        end
+    end, arg:add("Ranks", "RANKS", true):dispense())
+
+    command:registerCommand("Set_Power", function (ply, rank_object, power)
+        if !rank_object:setPower(power) then
+            return "Setting power for rank " .. rank_object:getName() .. " has failed"
+        end
+    end, arg:add("Rank", "RANK", true):add("Power", "INT", true, 0):dispense())
+
+    command:registerCommand("Get_Ranks", function (ply)
+        local f_str = "Ranks:\n"
+        for name in rank.rankIterator("name") do
+            f_str = f_str..name.."\n"
+        end
+        return f_str
+    end)
+end)
+
+MODULE.Handle.Server(function (jaas)
+    local dev, perm = jaas.Dev(), jaas.Permission()
+    local showInvisibleRanks = perm.registerPermission("Show Invisible Ranks", "This permission will show invisible ranks clientside")
+
+    local refreshRankTable = dev.sharedSync("JAAS_RankTableSync", function (_, ply)
+        local net_table, show_invisible_rank = {}, showInvisibleRanks:codeCheck(ply:getJAASCode())
+        for t in rank.rankIterator() do
+            if !t.invisible or (t.invisible and show_invisible_rank) then
+                table.insert(net_table, t)
+            end
+        end
+        if net_table then
+            return net_table
+        end
+    end)
+
+    concommand.Add("JAAS_RefreshRankTableSync", function ()
+        refreshRankTable()
+    end)
+end)
+
+MODULE.Handle.Client(function (jaas)
+    local dev = jaas.Dev()
+    dev.sharedSync("JAAS_RankTableSync", _, "JAAS_RankSyncClient", function (_, ply, table) -- TODO
+    end)
+end)
 
 log:printLog "Module Loaded"

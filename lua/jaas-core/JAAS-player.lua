@@ -19,9 +19,9 @@ local user_local = {["getCode"] = true, ["setCode"] = true, ["xorCode"] = true, 
 local u_cache = {}
 local u_cache_dirty = true
 
-JAAS.Hook.Add "Player" "GlobalRankChange" "Player_module_cache" (function()
+JAAS.Hook "Player" "GlobalRankChange" ["Player_module_cache"] = function ()
 	u_cache_dirty = true
-end)
+end
 
 local function add_to_cache(steamid)
 	if steamid then
@@ -35,19 +35,17 @@ local function add_to_cache(steamid)
 end
 
 local function get_from_cache(steamid)
-	if steamid then
-		if u_cache_dirty then
-			u_cache = {}
-			u_cache_dirty = false
-			add_to_cache(steamid)
-		end
-		if u_cache[steamid] ~= nil then
-			if !add_to_cache(steamid) then
-				error("SteamID must have been removed from database", 3)
-			end
-		end
-		return u_cache[steamid]
+	if u_cache_dirty then
+		u_cache = {}
+		u_cache_dirty = false
+		add_to_cache(steamid)
 	end
+	if u_cache[steamid] ~= nil then
+		if !add_to_cache(steamid) then
+			error("SteamID must have been removed from database", 3)
+		end
+	end
+	return u_cache[steamid]
 end
 
 function user_local:getCode()
@@ -75,23 +73,27 @@ function user_local:xorCode(code)
 	end
 end
 
-function user_local:canTarget(code, rank_library)
-	if dev.isRankLibrary(rank_library) then
-		if isnumber(code) then
-			if self:getCode() > 0 and code > 0 then
-				return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code)
-			elseif self:getCode() > 0 then
-				return rank_library.getMaxPower(self:getCode()) > 0
-			end
-		elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
-			if self:getCode() > 0 and code:getCode() > 0 then
-				return rank_library.getMaxPower(self:getCode()) > rank_library.getMaxPower(code:getCode())
-			elseif self:getCode() > 0 then
-				return rank_library.getMaxPower(self:getCode()) > 0
+MODULE.Handle.Server(function (jaas)
+	local rank = jaas.Rank()
+
+	function user_local:canTarget(code)
+		if dev.isRankLibrary(rank) then
+			if isnumber(code) then
+				if self:getCode() > 0 and code > 0 then
+					return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code)
+				elseif self:getCode() > 0 then
+					return rank.getMaxPower(self:getCode()) > 0
+				end
+			elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
+				if self:getCode() > 0 and code:getCode() > 0 then
+					return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code:getCode())
+				elseif self:getCode() > 0 then
+					return rank.getMaxPower(self:getCode()) > 0
+				end
 			end
 		end
 	end
-end
+end)
 
 function user_local:defaultAccess()
     if self:getCode() == 0 then
@@ -118,13 +120,13 @@ function user.playerIterator(key)
 	end
 end
 
-JAAS.Hook.Add "Rank" "RemovePosition" "Player_module" (function (func)
+JAAS.Hook "Rank" "RemovePosition" ["Player_module"] = function (func)
 	sql.Begin()
 	for steamid, code in user.userIterator() do
 		SQL.UPDATE {code = func(tonumber(code))} {steamid = steamid}
 	end
 	sql.Commit()
-end)
+end
 
 MODULE.Access(function (steamid)
 	if u_cache_dirty then
@@ -141,11 +143,10 @@ MODULE.Access(function (steamid)
 	end
 end, true)
 
-local meta = FindMetaTable("Player")
+local meta = FindMetaTable "Player"
 function meta:getJAASObject()
-	local f_str, id = log:executionTraceLog()
-	if f_str and !dev.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
-		return log:removeTraceLog(id)
+	if not MODULE.ExecutionTrace() then
+		return
 	end
 	if add_to_cache(steamid) then
 		return setmetatable({steamid = self:SteamID()}, {__index = user_local, __newindex = function () end, __metatable = "jaas_player_object"})

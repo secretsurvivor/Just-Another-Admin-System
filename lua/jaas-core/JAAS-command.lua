@@ -479,7 +479,7 @@ if SERVER then
         end
     end, commandAutoComplete)
 
-    JAAS.Hook.Add "Rank" "RemovePosition" "Command_module" (function (func)
+    JAAS.Hook "Rank" "RemovePosition" ["Command_module"] = function (func)
         sql.Begin()
         for category, c_t in pairs(command_table) do
             for name, n_t in pairs(c_t) do
@@ -492,15 +492,15 @@ if SERVER then
         for _,ply in ipairs(player.GetAll()) do
             RefreshClientCodes(_,ply)
         end
-    end)
+    end
 
-    JAAS.Hook.Add "Command" "GlobalRankChange" "ClientUpdate" (function (category, name, code)
+    JAAS.Hook "Command" "GlobalRankChange" ["ClientUpdate"] = function (category, name, code)
         for _,ply in ipairs(player.GetAll()) do
             net.Start("JAAS_ClientCommand")
             net.WriteTable({[category] = {[name] = code}})
             net.Send(ply)
         end
-    end)
+    end
 elseif CLIENT then
     net.Receive("JAAS_ClientCommand", function()
         local code = net.ReadInt(4)
@@ -511,7 +511,7 @@ elseif CLIENT then
         JAAS.Hook.run "Command" "CommandFeedback" (code, category, name, message)
     end)
 
-    JAAS.Hook.Add "Command" "CommandFeedback" "ConsoleEcho" (function(code, category, name, message)
+    JAAS.Hook "Command" "CommandFeedback" ["ConsoleEcho"] = function(code, category, name, message)
         if code == 0 then -- Successful Command Execution
             log:printLog(category.." "..name.." Successfully Executed")
         elseif code == 1 then -- Invalid Command Category or Name
@@ -525,7 +525,7 @@ elseif CLIENT then
         else -- Unknown Error Code
             log:printLog(category.." "..name.." Returned Unknown Error")
         end
-    end)
+    end
 
     concommand.Add("JAAS", function(ply, cmd, args, argStr)
         local category, name = args[1], args[2]
