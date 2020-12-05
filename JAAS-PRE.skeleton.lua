@@ -2,31 +2,23 @@ if JAAS then return end
 
 local onFailure = {}
 
-JAAS_PRE_HOOK = setmetatable({}, {
-    __index = function (self, k)
-        if k == "Command" or k == "Permission" then
-            return rawget(self, k)
-        end
-    end,
-    __newindex = function (self, k, v)
-        if k == "onFailure" and isfunction(v) then
+JAAS_PRE_HOOK = {
+    onFailed = function (v)
+        if isfunction(v) then
             table.insert(onFailure, v)
         end
     end
-})
+}
 
 hook.Add("PostGamemodeLoaded", "JAAS_PRE_HOOK_CLEANUP", function ()
-    if JAAS.PRE then
-        for k,v in ipairs(onFailure) do
-            v()
-        end
-        onFailure = nil
-        JAAS_PRE_HOOK = nil
+    for k,v in ipairs(onFailure) do
+        v()
     end
+    onFailure = nil
+    JAAS_PRE_HOOK = nil
 end)
 
 JAAS = {
-    PRE = true,
     Command = function ()
         local t = {}
 

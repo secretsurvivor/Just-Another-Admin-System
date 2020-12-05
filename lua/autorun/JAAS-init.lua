@@ -1,4 +1,4 @@
-JAAS = {["Command"] = false, ["Rank"] = false, ["Permission"] = false, ["Player"] = false, PRE = false}
+JAAS = {["Command"] = false, ["Rank"] = false, ["Permission"] = false, ["Player"] = false}
 
 local include = setmetatable({}, {__call = function (self, _)
     if !istable(_) then include(_) return end
