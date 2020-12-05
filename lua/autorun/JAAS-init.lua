@@ -1,5 +1,4 @@
---if JAAS then return end
-JAAS = {["Command"] = false, ["Rank"] = false, ["Permission"] = false, ["Player"] = false}
+JAAS = {["Command"] = false, ["Rank"] = false, ["Permission"] = false, ["Player"] = false, PRE = false}
 
 local include = setmetatable({}, {__call = function (self, _)
     if !istable(_) then include(_) return end
@@ -36,7 +35,7 @@ local function registerAdd(t, state, stage, f)
     end
 end
 
-JAAS.include = setmetatable({}, {
+JAAS.include = JAAS.include or setmetatable({}, {
     __call = function (self, state)
         if state == "Client" or state == "Server" or state == "Shared" then
             return function (stage)
@@ -74,7 +73,7 @@ local function hookNewFunction(table)
     })
 end
 
-local hook_func = {}
+local hook_func = hook_func or {}
 JAAS.Hook = setmetatable({
     Permission = function (name) -- JAAS.Hook.Permission name [identifier] = function () end
         if hook_func.permission == nil then
@@ -324,6 +323,10 @@ local function includeLoop(table_)
     elseif !CLIENT then
         print "-------------------------------"
     end
+end
+
+if JAAS_PRE_HOOK then
+    JAAS.include "Shared" "Init" "JAAS/JAAS-PRE_HOOK-INIT.lua"
 end
 
 for _, file_ in ipairs(file.Find("jaas/autorun/*.lua", "lsv")) do
