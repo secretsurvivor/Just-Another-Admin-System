@@ -2,7 +2,7 @@ local MODULE, log, dev, SQL = JAAS:RegisterModule "Command"
 SQL = SQL"JAAS_command"
 
 if !SQL.EXIST and SERVER then
-    SQL.CREATE.TABLE {name = "TEXT NOT NULL", category = "TEXT NOT NULL", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0", "PRIMARY KEY(name, category)"}
+    SQL.CREATE.TABLE {name = "TEXT NOT NULL", category = "TEXT NOT NULL", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0", access_group = "UNSIGNED INT DEFAULT 0", "PRIMARY KEY(name, category)"}
     SQL.CREATE.INDEX "JAAS_command_primary" {name, category}
 end
 
@@ -68,7 +68,7 @@ setmetatable(argTable, {
 	__metatable = nil
 })
 
-local command_table = command_table or {} -- SERVER -- [category][name] = {code, funcArgs, function, description} -- CLIENT -- [category][name] = {code, funcArgs, description}
+local command_table = command_table or {} -- SERVER -- [category][name] = {code, funcArgs, function, access} -- CLIENT -- [category][name] = {code, funcArgs, description}
 
 local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] = true, ["setCode"] = true} -- Used for local functions, for command data
 local command = {["registerCommand"] = true, ["setCategory"] = true, ["clearCategory"] = true, ["argumentTableBuilder"] = true} -- Used for global functions, for command table
@@ -101,12 +101,12 @@ if SERVER then
         return command_table[self.category][self.name][1]
     end
 
-    function local_command:getDescription()
+    function local_command:getAccess()
         return command_table[self.category][self.name][4]
     end
 
     function local_command:setCode(code)
-        local q = SQL.UPDATE {code = code} {name = self.name, category = self.category} and nil
+        local q = SQL.UPDATE {code = code} {name = self.name, category = self.category}
         if q then
             local before = command_table[self.category][self.name][1]
             command_table[self.category][self.name][1] = code
@@ -119,7 +119,7 @@ if SERVER then
     function local_command:xorCode(code)
         local before = command_table[self.category][self.name][1]
         local c_xor = bit.bxor(before, code)
-        local q = SQL.UPDATE {code = c_xor} {name = self.name, category = self.category} and nil
+        local q = SQL.UPDATE {code = c_xor} {name = self.name, category = self.category}
         if q then
             command_table[self.category][self.name][1] = c_xor
             JAAS.Hook.Run.Command(self.category)(self.name)(before, c_xor)
@@ -128,9 +128,25 @@ if SERVER then
         return q
     end
 
+    function local_command:setAccess(value)
+        local q = SQL.UPDATE {access_group = value} {name = self.name, category = self.category}
+        if q then
+            command_table[self.category][self.name][4] = value
+        end
+        return q
+    end
+
     function local_command:executeCommand(...)
         return command_table[self.category][self.name][3](...)
     end
+
+    MODULE.Handle.Server(function (jaas)
+        local access = jaas.AccessGroup()
+
+        function local_command:accessCheck(code)
+            return access.codeCheck(access.COMMAND, self:getAccess(), code)
+        end
+    end)
 
     setmetatable(local_command, {
         __call = function(self, command_name, command_category)
@@ -140,28 +156,29 @@ if SERVER then
         __metatable = "jaas_command_object"
     })
 
-    function command:registerCommand(name, func, funcArgs, description, code)
-        local q = SQL.SELECT "code" {name = name, category = self.category}
+    function command:registerCommand(name, func, funcArgs, description, code, access)
+        local q = SQL.SELECT "code, access_group" {name = name, category = self.category}
         if q then
-            code = tonumber(q[1]["code"])
-        elseif code == nil then
-            code = 0
+            code = tonumber(q["code"])
+            access = tonumber(q["access_group"])
         end
+        code = code or 0
+        access = access or 0
         if !q then
-            q = SQL.INSERT {name = name, category = self.category, code = code} and false or true
+            q = SQL.INSERT {name = name, category = self.category, code = code, access_group = access}
         end
         if q then
             funcArgs = funcArgs or {}
             if command_table[self.category] ~= nil then
-                command_table[self.category][name] = {code, funcArgs, func}
+                command_table[self.category][name] = {code, funcArgs, func, access}
             else
-                command_table[self.category] = {[name]={code, funcArgs, func}}
+                command_table[self.category] = {[name]={code, funcArgs, func, access}}
             end
             return local_command(name, self.category)
         end
     end
 elseif CLIENT then
-    function command:registerCommand(name, func, funcArgs, description, code)
+    function command:registerCommand(name, func, funcArgs, description, code, access)
         funcArgs = funcArgs or {}
         description = description or ""
         if isstring(name) and istable(funcArgs) then

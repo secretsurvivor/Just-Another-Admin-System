@@ -341,7 +341,8 @@ include.Shared {
 include.Server {
     "jaas-core/JAAS-player.lua",
     "jaas-core/JAAS-rank.lua",
-    "jaas-core/JAAS-permission.lua"
+    "jaas-core/JAAS-permission.lua",
+    "jaas-core/JAAS-access.lua"
 }
 
 include.Client "jaas-core/JAAS-panel.lua"
@@ -351,7 +352,7 @@ JAAS:PostInitialise()
 if CLIENT then print "------------------------------" end
 
 local dev = JAAS.Dev()
-local RefreshClientInclude = dev.sharedSync("JAAS_InitTableSync", function (_, ply)
+local RefreshClientInclude = dev.SharedSync("JAAS_InitTableSync", function (_, ply)
     local includeTable, count = {}, 0
     for state,stage in pairs(JAAS.include) do
         includeTable[state] = stage

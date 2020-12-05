@@ -2,11 +2,11 @@ local MODULE, log, dev, SQL = JAAS:RegisterModule "Permission"
 SQL = SQL"JAAS_permission"
 
 if !SQL.EXIST and SERVER then
-    SQL.CREATE.TABLE {name = "NOT NULL UNIQUE", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0"}
+    SQL.CREATE.TABLE {name = "NOT NULL UNIQUE", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0", access_group = "UNSIGNED INT DEFAULT 0"}
     SQL.CREATE.INDEX "JAAS_permission_name" "name"
 end
 
-local permission_table = permission_table or {} -- [name] = {code, description}
+local permission_table = permission_table or {} -- [name] = {code, description, access}
 local permission_local = {["getCode"] = true, ["setCode"] = true, ["getName"] = true, ["xorCode"] = true}
 local permission = {["registerPermission"] = true}
 
@@ -43,22 +43,37 @@ function permission_local:xorCode(code)
     return q
 end
 
+function permission_local:getAccess()
+    return permission_table[self.name][3]
+end
+
+function permission_local:setAccess(value)
+    local q = SQL.UPDATE {access_group = value} {name = self.name}
+    if q then
+        permission_table[self.name][3] = value
+    end
+    return q
+end
+
 function permission_local:codeCheck(code)
     if self:defaultAccess() then
         return true
     else
         if isnumber(code) then
-            if bit.band(self:getCode(), code) then
-                return true
-            end
+            return bit.band(self:getCode(), code) > 0
         elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
-            if bit.band(self:getCode(), code:getCode()) then
-                return true
-            end
+            return bit.band(self:getCode(), code:getCode()) > 0
         end
     end
-    return false
 end
+
+MODULE.Handle.Server(function (jaas)
+    local access = jaas.AccessGroup()
+
+    function permission_local:accessCheck(code)
+        return access.codeCheck(access.PERMISSION, self:getAccess(), code)
+    end
+end)
 
 function permission_local:defaultAccess()
     if self:getCode() == 0 then
@@ -75,18 +90,19 @@ setmetatable(permission_local, {
     end
 })
 
-function permission.registerPermission(name, description, code)
-    local q = SQL.SELECT "code" {name = name}
+function permission.registerPermission(name, description, code, access)
+    local q = SQL.SELECT "code, access_group" {name = name}
     if q then
         code = tonumber(q["code"])
-    elseif code == nil then
-        code = 0
+        access = tonumber(q["access_group"])
     end
+    code = code or 0
+    access = access or 0
     if !q then
-        q = SQL.INSERT {name = name, code = code} and false or true
+        q = SQL.INSERT {name = name, code = code, access_group = access}
     end
     if q then
-        permission_table[name] = {code, description}
+        permission_table[name] = {code, description, access}
         return permission_local(name)
     end
 end

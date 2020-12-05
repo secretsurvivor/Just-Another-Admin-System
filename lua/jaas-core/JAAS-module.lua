@@ -148,30 +148,32 @@ do -- Developer Module Initialisation
     function devFunctions:Cache()
         return setmetatable({
             __internal = {},
-            __dirty = true,
-            MakeDirty = function (self)
-                self.__dirty = true
-            end,
-            Dirty = function (self)
-                return self.__dirty
-            end
+            __dirty = true
         }, {__index = function (self, k)
-            if self.__dirty then
-                self.__internal = {}
-                self.__dirty = false
+            if rawget(self, "__dirty") then
+                rawset(self, "__internal", {})
+                rawset(self, "__dirty", false)
             end
-            return self.__internal[k]
+            return rawget(self, "__internal")[k]
         end,
         __newindex = function (self, k, v)
-            if self.__dirty then
-                self.__internal = {}
-                self.__dirty = false
+            if rawget(self, "__dirty") then
+                rawset(self, "__internal", {})
+                rawset(self, "__dirty", false)
             end
-            self.__internal[k] = v
+            rawget(self, "__internal")[k] = v
         end,
-        __call = function (self, v)
-            table.insert(self.__internal, v)
+        __call = function (self)
+            rawset(self, __dirty, true)
         end})
+    end
+
+    function devFunctions.isPlayer(v)
+        return isentity(v) and IsValid(v) and v:IsPlayer()
+    end
+
+    function devFunctions.isBot(v)
+        return isentity(v) and IsValid(v) and v:IsBot()
     end
 
     function devFunctions:isTypeFunc(name, metatable)
@@ -442,18 +444,18 @@ do
                 end
                 return function (where)
                     if isstring(where) then
-                        return QUERY("UPDATE " .. sql_table .. " SET " .. set .. " WHERE " .. where)
+                        return QUERY("UPDATE " .. sql_table .. " SET " .. set .. " WHERE " .. where) == nil
                     elseif istable(where) then
-                        return QUERY("UPDATE " .. sql_table .. " SET " .. set .. " WHERE " .. table_to_WHERE(where))
+                        return QUERY("UPDATE " .. sql_table .. " SET " .. set .. " WHERE " .. table_to_WHERE(where)) == nil
                     else
-                        return QUERY("UPDATE " .. sql_table .. " SET " .. set)
+                        return QUERY("UPDATE " .. sql_table .. " SET " .. set) == nil
                     end
                 end
             end,
             INSERT = function (set)
                 if isstring(set) then
                     return function (values)
-                        return QUERY("INSERT INTO " .. sql_table .. "(" .. set .. ") VALUES (" .. values .. ")")
+                        return QUERY("INSERT INTO " .. sql_table .. "(" .. set .. ") VALUES (" .. values .. ")") == nil
                     end
                 elseif istable(set) then
                     local cat,val,first_c,first_v = "","",true,true
@@ -480,8 +482,7 @@ do
                             end
                         end
                     end
-                    print("INSERT INTO " .. sql_table .. "(" .. cat .. ") VALUES (" .. val .. ")")
-                    return QUERY("INSERT INTO " .. sql_table .. "(" .. cat .. ") VALUES (" .. val .. ")")
+                    return QUERY("INSERT INTO " .. sql_table .. "(" .. cat .. ") VALUES (" .. val .. ")") == nil
                 end
             end,
             DELETE = function (where)

@@ -2,60 +2,161 @@ local MODULE, log, dev, SQL = JAAS:RegisterModule "Rank"
 SQL = SQL"JAAS_rank"
 
 if !SQL.EXIST and SERVER then
-    SQL.CREATE.TABLE {name = "TEXT NOT NULL UNIQUE", position = "UNSIGNED TINYINT NOT NULL UNIQUE CHECK (position != 0 AND position <= 64)", power = "UNSIGNED TINYINT DEFAULT 0", invisible = "BOOL DEFAULT FALSE"}
+    SQL.CREATE.TABLE {
+        name = "TEXT NOT NULL UNIQUE",
+        position = "UNSIGNED TINYINT NOT NULL UNIQUE CHECK (position != 0 AND position <= 64)",
+        power = "UNSIGNED TINYINT DEFAULT 0",
+        invisible = "BOOL DEFAULT FALSE",
+        access_group = "UNSIGNED INT DEFAULT 0"
+    }
 end
 
 local local_rank = {["getName"] = true, ["setName"] = true, ["getCodePosition"] = true, ["getCode"] = true} -- Used for local functions, for rank data
 
+local r_cache = dev.Cache()
+JAAS.Hook "Rank" "GlobalChange" ["Rank_module_cache"] = function ()
+    r_cache()
+end
+
 function local_rank:getName()
-    local name = SQL.SELECT "name" {rowid = self.id}
-    if name then
-        return name["name"]
+    if r_cache[self.id] ~= nil and r_cache[self.id].name ~= nil then
+        return r_cache[self.id].name
+    else
+        local name = SQL.SELECT "name" {rowid = self.id}
+        if name then
+            if r_cache[self.id] == nil then
+                r_cache[self.id] = {}
+            end
+            r_cache[self.id].name = name["name"]
+            return name["name"]
+        end
     end
 end
 
 function local_rank:setName(name)
-    return SQL.UPDATE {name = name} {rowid = self.id}
+    local q = SQL.UPDATE {name = name} {rowid = self.id}
+    if q then
+        JAAS.Hook.Run "Rank" "GlobalChange" ()
+    end
+    return q
 end
 
 function local_rank:getCodePosition()
-    local position = SQL.SELECT "position" {rowid = self.id}
-    if position then
-        return position["position"]
+    if r_cache[self.id] ~= nil and r_cache[self.id].position ~= nil then
+        return r_cache[self.id].position
+    else
+        local position = SQL.SELECT "position" {rowid = self.id}
+        if position then
+            if r_cache[self.id] == nil then
+                r_cache[self.id] = {}
+            end
+            r_cache[self.id].position = position["position"]
+            return position["position"]
+        end
     end
 end
 
 function local_rank:getCode()
-    local position = SQL.SELECT "1 << (position - 1)" {rowid = self.id}
-    if position then
-        return position["position"]
+    if r_cache[self.id] ~= nil and r_cache[self.id].code ~= nil then
+        return r_cache[self.id].code
+    else
+        local position = SQL.SELECT "1 << (position - 1)" {rowid = self.id}
+        if position then
+            if r_cache[self.id] == nil then
+                r_cache[self.id] = {}
+            end
+            r_cache[self.id].code = position["position"]
+            return position["position"]
+        end
     end
 end
 
 function local_rank:getPower()
-    local power = SQL.SELECT "power" {rowid = self.id}
-    if power then
-        return power["power"]
+    if r_cache[self.id] ~= nil and r_cache[self.id].power ~= nil then
+        return r_cache[self.id].power
+    else
+        local power = SQL.SELECT "power" {rowid = self.id}
+        if power then
+            if r_cache[self.id] == nil then
+                r_cache[self.id] = {}
+            end
+            r_cache[self.id].power = power["power"]
+            return power["power"]
+        end
     end
 end
 
 function local_rank:setPower(power)
     local a = SQL.UPDATE {power = power} {rowid = self.id}
     if a then
+        JAAS.Hook.Run "Rank" "GlobalChange" ()
         JAAS.Hook.Run "Rank" "GlobalPowerChange" ()
         return a
     end
 end
 
 function local_rank:getInvis()
-    local invis = SQL.SELECT "invisible" {rowid = self.id}
-    if invis then
-        return invis["invisible"]
+    if r_cache[self.id] ~= nil and r_cache[self.id].invis ~= nil then
+        return r_cache[self.id].invis
+    else
+        local invis = SQL.SELECT "invisible" {rowid = self.id}
+        if invis then
+            if r_cache[self.id] == nil then
+                r_cache[self.id] = {}
+            end
+            r_cache[self.id].invis = invis["invisible"]
+            return invis["invisible"]
+        end
     end
 end
 
 function local_rank:setInvis(invis)
-    return SQL.UPDATE {invisible = invis} {rowid = self.id}
+    local q = SQL.UPDATE {invisible = invis} {rowid = self.id}
+    if q then
+        JAAS.Hook.Run "Rank" "GlobalChange" ()
+    end
+    return q
+end
+
+function local_rank:getAccess()
+    if r_cache[self.id] ~= nil and r_cache[self.id].access ~= nil then
+        return r_cache[self.id].access
+    else
+        local access = SQL.SELECT "access_group" {rowid = self.id}
+        if access then
+            if r_cache[self.id] == nil then
+                r_cache[self.id] = {}
+            end
+            r_cache[self.id].access = access["access_group"]
+            return access["access_group"]
+        end
+    end
+end
+
+function local_rank:setAccess(value)
+    local q = SQL.UPDATE {access_group = value} {rowid = self.id}
+    if q then
+        JAAS.Hook.Run "Rank" "GlobalChange" ()
+    end
+    return q
+end
+
+MODULE.Handle.Server(function (jaas)
+    local access = jaas.AccessGroup()
+
+    function local_rank:accessCheck(code)
+        return access.codeCheck(access.RANK, self:getAccess(), code)
+    end
+end)
+
+function local_rank:codeCheck(code)
+    if isnumber(code) then
+        return bit.band(self:getCode(), code) > 0
+    elseif dev.isPlayerObject(code) or dev.isCommandObject(code) or dev.isPermissionObject(code) then
+        return bit.band(self:getCode(), code:getCode()) > 0
+    elseif dev.isPlayer(code) then
+        return bit.band(self:getCode(), code:getJAASCode()) > 0
+    end
 end
 
 setmetatable(local_rank, {
@@ -276,7 +377,7 @@ end
 local p_cache = dev.Cache()
 
 JAAS.Hook "Rank" "GlobalPowerChange" ["MaxPowerCacheClean"] = function()
-    p_cache:MakeDirty()
+    p_cache()
 end
 
 function rank.getMaxPower(code)
@@ -286,11 +387,9 @@ function rank.getMaxPower(code)
     if p_cache[code] ~= nil then
         return p_cache[code]
     else
-        local max = 0
-        for t in rank.codeIterator(code) do
-            if t.power > max then
-                max = t.power
-            end
+        local q,max = SQL.SELECT "MAX(power)" "code & ".. code .." > 0",0
+        if q then
+            max = q["MAX(power)"]
         end
         p_cache[code] = max
         return max

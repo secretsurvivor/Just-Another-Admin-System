@@ -18,11 +18,13 @@ local user_local = {["getCode"] = true, ["setCode"] = true, ["xorCode"] = true, 
 local u_cache = dev.Cache()
 
 JAAS.Hook "Player" "GlobalRankChange" ["Player_module_cache"] = function ()
-	u_cache:MakeDirty()
+	u_cache()
 end
 
 local function add_to_cache(steamid)
-	if steamid then
+	if u_cache[steamid] ~= nil then
+		return true
+	elseif steamid then
 		local a = SQL.SELECT "code" {steamid = steamid}
 		if a then
 			u_cache[steamid] = a["code"]
@@ -54,6 +56,9 @@ function user_local:setCode(code)
 end
 
 function user_local:xorCode(code)
+	if dev.isRankObject(code) then
+		code = code:getCode()
+	end
 	local q = SQL.UPDATE ("code = (code | " .. code .. ") & (~code | ~" .. code .. ")") {steamid = self.steamid}
 	if q then
 		JAAS.Hook.Run "Player" "GlobalRankChange" ()
@@ -75,6 +80,12 @@ MODULE.Handle.Server(function (jaas)
 			elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
 				if self:getCode() > 0 and code:getCode() > 0 then
 					return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code:getCode())
+				elseif self:getCode() > 0 then
+					return rank.getMaxPower(self:getCode()) > 0
+				end
+			elseif dev.isPlayer(code) then
+				if self:getCode() > 0 and code:getJAASCode() > 0 then
+					return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code:getJAASCode())
 				elseif self:getCode() > 0 then
 					return rank.getMaxPower(self:getCode()) > 0
 				end
@@ -117,7 +128,7 @@ JAAS.Hook "Rank" "RemovePosition" ["Player_module"] = function (func)
 end
 
 MODULE.Access(function (steamid)
-	if isentity(steamid) and IsValid(steamid) and steamid:IsPlayer() then
+	if dev.isPlayer(steamid) then
 		steamid = steamid:SteamID64()
 	end
 	if add_to_cache(steamid) then
@@ -133,12 +144,40 @@ function meta:getJAASObject()
 		return
 	end
 	if add_to_cache(steamid) then
-		return setmetatable({steamid = self:SteamID()}, {__index = user_local, __newindex = function () end, __metatable = "jaas_player_object"})
+		return setmetatable({steamid = self:SteamID64()}, {__index = user_local, __newindex = function () end, __metatable = "jaas_player_object"})
 	end
 end
 
 function meta:getJAASCode()
 	return get_from_cache(self.SteamID64())
 end
+
+MODULE.Handle.Server(function (jaas)
+	local rank = jaas.Rank()
+
+	function meta:canTarget(code)
+		if dev.isRankLibrary(rank) then
+			if isnumber(code) then
+				if self:getJAASCode() > 0 and code > 0 then
+					return rank.getMaxPower(self:getJAASCode()) > rank.getMaxPower(code)
+				elseif self:getJAASCode() > 0 then
+					return rank.getMaxPower(self:getJAASCode()) > 0
+				end
+			elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
+				if self:getJAASCode() > 0 and code:getCode() > 0 then
+					return rank.getMaxPower(self:getJAASCode()) > rank.getMaxPower(code:getCode())
+				elseif self:getJAASCode() > 0 then
+					return rank.getMaxPower(self:getJAASCode()) > 0
+				end
+			elseif dev.isPlayer(code) then
+				if self:getJAASCode() > 0 and code:getJAASCode() > 0 then
+					return rank.getMaxPower(self:getJAASCode()) > rank.getMaxPower(code:getJAASCode())
+				elseif self:getJAASCode() > 0 then
+					return rank.getMaxPower(self:getJAASCode()) > 0
+				end
+			end
+		end
+	end
+end)
 
 log:printLog "Module Loaded"

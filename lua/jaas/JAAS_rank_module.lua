@@ -5,13 +5,11 @@ command:setCategory "User"
 
 local ModifyUser_ArgTable = arg:add("Rank", "RANK", true):add("Target", "PLAYER"):dispense()
 command:registerCommand("Add", function (ply, rank_object, target)
-    local user = JAAS.Player(ply)
-    if target and IsValid(target) then -- Apply rank change on target
+    if dev.isPlayer(target) then -- Apply rank change on target
         local target_object = target:getJAASObject()
-        if !IsValid(ply) or ply == target or user:validPowerTarget(target_object) then
-            local rank_code = rank_object:getCode()
-            if bit.band(target_object:getCode(), rank_code) == 0 then
-                target_object:xorCode(rank_code)
+        if !IsValid(ply) or ply == target or ply:validPowerTarget(target) then
+            if rank_object:codeCheck(target_object) then
+                target_object:xorCode(rank_object)
             else
                 return target:Nick().." already has that rank"
             end
@@ -20,9 +18,9 @@ command:registerCommand("Add", function (ply, rank_object, target)
         end
     else
         if IsValid(ply) then -- Apply rank change on caller
-            local rank_code = rank_object:getCode()
-            if bit.band(user:getCode(), rank_code) == 0 then
-                user:xorCode(rank_code)
+            local user = JAAS.Player(ply)
+            if rank_object:codeCheck(user) then
+                user:xorCode(rank_object)
             else
                 return "You already have this rank"
             end
@@ -33,13 +31,11 @@ command:registerCommand("Add", function (ply, rank_object, target)
 end, ModifyUser_ArgTable)
 
 command:registerCommand("Remove", function (ply, rank_object, target)
-    local user = JAAS.Player(ply)
-    if target and IsValid(target) then -- Apply rank change on target
+    if dev.isPlayer(target) then -- Apply rank change on target
         local target_object = target:getJAASObject()
-        if !IsValid(ply) or ply == target or user:validPowerTarget(target_object) then
-            local rank_code = rank_object:getCode()
-            if bit.band(target_object:getCode(), rank_code) > 0 then
-                target_object:xorCode(rank_code)
+        if !IsValid(ply) or ply == target or ply:validPowerTarget(target) then
+            if rank_object:codeCheck(target) then
+                target_object:xorCode(rank_object)
             else
                 return target:Nick().." already has that rank"
             end
@@ -48,9 +44,9 @@ command:registerCommand("Remove", function (ply, rank_object, target)
         end
     else
         if IsValid(ply) then -- Apply rank change on caller
-            local rank_code = rank_code:getCode()
-            if bit.band(user:getCode(), rank_code) > 0 then
-                user:xorCode(rank_code)
+            local user = JAAS.Player(ply)
+            if rank_object:codeCheck(user) then
+                user:xorCode(rank_object)
             else
                 return "You already have this rank"
             end
@@ -63,9 +59,8 @@ end, ModifyUser_ArgTable)
 command:setCategory "Utility"
 
 command:registerCommand("Toggle_Flight", function (ply, target)
-    if target then
-        target_object,user = target:getJAASObject(),ply:getJAASObject()
-        if user:validPowerTarget(target_object) then
+    if dev.isPlayer(target) then
+        if !IsValid(ply) or ply:validPowerTarget(target) then
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_FLY)
             else
@@ -76,9 +71,8 @@ command:registerCommand("Toggle_Flight", function (ply, target)
 end, arg:add("Target", "PLAYER", true):dispense())
 
 command:registerCommand("Toggle_Gravity_Flight", function (ply, target)
-    if target then
-        target_object,user = target:getJAASObject(),ply:getJAASObject()
-        if user:validPowerTarget(target_object) then
+    if dev.isPlayer(target) then
+        if !IsValid(ply) or ply:validPowerTarget(target) then
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_FLYGRAVITY)
             else
@@ -89,9 +83,8 @@ command:registerCommand("Toggle_Gravity_Flight", function (ply, target)
 end, arg:add("Target", "PLAYER", true):dispense())
 
 command:registerCommand("Toggle_Noclip", function (ply, target)
-    if target then
-        target_object,user = target:getJAASObject(),ply:getJAASObject()
-        if user:validPowerTarget(target_object) then
+    if dev.isPlayer(target) then
+        if !IsValid(ply) or ply:validPowerTarget(target) then
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_NOCLIP)
             else
