@@ -55,7 +55,7 @@ do -- Developer Module Initialisation
         return query(format(s, ...))
     end
 
-    function devFunctions.verifyFilepath(filepath, verify_str)
+    function devFunctions.VerifyFilepath(filepath, verify_str)
         -- Verify String example: addons/*/lua/jaas/*
         if filepath and verify_str then
             local filepath_func = gmatch(filepath, ".")
@@ -110,7 +110,7 @@ do -- Developer Module Initialisation
         end
     end*/
 
-    function devFunctions.verifyFilepath_table(filepath, verify_str_table)
+    function devFunctions.VerifyFilepath_table(filepath, verify_str_table)
         for _, v_str in ipairs(verify_str_table) do
             if verifyFilepath(filepath, v_str) then
                 return true
@@ -120,7 +120,7 @@ do -- Developer Module Initialisation
     end
 
     if SERVER then -- SHARED -> dev.sharedSync(networkString, server_func, hook_identifier, client_func)
-        function devFunctions.sharedSync(networkString, server_func)
+        function devFunctions.SharedSync(networkString, server_func)
             util.AddNetworkString(networkString)
             local receive_func = function (_, ply)
                 local table_ = server_func(_, ply)
@@ -134,7 +134,7 @@ do -- Developer Module Initialisation
             return receive_func
         end
     elseif CLIENT then
-        function devFunctions.sharedSync(networkString, _, hook_identifier, client_func)
+        function devFunctions.SharedSync(networkString, _, hook_identifier, client_func)
             net.Receive(networkString, function (_, ply)
                 client_func(_, ply, net.ReadTable())
             end)
@@ -143,6 +143,35 @@ do -- Developer Module Initialisation
                 net.SendToServer()
             end)
         end
+    end
+
+    function devFunctions:Cache()
+        return setmetatable({
+            __internal = {},
+            __dirty = true,
+            MakeDirty = function (self)
+                self.__dirty = true
+            end,
+            Dirty = function (self)
+                return self.__dirty
+            end
+        }, {__index = function (self, k)
+            if self.__dirty then
+                self.__internal = {}
+                self.__dirty = false
+            end
+            return self.__internal[k]
+        end,
+        __newindex = function (self, k, v)
+            if self.__dirty then
+                self.__internal = {}
+                self.__dirty = false
+            end
+            self.__internal[k] = v
+        end,
+        __call = function (self, v)
+            table.insert(self.__internal, v)
+        end})
     end
 
     function devFunctions:isTypeFunc(name, metatable)
@@ -517,7 +546,7 @@ local handles = {server = {}, client = {}}
 function JAAS:RegisterModule(name)
     local l,d = log(name),dev()
     local f_str, id = l:executionTraceLog()
-    if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+    if JAAS.Var.ExecutionRefusal and !d.VerifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
         return l:removeTraceLog(id)
     end
     local jaas = self
@@ -527,7 +556,7 @@ function JAAS:RegisterModule(name)
                     if execution_log then
                         jaas[access_name] = function (...)
                             local f_str, id = l:executionTraceLog()
-                            if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+                            if JAAS.Var.ExecutionRefusal and !d.VerifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
                                 return l:removeTraceLog(id)
                             end
                             return index(...)
@@ -542,7 +571,7 @@ function JAAS:RegisterModule(name)
                     if execution_log then
                         jaas[name] = function (...)
                             local f_str, id = l:executionTraceLog()
-                            if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+                            if JAAS.Var.ExecutionRefusal and !d.VerifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
                                 return l:removeTraceLog(id)
                             end
                             return index(...)
@@ -559,7 +588,7 @@ function JAAS:RegisterModule(name)
                     if execution_log then
                         jaas[access_name] = function (...)
                             local f_str, id = l:executionTraceLog()
-                            if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+                            if JAAS.Var.ExecutionRefusal and !d.VerifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
                                 return l:removeTraceLog(id)
                             end
                             return index(...)
@@ -572,7 +601,7 @@ function JAAS:RegisterModule(name)
                     if execution_log then
                         jaas[name] = function (...)
                             local f_str, id = l:executionTraceLog()
-                            if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+                            if JAAS.Var.ExecutionRefusal and !d.VerifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
                                 return l:removeTraceLog(id)
                             end
                             return index(...)
@@ -601,7 +630,7 @@ function JAAS:RegisterModule(name)
         end}),
         ExecutionTrace = function ()
             local f_str, id = l:executionTraceLog(1)
-            if JAAS.Var.ExecutionRefusal and !d.verifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
+            if JAAS.Var.ExecutionRefusal and !d.VerifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
                 return !l:removeTraceLog(id)
             end
             return true

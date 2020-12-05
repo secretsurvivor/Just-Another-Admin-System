@@ -249,7 +249,7 @@ elseif CLIENT then
     end
 end
 
-local RefreshClientCodes = dev.sharedSync("JAAS_CommandCodeSync", function (_, ply)
+local RefreshClientCodes = dev.SharedSync("JAAS_CommandCodeSync", function (_, ply)
     local command_code_table = {}
     for category, c_table in pairs(command_table) do
         for name, n_table in pairs(c_table) do

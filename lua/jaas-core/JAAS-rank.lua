@@ -223,7 +223,7 @@ function rank.removeRanks(...)
                         rank_code_count = 1 + rank_code_count
                         rank_count = rank_count - 1
                     end
-                elseif istable(v) and getmetatable(v) == "jaas_rank_object" then
+                elseif dev.isRankObject(v) then
                     rank_position = tonumber(SQL.SELECT "position" {rowid = v.id}["position"])
                     if SQL.DELETE {rowid = v.id} then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
@@ -273,20 +273,15 @@ function rank.removeRanks(...)
     end
 end
 
-local p_cache = {}
-local p_cache_dirty = true
+local p_cache = dev.Cache()
 
 JAAS.Hook "Rank" "GlobalPowerChange" ["MaxPowerCacheClean"] = function()
-    p_cache_dirty = true
+    p_cache:MakeDirty()
 end
 
 function rank.getMaxPower(code)
     if code == 0 then
         return 0
-    end
-    if p_cache_dirty then
-        p_cache = {}
-        p_cache_dirty = false
     end
     if p_cache[code] ~= nil then
         return p_cache[code]
@@ -364,7 +359,7 @@ MODULE.Handle.Server(function (jaas)
     local dev, perm = jaas.Dev(), jaas.Permission()
     local showInvisibleRanks = perm.registerPermission("Show Invisible Ranks", "This permission will show invisible ranks clientside")
 
-    local refreshRankTable = dev.sharedSync("JAAS_RankTableSync", function (_, ply)
+    local refreshRankTable = dev.SharedSync("JAAS_RankTableSync", function (_, ply)
         local net_table, show_invisible_rank = {}, showInvisibleRanks:codeCheck(ply:getJAASCode())
         for t in rank.rankIterator() do
             if !t.invisible or (t.invisible and show_invisible_rank) then
@@ -383,7 +378,7 @@ end)
 
 MODULE.Handle.Client(function (jaas)
     local dev = jaas.Dev()
-    dev.sharedSync("JAAS_RankTableSync", _, "JAAS_RankSyncClient", function (_, ply, table) -- TODO
+    dev.SharedSync("JAAS_RankTableSync", _, "JAAS_RankSyncClient", function (_, ply, table) -- TODO
     end)
 end)
 

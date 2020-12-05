@@ -15,11 +15,10 @@ end)
 local user = {["userIterator"] = true}
 local user_local = {["getCode"] = true, ["setCode"] = true, ["xorCode"] = true, ["canTarget"] = true}
 
-local u_cache = {}
-local u_cache_dirty = true
+local u_cache = dev.Cache()
 
 JAAS.Hook "Player" "GlobalRankChange" ["Player_module_cache"] = function ()
-	u_cache_dirty = true
+	u_cache:MakeDirty()
 end
 
 local function add_to_cache(steamid)
@@ -34,11 +33,6 @@ local function add_to_cache(steamid)
 end
 
 local function get_from_cache(steamid)
-	if u_cache_dirty then
-		u_cache = {}
-		u_cache_dirty = false
-		add_to_cache(steamid)
-	end
 	if u_cache[steamid] ~= nil then
 		if !add_to_cache(steamid) then
 			error("SteamID must have been removed from database", 3)
@@ -123,10 +117,6 @@ JAAS.Hook "Rank" "RemovePosition" ["Player_module"] = function (func)
 end
 
 MODULE.Access(function (steamid)
-	if u_cache_dirty then
-		u_cache = {}
-		u_cache_dirty = false
-	end
 	if isentity(steamid) and IsValid(steamid) and steamid:IsPlayer() then
 		steamid = steamid:SteamID64()
 	end
