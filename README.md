@@ -24,8 +24,8 @@ Permissions are my favourite part of JAAS, allowing developers complete freedom 
 This in itself covers two fields; adding tabs and settings to the already established JAAS menu or just replacing the JAAS menu entirely with something better - I'm no interface designer so I implore you to make something better.
 ## Features to be finished
 Sadly, it is not release ready. There are still features that need to be finished and features to be explored before it can be considered ready to release. In its current state, it is merely a console based admin system that cannot even be fully used from console as not all of the commands are done yet. Some features like setting what rank can access what commands and permissions will be completely done by the user interface and I will most likely modify some of the modules to make it more efficient. This is a basic list covering what needs to be done:
-+ Utility Commands - Banning, kicking, etc.
-+ User Interface - Which also includes all of the code behind it like allowing it to be switched out
++ Utility Commands* - Banning, kicking, etc.
++ User Interface* - Which also includes all of the code behind it like allowing it to be switched out
 + Rank Presets - Will use its own preset language instead of Lua
 + Support Singleplayer
 + Whitelist
@@ -33,3 +33,5 @@ Sadly, it is not release ready. There are still features that need to be finishe
 + Language Support - Will allow other languages to be used for the user interface
 + SQL Injection Protection - Use a hashing algorithm
 + Hammer Entities - Also a Hammer fgd file for easier use in Hammer
+
+*_Tasks that are required to make JAAS release ready_
