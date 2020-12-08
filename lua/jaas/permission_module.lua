@@ -50,12 +50,13 @@ hook.Add("PlayerCanPickupWeapon", "JAAS_canPickupWeaponPermission", function (pl
 end)
 
 local meta = FindMetaTable("Player")
-local isAdmin = permission.registerPermission("Is Admin", "Player will be apart of the admin usergroup")
-function meta:IsAdmin()
-    return isAdmin:codeCheck(self:getJAASCode())
-end
 
 local isSuperadmin = permission.registerPermission("Is Superadmin", "Player be apart of the superadmin usergroup")
 function meta:IsSuperAdmin()
     return isSuperadmin:codeCheck(self:getJAASCode())
+end
+
+local isAdmin = permission.registerPermission("Is Admin", "Player will be apart of the admin usergroup")
+function meta:IsAdmin()
+    return isAdmin:codeCheck(self:getJAASCode()) or isSuperadmin:codeCheck(self:getJAASCode())
 end

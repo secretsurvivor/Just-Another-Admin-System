@@ -75,12 +75,12 @@ setmetatable(access_local, {
         if isnumber(v) then
             local q = SQL.SELECT "name" {rowid = v}
             if q then
-                return setmetatable({id = v}, {__index = access_local})
+                return setmetatable({id = v}, {__index = access_local, __metatable = "jaas_access_object"})
             end
         elseif isstring(v) then
             local q = SQL.SELECT "rowid" {name = v}
             if q then
-                return setmetatable({id = q}, {__index = access_local})
+                return setmetatable({id = q}, {__index = access_local, __metatable = "jaas_access_object"})
             end
         end
     end
@@ -135,7 +135,39 @@ MODULE.Access(function (identifier)
             return r
         end
     end
-    return setmetatable({}, {__index = access})
+    return setmetatable({}, {__index = access, __metatable = "jaas_access_library"})
 end, true, "AccessGroup")
+
+dev:isTypeFunc("AccessObject", "jaas_access_object")
+dev:isTypeFunc("AccessLibrary", "jaas_access_library")
+
+MODULE.Handle.Server(function (jaas)
+    local perm = jaas.Permission()
+    local access_permission = perm.registerPermission("Can Modify Access Group", "Player will be able to modify access groups")
+
+    util.AddNetworkString "JAAS_AccessModify_Channel"
+    /* Access feedback codes :: 2 Bits
+        0 :: Permission Change was a success
+        1 :: Code could not be changed
+        2 :: Unknown Access identifier
+    */
+    local sendFeedback = dev.sendUInt("JAAS_AccessModify_Channel", 2)
+    net.Receive("JAAS_AccessModify_Channel", function (len, ply)
+        if access_permission:codeCheck(ply) then
+            local name = net.ReadString()
+            local code = net.ReadUInt(64)
+            local acc, sendCode = jaas.AccessGroup(), sendFeedback(ply)
+            if dev.isAccessObject(acc) then
+                if acc:xorCode(code) then
+                    sendCode(0)
+                else
+                    sendCode(1)
+                end
+            else
+                sendCode(2)
+            end
+        end
+    end)
+end)
 
 log:printLog "Module Loaded"

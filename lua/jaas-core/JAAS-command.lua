@@ -2,25 +2,34 @@ local MODULE, log, dev, SQL = JAAS:RegisterModule "Command"
 SQL = SQL"JAAS_command"
 
 if !SQL.EXIST and SERVER then
-    SQL.CREATE.TABLE {name = "TEXT NOT NULL", category = "TEXT NOT NULL", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0", access_group = "UNSIGNED INT DEFAULT 0", "PRIMARY KEY(name, category)"}
+    SQL.CREATE.TABLE {
+        name = "TEXT NOT NULL",
+        category = "TEXT NOT NULL",
+        code = "UNSIGNED BIGINT NOT NULL DEFAULT 0",
+        access_group = "UNSIGNED INT DEFAULT 0",
+        "PRIMARY KEY(name, category)"
+    }
     SQL.CREATE.INDEX "JAAS_command_primary" {name, category}
 end
 
 local argTable = {["add"]=true, ["dispense"]=true} -- Argument Table Builder, for command registering and user interface
 
 local function typeMap(typ)
-    if        typ == "BOOL" then return    0x1
-    elseif     typ == "INT" then return    0x2
-    elseif   typ == "FLOAT" then return    0x3
-    elseif  typ == "STRING" then return    0x4
-    elseif  typ == "PLAYER" then return    0x5
-    elseif typ == "PLAYERS" then return    0x6
-    elseif    typ == "RANK" then return    0x7
-    elseif   typ == "RANKS" then return    0x8
-    elseif  typ == "OPTION" then return    0x9
-    elseif typ == "OPTIONS" then return    0xA
-    else error("Unknown Datatype", 2)
-    end
+    local typeCase = dev.SwitchCase()
+    typeCase:case("BOOL", 0x1)
+    typeCase:case("INT", 0x2)
+    typeCase:case("FLOAT", 0x3)
+    typeCase:case("STRING", 0x4)
+    typeCase:case("PLAYER", 0x5)
+    typeCase:case("PLAYERS", 0x6)
+    typeCase:case("RANK", 0x7)
+    typeCase:case("RANKS", 0x8)
+    typeCase:case("OPTION", 0x9)
+    typeCase:case("OPTIONS", 0xA)
+    typeCase:default(function ()
+        error("Unknown Datatype", 2)
+    end)
+    return typeCase:switch(typ)
 end
 
 /*
@@ -144,7 +153,13 @@ if SERVER then
         local access = jaas.AccessGroup()
 
         function local_command:accessCheck(code)
-            return access.codeCheck(access.COMMAND, self:getAccess(), code)
+            if isnumber(code) then
+                return access.codeCheck(access.COMMAND, self:getAccess(), code)
+            elseif dev.isPlayerObject(code) then
+                return access.codeCheck(access.COMMAND, self:getAccess(), code:getCode())
+            elseif dev.isPlayer(code) then
+                return access.codeCheck(access.COMMAND, self:getAccess(), code:getJAASCode())
+            end
         end
     end)
 
@@ -294,7 +309,44 @@ MODULE.Access(function (command_name, command_category)
     else
         return setmetatable({category = "default"}, {__index = command, __newindex = function () end, __metatable = "jaas_command_library"})
     end
-end, true)
+end)
+
+dev:isTypeFunc("CommandObject","jaas_command_object")
+dev:isTypeFunc("CommandLibrary","jaas_command_library")
+
+MODULE.Handle.Server(function (jaas)
+    local modify_command = jaas.Permission().registerPermission("Can Modify Commands", "Player will be able to change what command ranks have access to")
+
+    util.AddNetworkString "JAAS_CommandModify_Channel"
+    /* Command feedback codes :: 2 Bits
+        0 :: Command Change was a success
+        1 :: Code could not be changed
+        2 :: Unknown Command identifier
+        3 :: Not part of Access Group
+    */
+    local sendFeedback = dev.sendUInt("JAAS_CommandModify_Channel", 2)
+    net.Receive("JAAS_CommandModify_Channel", function (len, ply)
+        if modify_command:codeCheck(ply) then
+            local category = net.ReadString()
+            local name = net.ReadString()
+            local code = net.ReadUInt(64)
+            local cmd, sendCode = jaas.Command(name, category), sendFeedback(ply)
+            if dev.isCommandObject(cmd) then
+                if cmd:accessCheck(ply) then
+                    if cmd:xorCode(code) then
+                        sendCode(0)
+                    else
+                        sendCode(1)
+                    end
+                else
+                    sendCode(3)
+                end
+            else
+                sendCode(2)
+            end
+        end
+    end)
+end)
 
 local function commandAutoComplete(cmd, args_str)
     local args = string.Explode(" ", string.Trim(args_str))
@@ -313,10 +365,12 @@ local function commandAutoComplete(cmd, args_str)
                                     cmd_args = cmd_args.." "..args[i-1]
                                 end
                                 local arg_type = t[2][i-2][2]
-                                if arg_type == 1 then -- Bool
+                                local autocompleteCase = dev.SwitchCase()
+                                autocompleteCase:case(1, function () -- Bool
                                     table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." true")
                                     table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." false")
-                                elseif arg_type == 5 then -- Player
+                                end)
+                                autocompleteCase:case(5, function () -- Player
                                     for _,ply in ipairs(player.GetAll()) do
                                         if string.find(ply:Nick(), args[i]) then
                                             table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." \""..ply:Nick().."\"")
@@ -325,15 +379,21 @@ local function commandAutoComplete(cmd, args_str)
                                             table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." \""..ply:Nick().."\"")
                                         end
                                     end
-                                elseif arg_type == 6 then -- Players
-                                elseif arg_type == 7 then -- Rank
-                                elseif arg_type == 8 then -- Ranks
-                                elseif arg_type == 9 then -- Option
+                                end)
+                                autocomplete:case(6, function () -- Players
+                                end)
+                                autocomplete:case(7, function () -- Rank
+                                end)
+                                autocomplete:case(8, function () -- Ranks
+                                end)
+                                autocomplete:case(9, function () -- Option
                                     for k,_ in pairs(t[2][i-2][4]) do
                                         table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." "..k)
                                     end
-                                elseif arg_type == 10 then -- Options
-                                end
+                                end)
+                                autocomplete:case(10, function () -- Options
+                                end)
+                                autocompleteCase:switch(arg_type)
                             end
                             break
                         else
@@ -387,33 +447,45 @@ if SERVER then
                 local funcArgs, funcArgs_toBeExecuted = command_table[category][name][2], {}
                 for i, arg in ipairs(funcArgs) do -- Read Function Arguments
                     local readArg
-                    if arg[2] == 1 then
-                        readArg = net.ReadBool()
-                    elseif arg[2] == 2 then
-                        readArg = net.ReadInt(64)
-                    elseif arg[2] == 3 then
-                        readArg = net.ReadFloat()
-                    elseif arg[2] == 4 then
-                        readArg = net.ReadString()
-                    elseif arg[2] == 5 then
-                        readArg = net.ReadEntity()
-                    elseif arg[2] == 6 then
-                        readArg = net.ReadTable()
-                    elseif arg[2] == 7 then
+                    local readArgCase = dev.SwitchCase()
+                    readArgCase:case(1, function ()
+                        return net.ReadBool()
+                    end)
+                    readArgCase:case(2, function ()
+                        return net.ReadInt(64)
+                    end)
+                    readArgCase:case(3, function ()
+                        return net.ReadFloat()
+                    end)
+                    readArgCase:case(4, function ()
+                        return net.ReadString()
+                    end)
+                    readArgCase:case(5, function ()
+                        return net.ReadEntity()
+                    end)
+                    readArgCase:case(6, function ()
+                        return net.ReadTable()
+                    end)
+                    readArgCase:case(7, function ()
                         local rank_name = net.ReadString()
-                        readArg = JAAS.Rank(rank_name)
-                    elseif arg[2] == 8 then
+                        return JAAS.Rank(rank_name)
+                    end)
+                    readArgCase:case(8, function ()
                         local rank_table = net.ReadTable()
-                        readArg = {}
+                        local t = {}
                         for k,v in ipairs(rank_table) do
-                            readArg[k] = JAAS.Rank(v)
+                            t[k] = JAAS.Rank(v)
                         end
-                    elseif arg[2] == 9 then
-                        readArg = net.ReadInt(math.ceil(math.log(#arg[4], 2)))
-                    elseif arg[2] == 10 then
-                        readArg = net.ReadTable()
-                    end
-                    readArg = readArg or arg[4]
+                        return t
+                    end)
+                    readArgCase:case(9, function ()
+                        return net.ReadInt(math.ceil(math.log(#arg[4], 2)))
+                    end)
+                    readArgCase:case(10, function ()
+                        return net.ReadTable()
+                    end)
+                    readArgCase:default(arg[4])
+                    readArg = readArgCase:switch(arg[2])
                     if !readArg and arg[3] then break end
                     table.insert(funcArgs_toBeExecuted, readArg)
                 end
@@ -528,19 +600,26 @@ elseif CLIENT then
     end)
 
     JAAS.Hook "Command" "CommandFeedback" ["ConsoleEcho"] = function(code, category, name, message)
-        if code == 0 then -- Successful Command Execution
+        local logCase = dev.SwitchCase()
+        logCase:case(0, function () -- Successful Command Execution
             log:printLog(category.." "..name.." Successfully Executed")
-        elseif code == 1 then -- Invalid Command Category or Name
+        end)
+        logCase:case(1, function () -- Invalid Command Category or Name
             log:printLog(category.." "..name.." Unknown Category or Name")
-        elseif code == 2 then -- Invalid Player Access
+        end)
+        logCase:case(2, function () -- Invalid Player Access
             log:printLog(category.." "..name.." Invalid Access")
-        elseif code == 3 then -- Invalid Passed Argument
+        end)
+        logCase:case(3, function () -- Invalid Passed Argument
             log:printLog(category.." "..name.." Invalid Arguments")
-        elseif code == 4 then -- Function Feedback
+        end)
+        logCase:case(4, function () -- Function Feedback
             log:printLog(category.." "..name.." - "..message)
-        else -- Unknown Error Code
+        end)
+        logCase:default(function () -- Unknown Error Code
             log:printLog(category.." "..name.." Returned Unknown Error")
-        end
+        end)
+        logCase:switch(code)
     end
 
     concommand.Add("JAAS", function(ply, cmd, args, argStr)

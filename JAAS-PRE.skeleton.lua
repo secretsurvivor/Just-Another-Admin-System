@@ -7,7 +7,8 @@ JAAS_PRE_HOOK = {
         if isfunction(v) then
             table.insert(onFailure, v)
         end
-    end
+    end,
+    Active = false
 }
 
 hook.Add("PostGamemodeLoaded", "JAAS_PRE_HOOK_CLEANUP", function ()

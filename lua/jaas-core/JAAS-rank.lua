@@ -145,7 +145,13 @@ MODULE.Handle.Server(function (jaas)
     local access = jaas.AccessGroup()
 
     function local_rank:accessCheck(code)
-        return access.codeCheck(access.RANK, self:getAccess(), code)
+        if isnumber(code) then
+            return access.codeCheck(access.RANK, self:getAccess(), code)
+        elseif dev.isPlayerObject(code) then
+            return access.codeCheck(access.RANK, self:getAccess(), code:getCode())
+        elseif dev.isPlayer(code) then
+            return access.codeCheck(access.RANK, self:getAccess(), code:getJAASCode())
+        end
     end
 end)
 
@@ -271,7 +277,7 @@ function rank.removeRank(name)
         q = SQL.DELETE {rowid = name.id}
         rank_count = rank_count - 1
     end
-    if q != false then
+    if q then
         local rank_code = bit.lshift(1, rank_position - 1)
         JAAS.Hook.Run "Rank" "RemovePosition" (function (bit_code)
             if bit_code > 0 then
@@ -299,8 +305,8 @@ function rank.removeRank(name)
             end
         end
         sql.Commit()
-        return true
     end
+    return q
 end
 
 function rank.removeRanks(...)
@@ -412,50 +418,97 @@ MODULE.Access(function (rank_name)
     else
         return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})
     end
-end, true)
-
-MODULE.Handle.Shared(function (jaas)
-    local command = jaas.Command()
-    local arg = command.argumentTableBuilder()
-
-    command:setCategory "Rank"
-
-    command:registerCommand("Add", function (ply, name, power, invis)
-        name = sql.SQLStr(name)
-        if !rank.addRank(name, power, invis) then
-            return "Adding Rank has failed"
-        end
-    end, arg:add("Name", "STRING", true):add("Power", "INT", false, 0):add("Invisible", "BOOL", false, false):dispense())
-
-    command:registerCommand("Remove", function (ply, rank_object)
-        if !rank.removeRank(rank_object) then
-            return "Unknown Rank"
-        end
-    end, arg:add("Rank", "RANK", true):dispense())
-
-    command:registerCommand("Remove_Ranks", function (ply, rank_table)
-        if !rank.removeRanks(rank_table) then
-            return "All Ranks Unknown"
-        end
-    end, arg:add("Ranks", "RANKS", true):dispense())
-
-    command:registerCommand("Set_Power", function (ply, rank_object, power)
-        if !rank_object:setPower(power) then
-            return "Setting power for rank " .. rank_object:getName() .. " has failed"
-        end
-    end, arg:add("Rank", "RANK", true):add("Power", "INT", true, 0):dispense())
-
-    command:registerCommand("Get_Ranks", function (ply)
-        local f_str = "Ranks:\n"
-        for name in rank.rankIterator("name") do
-            f_str = f_str..name.."\n"
-        end
-        return f_str
-    end)
 end)
 
+dev:isTypeFunc("RankObject","jaas_rank_object")
+dev:isTypeFunc("RankLibrary","jaas_rank_library")
+
 MODULE.Handle.Server(function (jaas)
-    local dev, perm = jaas.Dev(), jaas.Permission()
+    local perm = jaas.Permission()
+    local modify_rank = perm.registerPermission("Can Modify Rank Table", "Player will be able to modify the rank table - this is required to add, remove, and modify existing ranks")
+
+    util.AddNetworkString "JAAS_ModifyRank_Channel"
+    /*
+        0 :: Modify Successful
+        1 :: Could not modify
+        2 :: Invalid Rank Identifier
+        3 :: Unknown modify code
+    */
+    local sendFeedback = dev.sendUInt("JAAS_ModifyRankTable_Channel", 2)
+    net.Receive("JAAS_ModifyRank_Channel", function (len, ply)
+        /*
+            0 :: Add Rank
+            1 :: Remove Rank
+            2 :: Remove Ranks
+            3 :: Set Power
+            4 :: Set Invisible
+        */
+        if modify_rank:codeCheck(ply) then
+            local sendCode = sendFeedback(ply)
+            local modify_code = net.ReadUInt(3)
+            local modifyCase = dev.SwitchCase()
+            modifyCase:case(0, function ()
+                local name = SQL.ESCAPE(net.ReadString())
+                local power = net.ReadUInt(8)
+                local invis = net.ReadBool()
+                if rank.addRank(name, power, invis) then
+                    return 0
+                else
+                    return 1
+                end
+            end)
+            modifyCase:case(1, function ()
+                local name = SQL.ESCAPE(net.ReadString())
+                if rank.removeRank(name) then
+                    return 0
+                else
+                    return 1
+                end
+            end)
+            modifyCase:case(2, function ()
+                local len,t = net.ReadUInt(64),{}
+                for i=1,len do
+                    t[i] = net.ReadString()
+                end
+                if rank.removeRanks(unpack(t)) then
+                    return 0
+                else
+                    return 1
+                end
+            end)
+            modifyCase:case(3, function ()
+                local name = SQL.ESCAPE(net.ReadString())
+                local power = net.ReadUInt(8)
+                local rnk = jaas.Rank(name)
+                if dev.isRankObject(rnk) then
+                    if rnk:setPower(power) then
+                        return 0
+                    else
+                        return 1
+                    end
+                else
+                    return 2
+                end
+            end)
+            modifyCase:case(4, function ()
+                local name = SQL.ESCAPE(net.ReadString())
+                local invis = net.ReadBool()
+                local rnk = jaas.Rank(name)
+                if dev.isRankObject(rnk) then
+                    if rnk:setInvis(invis) then
+                        return 0
+                    else
+                        return 1
+                    end
+                else
+                    return 2
+                end
+            end)
+            modifyCase:default(3)
+            sendCode(modifyCase:switch(modify_code))
+        end
+    end)
+
     local showInvisibleRanks = perm.registerPermission("Show Invisible Ranks", "This permission will show invisible ranks clientside")
 
     local refreshRankTable = dev.SharedSync("JAAS_RankTableSync", function (_, ply)

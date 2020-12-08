@@ -2,7 +2,7 @@ local MODULE, log, dev, SQL = JAAS:RegisterModule "Player"
 SQL = SQL"JAAS_player"
 
 if !SQL.EXIST and SERVER then
-	SQL.CREATE.TABLE {steamid = "UNSIGNED BIG INT PRIMARY KEY", code = "UNSIGNED BIG INT DEFAULT 0"}
+	SQL.CREATE.TABLE {steamid = "UNSIGNED BIG INT UNIQUE PRIMARY KEY", code = "UNSIGNED BIG INT DEFAULT 0"}
 end
 
 gameevent.Listen("player_connect")
@@ -37,7 +37,14 @@ end
 local function get_from_cache(steamid)
 	if u_cache[steamid] ~= nil then
 		if !add_to_cache(steamid) then
-			error("SteamID must have been removed from database", 3)
+			local ply = player.GetBySteamID64(steamid)
+			if ply then
+				u_cache[steamid] = 0
+				SQL.INSERT {steamid = ply:SteamID64()}
+				return 0
+			else
+				error("Invalid SteamID", 3)
+			end
 		end
 	end
 	return u_cache[steamid]
@@ -50,7 +57,7 @@ end
 function user_local:setCode(code)
 	local a = SQL.UPDATE {code = code} {steamid = self.steamid}
 	if a then
-		JAAS.Hook.Run "Player" "GlobalRankChange" ()
+		JAAS.Hook.Run "Player" "GlobalRankChange" (self:getCode(), code)
 		return a
 	end
 end
@@ -61,7 +68,7 @@ function user_local:xorCode(code)
 	end
 	local q = SQL.UPDATE ("code = (code | " .. code .. ") & (~code | ~" .. code .. ")") {steamid = self.steamid}
 	if q then
-		JAAS.Hook.Run "Player" "GlobalRankChange" ()
+		JAAS.Hook.Run "Player" "GlobalRankChange" (self:getCode(), bit.bxor(self:getCode(), code))
 		return q
 	end
 end
@@ -136,7 +143,10 @@ MODULE.Access(function (steamid)
 	else
 		return setmetatable({}, {__index = user, __newindex = function () end, __metatable = "jaas_player_library"})
 	end
-end, true)
+end)
+
+dev:isTypeFunc("PlayerObject","jaas_player_object")
+dev:isTypeFunc("PlayerLibrary","jaas_player_library")
 
 local meta = FindMetaTable "Player"
 function meta:getJAASObject()

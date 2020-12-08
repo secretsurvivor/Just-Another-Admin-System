@@ -14,7 +14,8 @@ if JAAS_PRE_HOOK.Permission and SERVER then
     for k,v in ipairs(JAAS_PRE_HOOK.Permission) do
         perm.registerPermission(v[1], v[2], v[3], v[4])
     end
+    JAAS_PRE_HOOK.Permission = nil
 end
 
-JAAS_PRE_HOOK = nil
+JAAS_PRE_HOOK = {Active = true}
 hook.Remove("PostGamemodeLoaded", "JAAS_PRE_HOOK_CLEANUP")

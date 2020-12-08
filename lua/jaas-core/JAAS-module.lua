@@ -176,26 +176,83 @@ do -- Developer Module Initialisation
         return isentity(v) and IsValid(v) and v:IsBot()
     end
 
+    if SERVER then
+        function devFunctions.sendString(networkString)
+            return function (ply)
+                return function (string)
+                    net.Start(networkString)
+                    net.WriteString(string)
+                    net.Send(ply)
+                end
+            end
+        end
+
+        function devFunctions.sendUInt(networkString, bits)
+            return function (ply)
+                return function (code)
+                    net.Start(networkString)
+                    net.WriteUInt(code, bits)
+                    net.Send(ply)
+                end
+            end
+        end
+    end
+
+    function devFunctions.ReceiveTable(networkString)
+        return function (func)
+            if isfunction(func) then
+                net.Receive(networkString, function (len, ply)
+                    func(ply, net.ReadTable(), len)
+                end)
+            end
+        end
+    end
+
+    function devFunctions.SwitchCase()
+        local t = setmetatable({
+            case = function (self, value, func)
+                if isnumber(value) then
+                    self.internal[value + 1] = func
+                else
+                    self.internal[value] = func
+                end
+            end,
+            default = function (self, func)
+                self.default = func
+            end,
+            switch = function (self, value)
+                local r
+                if isnumber(value) then
+                    r = self.internal[value + 1]
+                else
+                    r = self.internal[value]
+                end
+                if r ~= nil then
+                    if isfunction(r) then
+                        return r()
+                    else
+                        return r
+                    end
+                else
+                    if isfunction(self.default) then
+                        return self.default()
+                    else
+                        return self.default
+                    end
+                end
+            end
+        },{})
+        return setmetatable({default = function () end, internal = {}}, {__index = t})
+    end
+
     function devFunctions:isTypeFunc(name, metatable)
         self["is" .. name] = function (v)
             return getmetatable(v) == metatable
         end
     end
 
-    for k,v in ipairs({
-        {"RankObject","jaas_rank_object"},
-        {"PermissionObject","jaas_permission_object"},
-        {"CommandObject","jaas_command_object"},
-        {"PlayerObject","jaas_player_object"},
-        {"RankLibrary","jaas_rank_library"},
-        {"CommandLibrary","jaas_command_library"},
-        {"PermissionLibrary","jaas_permission_library"},
-        {"PlayerLibrary","jaas_player_library"},
-        {"LogLibrary","jaas_log_library"},
-        {"DevLibrary","jaas_developer_library"}
-    }) do
-        devFunctions:isTypeFunc(v[1], v[2])
-    end
+    devFunctions:isTypeFunc("DevLibrary", "jaas_developer_library")
+    devFunctions:isTypeFunc("LogLibrary", "jaas_log_library")
 
     function math.PercentageDif(a, b)
         return (math.abs(a - b) / ((a + b) / 2)) * 100
@@ -390,7 +447,7 @@ do
             CREATE = setmetatable({
                 TABLE = function (columns)
                     if isstring(columns) then
-                        return QUERY("CREATE TABLE " .. sql_table .. " (" .. columns .. ")")
+                        return QUERY("CREATE TABLE " .. sql_table .. " (" .. columns .. ")") == nil
                     elseif istable(columns) then
                         local q,eq,first = "","",true
                         for k,v in pairs(columns) do
@@ -405,15 +462,15 @@ do
                                 eq = eq .. "," .. v
                             end
                         end
-                        return QUERY("CREATE TABLE " .. sql_table .. " (" .. q .. eq .. ")")
+                        return QUERY("CREATE TABLE " .. sql_table .. " (" .. q .. eq .. ")") == nil
                     end
                 end,
                 INDEX = function (index_name)
                     return function (columns)
                         if isstring(columns) then
-                            return QUERY("CREATE INDEX " .. index_name .. " ON " .. sql_table .. " (" .. columns .. ")")
+                            return QUERY("CREATE INDEX " .. index_name .. " ON " .. sql_table .. " (" .. columns .. ")") == nil
                         elseif istable(columns) then
-                            return QUERY("CREATE INDEX " .. index_name .. " ON " .. sql_table .. " (" .. t.concat(columns, ",") .. ")")
+                            return QUERY("CREATE INDEX " .. index_name .. " ON " .. sql_table .. " (" .. t.concat(columns, ",") .. ")") == nil
                         end
                     end
                 end
@@ -487,21 +544,22 @@ do
             end,
             DELETE = function (where)
                 if isstring(where) then
-                    return QUERY("DELETE FROM " .. sql_table .. " WHERE " .. where)
+                    return QUERY("DELETE FROM " .. sql_table .. " WHERE " .. where) == nil
                 elseif istable(where) then
-                    return QUERY("DELETE FROM " .. sql_table .. " WHERE " .. table_to_WHERE(where))
+                    return QUERY("DELETE FROM " .. sql_table .. " WHERE " .. table_to_WHERE(where)) == nil
                 else
-                    return QUERY("DELETE FROM " .. sql_table)
+                    return QUERY("DELETE FROM " .. sql_table) == nil
                 end
             end,
             DROP = {
                 TABLE = function ()
-                    return QUERY("DROP TABLE " .. sql_table)
+                    return QUERY("DROP TABLE " .. sql_table) == nil
                 end,
                 INDEX = function (name)
-                    return QUERY("DROP INDEX " .. name)
+                    return QUERY("DROP INDEX " .. name) == nil
                 end
-            }
+            },
+            ESCAPE = sql.SQLStr
         }, {__call = function (self, str)
             return QUERY(str)
         end})
@@ -552,6 +610,7 @@ function JAAS:RegisterModule(name)
     end
     local jaas = self
     return {Access = function (index, execution_log, access_name)
+            execution_log = execution_log == nil or execution_log == true or false
             if istable(index) then
                 if access_name then
                     if execution_log then
@@ -640,12 +699,12 @@ function JAAS:RegisterModule(name)
 end
 
 function JAAS:PostInitialise()
-    if SERVER then
+    if SERVER and 0 < #handles.server then
         for k,v in ipairs(handles.server) do
             v(setmetatable({}, {__index = modules}))
             handles[k] = nil
         end
-    elseif CLIENT then
+    elseif CLIENT and 0 < #handles.client then
         for k,v in ipairs(handles.client) do
             v(setmetatable({}, {__index = modules}))
             handles[k] = nil
@@ -653,6 +712,6 @@ function JAAS:PostInitialise()
     end
 end
 
-JAAS:RegisterModule"Log".Access(log, true)
+JAAS:RegisterModule"Log".Access(log)
 JAAS:RegisterModule"Developer".Access(dev, true, "Dev")
 JAAS:RegisterModule"SQL".Access(SQL, false)

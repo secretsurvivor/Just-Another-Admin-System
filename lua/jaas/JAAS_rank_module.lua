@@ -8,10 +8,14 @@ command:registerCommand("Add", function (ply, rank_object, target)
     if dev.isPlayer(target) then -- Apply rank change on target
         local target_object = target:getJAASObject()
         if !IsValid(ply) or ply == target or ply:validPowerTarget(target) then
-            if rank_object:codeCheck(target_object) then
-                target_object:xorCode(rank_object)
+            if !IsValid(ply) or rank_object:accessCheck(ply) then
+                if rank_object:codeCheck(target_object) then
+                    target_object:xorCode(rank_object)
+                else
+                    return target:Nick().." already has that rank"
+                end
             else
-                return target:Nick().." already has that rank"
+                return "Cannot add target to " .. rank_object:getName()
             end
         else
             return "Cannot Target "..target:Nick()
@@ -19,10 +23,14 @@ command:registerCommand("Add", function (ply, rank_object, target)
     else
         if IsValid(ply) then -- Apply rank change on caller
             local user = JAAS.Player(ply)
-            if rank_object:codeCheck(user) then
-                user:xorCode(rank_object)
+            if rank_object:accessCheck(user) then
+                if rank_object:codeCheck(user) then
+                    user:xorCode(rank_object)
+                else
+                    return "You already have this rank"
+                end
             else
-                return "You already have this rank"
+                return "Cannot add yourself to " .. rank_object:getName()
             end
         else
             return "Target must be valid to change rank" -- Can't change server's rank
@@ -34,10 +42,14 @@ command:registerCommand("Remove", function (ply, rank_object, target)
     if dev.isPlayer(target) then -- Apply rank change on target
         local target_object = target:getJAASObject()
         if !IsValid(ply) or ply == target or ply:validPowerTarget(target) then
-            if rank_object:codeCheck(target) then
-                target_object:xorCode(rank_object)
+            if !IsValid(ply) or rank_object:accessCheck(ply) then
+                if rank_object:codeCheck(target) then
+                    target_object:xorCode(rank_object)
+                else
+                    return target:Nick().." already does not have rank"
+                end
             else
-                return target:Nick().." already has that rank"
+                return "Cannot remove target from "..rank_object:getName()
             end
         else
             return "Cannot Target "..target:Nick()
@@ -45,10 +57,14 @@ command:registerCommand("Remove", function (ply, rank_object, target)
     else
         if IsValid(ply) then -- Apply rank change on caller
             local user = JAAS.Player(ply)
-            if rank_object:codeCheck(user) then
-                user:xorCode(rank_object)
+            if rank_object:accessCheck(user) then
+                if rank_object:codeCheck(user) then
+                    user:xorCode(rank_object)
+                else
+                    return "You already have this rank"
+                end
             else
-                return "You already have this rank"
+                return "Cannot remove yourself from " .. rank_object:getName()
             end
         else
             return "Target must be valid to change rank" -- Can't change server's rank

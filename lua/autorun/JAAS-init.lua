@@ -295,6 +295,7 @@ local function includeLoop(table_)
                     print("  [".. state .."] "..v)
                     include[state](v)
                 end
+                JAAS:PostInitialise()
             end
             if table_[state].Init ~= nil then
                 if !message then print "-------- JAAS Register --------" message = true end
@@ -326,7 +327,7 @@ local function includeLoop(table_)
 end
 
 if JAAS_PRE_HOOK then
-    JAAS.include "Shared" "Init" "JAAS/JAAS-PRE_HOOK-INIT.lua"
+    JAAS.include "Shared" "Init" "JAAS/JAAS-PRE.init.lua"
 end
 
 for _, file_ in ipairs(file.Find("jaas/autorun/*.lua", "lsv")) do
