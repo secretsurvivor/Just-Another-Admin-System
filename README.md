@@ -35,3 +35,8 @@ Sadly, it is not release ready. There are still features that need to be finishe
 + Hammer Entities - Also a Hammer fgd file for easier use in Hammer
 
 *_Tasks that are required to make JAAS release ready_
+## Credits
+* secret_survivor - (All me baby!)
+* Dempsy - (Encouragement and support)
+## Contact
+If you would like to contact me about JAAS then the best way to do so would be through [Steam](https://steamcommunity.com/id/secret_survivor/). Would be best to leave a comment explaining why you've added me so I don't ignore it.
