@@ -21,11 +21,11 @@ function access_local:getName()
 end
 
 function access_local:setName(name)
-    local q = SQL.UPDATE {name = name} {rowid = self.id}
-    if q then
+    if SQL.UPDATE {name = name} {rowid = self.id} then
         JAAS.Hook "AccessGroup" "GlobalAccessChange" ()
+        return true
     end
-    return q
+    return false
 end
 
 function access_local:getCode()
@@ -38,19 +38,19 @@ function access_local:getCode()
 end
 
 function access_local:setCode(code)
-    local q = SQL.UPDATE {code = code} {rowid = self.id}
-    if q then
+    if SQL.UPDATE {code = code} {rowid = self.id} then
         JAAS.Hook "AccessGroup" "GlobalAccessChange" ()
+        return true
     end
-    return q
+    return false
 end
 
 function access_local:xorCode(code)
-    local q = SQL.UPDATE ("code = (code | " .. code .. ") & (~code | ~" .. code .. ")") {rowid = self.id}
-    if q then
+    if SQL.UPDATE ("code = (code | " .. code .. ") & (~code | ~" .. code .. ")") {rowid = self.id} then
         JAAS.Hook "AccessGroup" "GlobalAccessChange" ()
+        return true
     end
-    return q
+    return false
 end
 
 function access_local:getValue()
@@ -63,18 +63,17 @@ function access_local:getValue()
 end
 
 function access_local:setValue(v)
-    local q = SQL.UPDATE {access_value = v} {rowid = self.id}
-    if q then
+    if SQL.UPDATE {access_value = v} {rowid = self.id} then
         JAAS.Hook "AccessGroup" "GlobalAccessChange" ()
+        return true
     end
-    return q
+    return false
 end
 
 setmetatable(access_local, {
     __call = function (self, v)
         if isnumber(v) then
-            local q = SQL.SELECT "name" {rowid = v}
-            if q then
+            if SQL.SELECT "name" {rowid = v} then
                 return setmetatable({id = v}, {__index = access_local, __metatable = "jaas_access_object"})
             end
         elseif isstring(v) then
@@ -93,8 +92,7 @@ end
 
 local access = {
     registerAccess = function (name, type, value)
-        local q = SQL.INSERT {name = name, access_type = type, access_value = value}
-        if q then
+        if SQL.INSERT {name = name, access_type = type, access_value = value} then
             return access_local(name)
         end
         return false
@@ -130,10 +128,7 @@ local access = {
 
 MODULE.Access(function (identifier)
     if identifier then
-        local r = access_local(identifier)
-        if r then
-            return r
-        end
+        return access_local(identifier)
     end
     return setmetatable({}, {__index = access, __metatable = "jaas_access_library"})
 end, true, "AccessGroup")

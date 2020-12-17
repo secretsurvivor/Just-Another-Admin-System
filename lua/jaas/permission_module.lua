@@ -17,13 +17,12 @@ end)
 
 local physgunPickupAllow = permission.registerPermission("Physgun Player Pickup Allow", "Player will be able to pickup other players that they are able to target")
 hook.Add("PhysgunPickup", "JAAS_physgunPickupAllowPermission", function (ply, ent)
-    local user = ply:getJAASObject()
     if ent:IsPlayer() then
-        if physgunPickupAllow:codeCheck(user:getCode()) and user:canTarget(ent:getJAASCode()) then
+        if physgunPickupAllow:codeCheck(ply:getJAASCode()) and ply:canTarget(ent:getJAASCode()) then
             return true
         end
     elseif ent:IsBot() then
-        if physgunPickupAllow:codeCheck(user:getCode()) then
+        if physgunPickupAllow:codeCheck(ply:getJAASCode()) then
             return true
         end
     end

@@ -16,7 +16,6 @@ local user = {["userIterator"] = true}
 local user_local = {["getCode"] = true, ["setCode"] = true, ["xorCode"] = true, ["canTarget"] = true}
 
 local u_cache = dev.Cache()
-
 JAAS.Hook "Player" "GlobalRankChange" ["Player_module_cache"] = function ()
 	u_cache()
 end
@@ -55,22 +54,22 @@ function user_local:getCode()
 end
 
 function user_local:setCode(code)
-	local a = SQL.UPDATE {code = code} {steamid = self.steamid}
-	if a then
+	if SQL.UPDATE {code = code} {steamid = self.steamid} then
 		JAAS.Hook.Run "Player" "GlobalRankChange" (self:getCode(), code)
-		return a
+		return true
 	end
+	return false
 end
 
 function user_local:xorCode(code)
 	if dev.isRankObject(code) then
 		code = code:getCode()
 	end
-	local q = SQL.UPDATE ("code = (code | " .. code .. ") & (~code | ~" .. code .. ")") {steamid = self.steamid}
-	if q then
+	if SQL.UPDATE ("code = (code | " .. code .. ") & (~code | ~" .. code .. ")") {steamid = self.steamid} then
 		JAAS.Hook.Run "Player" "GlobalRankChange" (self:getCode(), bit.bxor(self:getCode(), code))
-		return q
+		return true
 	end
+	return false
 end
 
 MODULE.Handle.Server(function (jaas)
@@ -112,14 +111,14 @@ function user.playerIterator(key)
 	local i = 0
 	if key then
 		return function ()
-			i = i + 1
+			i = 1 + i
 			if i <= #a then
 				return a[i][key]
 			end
 		end
 	end
 	return function ()
-		i = i + 1
+		i = 1 + i
 		if i <= #a then
 			return a[i]["steamid"], a[i]["code"]
 		end

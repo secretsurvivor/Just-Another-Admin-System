@@ -23,24 +23,24 @@ function permission_local:getDescription()
 end
 
 function permission_local:setCode(code)
-    local q = SQL.UPDATE {code = code} {name = self.name}
-    if q then
+    if SQL.UPDATE {code = code} {name = self.name} then
         local before = permission_table[self.name][1]
         permission_table[self.name][1] = code
         JAAS.Hook.Run.Permission(self.name)(before, code)
+        return true
     end
-    return q
+    return false
 end
 
 function permission_local:xorCode(code)
     local before = permission_table[self.name][1]
     local c_xor = bit.bxor(before, code)
-    local q = SQL.UPDATE {code = c_xor} {name = self.name}
-    if q then
+    if SQL.UPDATE {code = c_xor} {name = self.name} then
         permission_table[self.name][1] = c_xor
         JAAS.Hook.Run.Permission(self.name)(before, c_xor)
+        return true
     end
-    return q
+    return false
 end
 
 function permission_local:getAccess()
@@ -51,11 +51,11 @@ function permission_local:setAccess(value)
     if dev.isAccessObject(value) then
         value = value:getValue()
     end
-    local q = SQL.UPDATE {access_group = value} {name = self.name}
-    if q then
+    if SQL.UPDATE {access_group = value} {name = self.name} then
         permission_table[self.name][3] = value
+        return true
     end
-    return q
+    return false
 end
 
 function permission_local:codeCheck(code)
@@ -138,37 +138,35 @@ end)
 dev:isTypeFunc("PermissionObject","jaas_permission_object")
 dev:isTypeFunc("PermissionLibrary","jaas_permission_library")
 
-MODULE.Handle.Server(function (jaas)
-    local modify_permission = permission.registerPermission("Can Modify Permissions", "Player will be able to change what permissions ranks have access to")
+local modify_permission = permission.registerPermission("Can Modify Permissions", "Player will be able to change what permissions ranks have access to")
 
-    util.AddNetworkString "JAAS_PermissionModify_Channel"
-    /* Permission feedback codes :: 2 Bits
-        0 :: Permission Change was a success
-        1 :: Code could not be changed
-        2 :: Unknown Permission identifier
-        3 :: Not part of Access Group
-    */
-    local sendFeedback = dev.sendUInt("JAAS_PermissionModify_Channel", 2)
-    net.Receive("JAAS_PermissionModify_Channel", function (len, ply) -- All changes will be xor
-        if modify_permission:codeCheck(ply) then
-            local name = net.ReadString()
-            local code = net.ReadUInt(64)
-            local perm, sendCode = jaas.Permission(name), sendFeedback(ply)
-            if dev.isPermissionObject(perm) then
-                if perm:accessCheck(ply) then
-                    if perm:xorCode(code) then
-                        sendCode(0)
-                    else
-                        sendCode(1)
-                    end
+util.AddNetworkString "JAAS_PermissionModify_Channel"
+/* Permission feedback codes :: 2 Bits
+    0 :: Permission Change was a success
+    1 :: Code could not be changed
+    2 :: Unknown Permission identifier
+    3 :: Not part of Access Group
+*/
+local sendFeedback = dev.sendUInt("JAAS_PermissionModify_Channel", 2)
+net.Receive("JAAS_PermissionModify_Channel", function (len, ply) -- All changes will be xor
+    if modify_permission:codeCheck(ply) then
+        local name = net.ReadString()
+        local code = net.ReadUInt(64)
+        local perm, sendCode = jaas.Permission(name), sendFeedback(ply)
+        if dev.isPermissionObject(perm) then
+            if perm:accessCheck(ply) then
+                if perm:xorCode(code) then
+                    sendCode(0)
                 else
-                    sendCode(3)
+                    sendCode(1)
                 end
             else
-                sendCode(2)
+                sendCode(3)
             end
+        else
+            sendCode(2)
         end
-    end)
+    end
 end)
 
 concommand.Add("JAAS_printPermissions", function ()

@@ -34,11 +34,11 @@ function local_rank:getName()
 end
 
 function local_rank:setName(name)
-    local q = SQL.UPDATE {name = name} {rowid = self.id}
-    if q then
+    if SQL.UPDATE {name = name} {rowid = self.id} then
         JAAS.Hook.Run "Rank" "GlobalChange" ()
+        return true
     end
-    return q
+    return false
 end
 
 function local_rank:getCodePosition()
@@ -87,12 +87,12 @@ function local_rank:getPower()
 end
 
 function local_rank:setPower(power)
-    local a = SQL.UPDATE {power = power} {rowid = self.id}
-    if a then
+    if SQL.UPDATE {power = power} {rowid = self.id} then
         JAAS.Hook.Run "Rank" "GlobalChange" ()
         JAAS.Hook.Run "Rank" "GlobalPowerChange" ()
-        return a
+        return true
     end
+    return false
 end
 
 function local_rank:getInvis()
@@ -111,11 +111,11 @@ function local_rank:getInvis()
 end
 
 function local_rank:setInvis(invis)
-    local q = SQL.UPDATE {invisible = invis} {rowid = self.id}
-    if q then
+    if SQL.UPDATE {invisible = invis} {rowid = self.id} then
         JAAS.Hook.Run "Rank" "GlobalChange" ()
+        return true
     end
-    return q
+    return false
 end
 
 function local_rank:getAccess()
@@ -134,11 +134,11 @@ function local_rank:getAccess()
 end
 
 function local_rank:setAccess(value)
-    local q = SQL.UPDATE {access_group = value} {rowid = self.id}
-    if q then
+    if SQL.UPDATE {access_group = value} {rowid = self.id} then
         JAAS.Hook.Run "Rank" "GlobalChange" ()
+        return true
     end
-    return q
+    return false
 end
 
 MODULE.Handle.Server(function (jaas)
@@ -169,10 +169,15 @@ setmetatable(local_rank, {
     __call = function(self, rank_name)
         if isstring(rank_name) then
             local a = SQL.SELECT "rowid" {name = rank_name}
-            return setmetatable({id = a["rowid"]}, {__index = local_rank})
+            if a then
+                return setmetatable({id = a["rowid"]}, {__index = local_rank, __metatable = "jaas_rank_object"})
+            end
         elseif isnumber(rank_name) then
-            return setmetatable({id = rank_name}, {__index = local_rank})
+            if SQL.SELECT "rowid" {rowid = rank_name} then
+                return setmetatable({id = rank_name}, {__index = local_rank, __metatable = "jaas_rank_object"})
+            end
         end
+        return false
     end,
     __newindex = function() end,
 	__metatable = "jaas_rank_object"
@@ -190,8 +195,7 @@ function rank.addRank(name, power, invis)
         if t then
             local next_position = t["MAX(position)"]
             if next_position == "NULL" then next_position = 0 end
-            local a = SQL.INSERT {name = name, position = 1 + next_position, power = power, invisible = invis}
-            if a != false then
+            if SQL.INSERT {name = name, position = 1 + next_position, power = power, invisible = invis} then
                 rank_count = 1 + rank_count
                 return local_rank(name)
             end
@@ -205,14 +209,14 @@ function rank.rankIterator(key)
     if a then
         if key then
             return function ()
-                i = i + 1
+                i = 1 + i
                 if i <= #a then
                     return a[i][key]
                 end
             end
         end
         return function ()
-            i = i + 1
+            i = 1 + i
             if i <= #a then
                 return a[i]
             end
@@ -267,17 +271,15 @@ function rank.removeRank(name)
     if isstring(name) then
         rank_position = tonumber(SQL.SELECT "position" {name = name}["position"])
         q = SQL.DELETE {name = name}
-        rank_count = rank_count - 1
     elseif isnumber(name) then
         rank_position = tonumber(SQL.SELECT "position" {rowid = name}["position"])
         q = SQL.DELETE {rowid = name}
-        rank_count = rank_count - 1
     elseif dev.isRankObject(var) then
         rank_position = tonumber(SQL.SELECT "position" {rowid = name.id}["position"])
         q = SQL.DELETE {rowid = name.id}
-        rank_count = rank_count - 1
     end
     if q then
+        rank_count = rank_count - 1
         local rank_code = bit.lshift(1, rank_position - 1)
         JAAS.Hook.Run "Rank" "RemovePosition" (function (bit_code)
             if bit_code > 0 then
@@ -293,7 +295,7 @@ function rank.removeRank(name)
                     bit_code = bit.ror(bit_code, rank_position)
                     bit_code = bit.rshift(bit_code, bit_length - rank_position)
                     bit_code = bit.rol(bit_code, bit_length)
-                    return bit.bor(shifted_bits, bit_code)
+                    return shifted_bits + bit_code
                 end
             end
             return bit_code or 0
@@ -338,8 +340,8 @@ function rank.removeRanks(...)
                         rank_count = rank_count - 1
                     end
                 end
-                rankPositions[rank_code_count + 1] = rank_position
-                if k > rank_code_count + 1 then
+                rankPositions[1 + rank_code_count] = rank_position
+                if k > 1 + rank_code_count then
                     rankPositions[k] = nil
                 end
             end
@@ -360,7 +362,7 @@ function rank.removeRanks(...)
                         bit_code = bit.ror(bit_code, rankPositions[1])
                         bit_code = bit.rshift(bit_code, bit_length - rankPositions[1])
                         bit_code = bit.rol(bit_code, bit_length)
-                        return bit.bor(shifted_bits, bit_code)
+                        return shifted_bits + bit_code
                     else
                         return shifted_bits
                     end
@@ -507,7 +509,7 @@ MODULE.Handle.Server(function (jaas)
         local net_table, show_invisible_rank = {}, showInvisibleRanks:codeCheck(ply:getJAASCode())
         for t in rank.rankIterator() do
             if !t.invisible or (t.invisible and show_invisible_rank) then
-                table.insert(net_table, t)
+                net_table[1 + #net_table] = t
             end
         end
         if net_table then

@@ -55,7 +55,7 @@ function argTable:add(name, dataType, required, default)
             end
             default = option_list
         end
-        table.insert(self.internal, {name, dataType, required and true, default})
+        self.internal[1 + #self.internal] = {name, dataType, required and true, default}
 		return self
     end
 end
@@ -85,7 +85,7 @@ local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] =
 local command = {["registerCommand"] = true, ["setCategory"] = true, ["clearCategory"] = true, ["argumentTableBuilder"] = true} -- Used for global functions, for command table
 
 function command:setCategory(name)
-    if isstring(name) then
+    if isstring(name) and !string.find(name, " ") then
         self.category = name
         return true
     end
@@ -117,34 +117,34 @@ if SERVER then
     end
 
     function local_command:setCode(code)
-        local q = SQL.UPDATE {code = code} {name = self.name, category = self.category}
-        if q then
+        if SQL.UPDATE {code = code} {name = self.name, category = self.category} then
             local before = command_table[self.category][self.name][1]
             command_table[self.category][self.name][1] = code
             JAAS.Hook.Run.Command(self.category)(self.name)(before, code)
             JAAS.Hook.Run "Command" "GlobalRankChange" (self.category, self.name, code)
+            return true
         end
-        return q
+        return false
     end
 
     function local_command:xorCode(code)
         local before = command_table[self.category][self.name][1]
         local c_xor = bit.bxor(before, code)
-        local q = SQL.UPDATE {code = c_xor} {name = self.name, category = self.category}
-        if q then
+        if SQL.UPDATE {code = c_xor} {name = self.name, category = self.category} then
             command_table[self.category][self.name][1] = c_xor
             JAAS.Hook.Run.Command(self.category)(self.name)(before, c_xor)
             JAAS.Hook.Run "Command" "GlobalRankChange" (self.category, self.name, c_xor)
+            return true
         end
-        return q
+        return false
     end
 
     function local_command:setAccess(value)
-        local q = SQL.UPDATE {access_group = value} {name = self.name, category = self.category}
-        if q then
+        if SQL.UPDATE {access_group = value} {name = self.name, category = self.category} then
             command_table[self.category][self.name][4] = value
+            return true
         end
-        return q
+        return false
     end
 
     function local_command:executeCommand(...)
@@ -167,13 +167,16 @@ if SERVER then
 
     setmetatable(local_command, {
         __call = function(self, command_name, command_category)
-            return setmetatable({name = command_name, category = command_category}, {__index = local_command})
+            return setmetatable({name = command_name, category = command_category}, {__index = local_command, __metatable = "jaas_command_object"})
         end,
         __newindex = function() end,
         __metatable = "jaas_command_object"
     })
 
     function command:registerCommand(name, func, funcArgs, description, code, access)
+        if string.find(name, " ") then
+            return false
+        end
         local q = SQL.SELECT "code, access_group" {name = name, category = self.category}
         if q then
             code = tonumber(q["code"])
@@ -196,9 +199,13 @@ if SERVER then
             end
             return local_command(name, self.category)
         end
+        return q
     end
 elseif CLIENT then
     function command:registerCommand(name, func, funcArgs, description, code, access)
+        if string.find(name, " ") then
+            return false
+        end
         if dev.isArgumentBuilder(funcArgs) then
             funcArgs = funcArgs:dispense()
         end
@@ -226,32 +233,37 @@ elseif CLIENT then
         net.WriteString(category)
         net.WriteString(name)
         for i,v in ipairs(t) do
-            local a = argumentTable[i][2]
-            if a == 1 then -- Bool
+            local commandCase = dev.SwitchCase()
+            commandCase:case(1, function () -- Bool
                 if isstring(v) then
                     v = v == "true"
                 end
                 net.WriteBool(v)
-            elseif a == 2 then -- Int
+            end)
+            commandCase:case(2, function () -- Int
                 if isstring(v) then
                     v = tonumber(v)
                 end
                 net.WriteInt(v, 64)
-            elseif a == 3 then -- Float
+            end)
+            commandCase:case(3, function () -- Float
                 if isstring(v) then
                     v = tonumber(v)
                 end
                 net.WriteFloat(v)
-            elseif a == 4 then -- String
+            end)
+            commandCase:case(4, function () -- String
                 net.WriteString(v)
-            elseif a == 5 then -- Player
+            end)
+            commandCase:case(5, function () -- Player
                 if isstring(v) then
                     v = getPlyFromNick(v)
                 end
                 if IsValid(v) then
                     net.WriteEntity(v)
                 end
-            elseif a == 6 then -- Players
+            end)
+            commandCase:case(6, function () -- Players
                 if isstring(v) then
                     v = string.ToTable(v)
                 end
@@ -259,21 +271,25 @@ elseif CLIENT then
                     v[i] = getPlyFromNick(p)
                 end
                 net.WriteTable(v)
-            elseif a == 7 then -- Rank
+            end)
+            commandCase:case(7, function () -- Rank
                 net.WriteString(v)
-            elseif a == 8 then -- Ranks
+            end)
+            commandCase:case(8, function () -- Ranks
                 if isstring(v) then
                     v = string.ToTable(v)
                 end
                 net.WriteTable(v)
-            elseif a == 9 then -- Option
+            end)
+            commandCase:case(9, function () -- Option
                 if isstring(v) then
                     v = argumentTable[i][4][v] or 1
                 end
                 if isnumber(v) then
                     net.WriteInt(v, math.ceil(math.log(#argumentTable[i][4], 2)))
                 end
-            elseif a == 10 then -- Options
+            end)
+            commandCase:case(10, function () -- Options
                 if isstring(v) then
                     v = string.ToTable(v)
                 end
@@ -283,7 +299,8 @@ elseif CLIENT then
                     end
                 end
                 net.WriteTable(v)
-            end
+            end)
+            commandCase:switch(argumentTable[i][2])
         end
         net.SendToServer()
     end
@@ -375,16 +392,16 @@ local function commandAutoComplete(cmd, args_str)
                                 local arg_type = t[2][i-2][2]
                                 local autocompleteCase = dev.SwitchCase()
                                 autocompleteCase:case(1, function () -- Bool
-                                    table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." true")
-                                    table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." false")
+                                    autocomplete[1 + #autocomplete] = "JAAS "..category.." "..name..cmd_args.." true"
+                                    autocomplete[1 + #autocomplete] = "JAAS "..category.." "..name..cmd_args.." false"
                                 end)
                                 autocompleteCase:case(5, function () -- Player
                                     for _,ply in ipairs(player.GetAll()) do
                                         if string.find(ply:Nick(), args[i]) then
-                                            table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." \""..ply:Nick().."\"")
+                                            autocomplete[1 + #autocomplete] = "JAAS "..category.." "..name..cmd_args.." \""..ply:Nick().."\""
                                             break
                                         else
-                                            table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." \""..ply:Nick().."\"")
+                                            autocomplete[1 + #autocomplete] = "JAAS "..category.." "..name..cmd_args.." \""..ply:Nick().."\""
                                         end
                                     end
                                 end)
@@ -396,7 +413,7 @@ local function commandAutoComplete(cmd, args_str)
                                 end)
                                 autocomplete:case(9, function () -- Option
                                     for k,_ in pairs(t[2][i-2][4]) do
-                                        table.insert(autocomplete, "JAAS "..category.." "..name..cmd_args.." "..k)
+                                        autocomplete[1 + #autocomplete] = "JAAS "..category.." "..name..cmd_args.." "..k
                                     end
                                 end)
                                 autocomplete:case(10, function () -- Options
@@ -405,19 +422,19 @@ local function commandAutoComplete(cmd, args_str)
                             end
                             break
                         else
-                            table.insert(autocomplete, "JAAS "..category.." "..name)
+                            autocomplete[1 + #autocomplete] = "JAAS "..category.." "..name
                         end
                         break
                     else
-                        table.insert(autocomplete, "JAAS "..category.." "..name)
+                        autocomplete[1 + #autocomplete] = "JAAS "..category.." "..name
                     end
                 end
             else
-                table.insert(autocomplete, "JAAS "..category)
+                autocomplete[1 + #autocomplete] = "JAAS "..category
             end
             break
         else
-            table.insert(autocomplete, "JAAS "..category)
+            autocomplete[1 + #autocomplete] = "JAAS "..category
         end
     end
     return autocomplete
@@ -495,7 +512,7 @@ if SERVER then
                     readArgCase:default(arg[4])
                     readArg = readArgCase:switch(arg[2])
                     if !readArg and arg[3] then break end
-                    table.insert(funcArgs_toBeExecuted, readArg)
+                    funcArgs_toBeExecuted[1 + #funcArgs_toBeExecuted] = readArg
                 end
                 if #funcArgs == #funcArgs_toBeExecuted then -- All checks complete, command can be executed
                     local a = command_table[category][name][3](ply, unpack(funcArgs_toBeExecuted))
@@ -553,12 +570,12 @@ if SERVER then
             end
             local funcArgs, funcArgs_toBeExecuted = command_table[category][name][2], {}
             for i, arg in ipairs(funcArgs) do
-                local value = typeFix(arg[2], args[i + 2])
+                local value = typeFix(arg[2], args[2 + i])
                 value = value or funcArgs[4]
                 if !value and funcArgs[3] then
                     break
                 end
-                table.insert(funcArgs_toBeExecuted, value)
+                funcArgs_toBeExecuted[1 + #funcArgs_toBeExecuted] = value
             end
             if #funcArgs == #funcArgs_toBeExecuted then
                 local feedback = command_table[category][name][3](ply, unpack(funcArgs_toBeExecuted))
@@ -634,8 +651,8 @@ elseif CLIENT then
         local category, name = args[1], args[2]
         if command_table[category] ~= nil and command_table[category][name] ~= nil then
             local command_args = {}
-            for i=3,#args do
-                table.insert(command_args, args[i])
+            for i=3, #args do
+                command_args[1 + #command_args] = args[i]
             end
             command.executeCommand(category, name, command_table[category][name][2], command_args)
         else

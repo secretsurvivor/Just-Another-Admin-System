@@ -28,7 +28,7 @@ local function registerAdd(t, state, stage, f)
         elseif t[state][stage] == nil then
             t[state][stage] = {f}
         else
-            table.insert(t[state][stage], f)
+            t[state][stage][1 + #t[state][stage]] = f
         end
         return true
     else
@@ -332,7 +332,7 @@ local function includeLoop(table_)
 end
 
 if JAAS_PRE_HOOK then
-    JAAS.include "Shared" "Init" "JAAS/JAAS-PRE.init.lua"
+    JAAS.include.Shared.Init "JAAS/JAAS-PRE.init.lua"
 end
 
 for _, file_ in ipairs(file.Find("jaas/autorun/*.lua", "lsv")) do

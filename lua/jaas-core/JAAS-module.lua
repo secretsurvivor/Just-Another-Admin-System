@@ -212,7 +212,7 @@ do -- Developer Module Initialisation
         local t = setmetatable({
             case = function (self, value, func)
                 if isnumber(value) then
-                    self.internal[value + 1] = func
+                    self.internal[1 + value] = func
                 else
                     self.internal[value] = func
                 end
@@ -223,7 +223,7 @@ do -- Developer Module Initialisation
             switch = function (self, value)
                 local r
                 if isnumber(value) then
-                    r = self.internal[value + 1]
+                    r = self.internal[1 + value]
                 else
                     r = self.internal[value]
                 end
@@ -312,14 +312,14 @@ do -- Log Module Initialisation
             return
         end
         offset = offset or 0
-        local info = debug.getinfo(3 + offset)
+        local info = debug.getinfo(3 + (offset or 0))
         if executionTrace[self.label] ~= nil then
             for _,v in ipairs(executionTrace[self.label]) do
                 if v[1] == filepath and v[2] == line then
                     return
                 end
             end
-            table.insert(executionTrace[self.label], {info.short_src, info.currentline})
+            executionTrace[self.label][1 + #executionTrace[self.label]] = {info.short_src, info.currentline}
         else
             executionTrace[self.label] = {{info.short_src, info.currentline}}
         end
@@ -336,7 +336,7 @@ do -- Log Module Initialisation
                     return
                 end
             end
-            table.insert(refusedTrace[self.label], id)
+            refusedTrace[self.label][1 + #refusedTrace[self.label]] = id
         else
             refusedTrace[self.label] = {id}
         end
@@ -398,7 +398,7 @@ do
         end
     end
     local function table_to_str(t)
-        local q,first = "",true
+        local q, first = "", true
         for k,v in pairs(t) do
             if isnumber(v) then
                 if first then
@@ -419,7 +419,7 @@ do
         return q
     end
     local function table_to_WHERE(t)
-        local q,first = "",true
+        local q, first = "", true
         for k,v in pairs(t) do
             if isnumber(v) then
                 if first then
@@ -610,7 +610,7 @@ function JAAS:RegisterModule(name)
     end
     local jaas = self
     return {Access = function (index, execution_log, access_name)
-            execution_log = execution_log == nil or execution_log == true or false
+            execution_log = execution_log == nil or execution_log == true
             if istable(index) then
                 if access_name then
                     if execution_log then
@@ -677,18 +677,18 @@ function JAAS:RegisterModule(name)
         Handle = setmetatable({
             Server = function (func)
                 if isfunction(func) then
-                    table.insert(handles.server, func)
+                    handles.server[1 + #handles.server] = func
                 end
             end,
             Client = function (func)
                 if isfunction(func) then
-                    table.insert(handles.client, func)
+                    handles.client[1 + #handles.client] = func
                 end
             end,
             Shared = function (func)
                 if isfunction(func) then
-                    table.insert(handles.server, func)
-                    table.insert(handles.client, func)
+                    handles.server[1 + #handles.server] = func
+                    handles.client[1 + #handles.client] = func
                 end
             end
         }, {__call = function (self, func)
