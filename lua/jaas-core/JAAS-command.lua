@@ -72,10 +72,12 @@ end
 
 setmetatable(argTable, {
 	__call = function(self)
-		return setmetatable({internal = {}}, {__index = self})
+		return setmetatable({internal = {}}, {__index = self, __metatable = "jaas_argumentbuilder"})
 	end,
 	__metatable = nil
 })
+
+dev:isTypeFunc("ArgumentBuilder", "jaas_argumentbuilder")
 
 local command_table = command_table or {} -- SERVER -- [category][name] = {code, funcArgs, function, access} -- CLIENT -- [category][name] = {code, funcArgs, description}
 
@@ -183,6 +185,9 @@ if SERVER then
             q = SQL.INSERT {name = name, category = self.category, code = code, access_group = access}
         end
         if q then
+            if dev.isArgumentBuilder(funcArgs) then
+                funcArgs = funcArgs:dispense()
+            end
             funcArgs = funcArgs or {}
             if command_table[self.category] ~= nil then
                 command_table[self.category][name] = {code, funcArgs, func, access}
@@ -194,6 +199,9 @@ if SERVER then
     end
 elseif CLIENT then
     function command:registerCommand(name, func, funcArgs, description, code, access)
+        if dev.isArgumentBuilder(funcArgs) then
+            funcArgs = funcArgs:dispense()
+        end
         funcArgs = funcArgs or {}
         description = description or ""
         if isstring(name) and istable(funcArgs) then

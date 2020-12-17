@@ -82,9 +82,13 @@ command:registerCommand("Toggle_Flight", function (ply, target)
             else
                 target:SetMoveType(MOVETYPE_WALK)
             end
+        else
+            return "Cannot target "..target:Nick()
         end
+    else
+        return "Invalid target"
     end
-end, arg:add("Target", "PLAYER", true):dispense())
+end, arg:add("Target", "PLAYER", true))
 
 command:registerCommand("Toggle_Gravity_Flight", function (ply, target)
     if dev.isPlayer(target) then
@@ -94,9 +98,13 @@ command:registerCommand("Toggle_Gravity_Flight", function (ply, target)
             else
                 target:SetMoveType(MOVETYPE_WALK)
             end
+        else
+            return "Cannot target "..target:Nick()
         end
+    else
+        return "Invalid target"
     end
-end, arg:add("Target", "PLAYER", true):dispense())
+end, arg:add("Target", "PLAYER", true))
 
 command:registerCommand("Toggle_Noclip", function (ply, target)
     if dev.isPlayer(target) then
@@ -106,6 +114,26 @@ command:registerCommand("Toggle_Noclip", function (ply, target)
             else
                 target:SetMoveType(MOVETYPE_WALK)
             end
+        else
+            return "Cannot target "..target:Nick()
         end
+    else
+        return "Invalid target"
     end
-end, arg:add("Target", "PLAYER", true):dispense())
+end, arg:add("Target", "PLAYER", true))
+
+command:registerCommand("Kick", function (ply, target, reason)
+    if dev.isPlayer(target) then
+        if !IsValid(ply) or ply:validPowerTarget(target) then
+            if reason then
+                ply:Kick(string.format(":: JAAS ::\n%s\n%s kicked you", reason, ply:Nick()))
+            else
+                ply:Kick(":: JAAS ::\n"..ply:Nick().." kicked you")
+            end
+        else
+            return "Cannot target "..target:Nick()
+        end
+    else
+        return "Invalid target"
+    end
+end, arg:add("Target", "PLAYER", true):add("Reason", "STRING", false))

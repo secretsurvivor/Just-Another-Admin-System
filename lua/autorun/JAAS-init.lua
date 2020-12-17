@@ -1,17 +1,18 @@
 JAAS = {["Command"] = false, ["Rank"] = false, ["Permission"] = false, ["Player"] = false}
 
+local i,c = include,AddCSLuaFile
 local include = setmetatable({}, {__call = function (self, _)
-    if !istable(_) then include(_) return end
+    if !istable(_) then return i(_) end
     for __,_ in ipairs(_) do
-        include(_)
+        i(_)
     end
 end})
-local AddCSLuaFile = setmetatable({}, {__call = function (self, _)
-    if !istable(_) then AddCSLuaFile(_) return end
+local function AddCSLuaFile(_)
+    if !istable(_) then return c(_) end
     for __,_ in ipairs(_) do
-        AddCSLuaFile(_)
+        c(_)
     end
-end})
+end
 function include.Server(_) if SERVER then include(_) end end
 function include.Client(_) AddCSLuaFile(_) if CLIENT then include(_) end end
 function include.Shared(_) AddCSLuaFile(_) include(_) end
@@ -31,20 +32,24 @@ local function registerAdd(t, state, stage, f)
         end
         return true
     else
-        error("File " .. f .. " does not exist", 2)
+        ErrorNoHalt("File " .. f .. " does not exist")
     end
 end
 
-JAAS.include = JAAS.include or setmetatable({}, {
-    __call = function (self, state)
+local jaas_registry = jaas_registry or {}
+
+JAAS.include = setmetatable({}, {
+    __index = function (self, state)
         if state == "Client" or state == "Server" or state == "Shared" then
-            return function (stage)
-                if stage == "Pre" or stage == "Init" or stage == "Post" then
-                    return function (f)
-                        return registerAdd(self, state, stage, f)
+            return setmetatable({}, {
+                __index = function (self, stage)
+                    if stage == "Pre" or stage == "Init" or stage == "Post" then
+                        return function (f)
+                            return registerAdd(jaas_registry, state, stage, f)
+                        end
                     end
                 end
-            end
+            })
         end
     end
 })
@@ -358,7 +363,7 @@ if CLIENT then print "------------------------------" end
 local dev = JAAS.Dev()
 local RefreshClientInclude = dev.SharedSync("JAAS_InitTableSync", function (_, ply)
     local includeTable, count = {}, 0
-    for state,stage in pairs(JAAS.include) do
+    for state,stage in pairs(jaas_registry) do
         includeTable[state] = stage
     end
     if count > 0 then
@@ -369,7 +374,7 @@ end, "JAAS_ClientInit", function (_, ply, table)
 end)
 
 if SERVER then
-    includeLoop(JAAS.include)
+    includeLoop(jaas_registry)
 
     concommand.Add("JAAS_RefreshClientFiles", function ()
         for _,ply in ipairs(player.GetAll()) do

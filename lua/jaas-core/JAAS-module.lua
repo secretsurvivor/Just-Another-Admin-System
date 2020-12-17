@@ -676,20 +676,26 @@ function JAAS:RegisterModule(name)
         Class = class,
         Handle = setmetatable({
             Server = function (func)
-                table.insert(handles.server, func)
+                if isfunction(func) then
+                    table.insert(handles.server, func)
+                end
             end,
             Client = function (func)
-                table.insert(handles.client, func)
+                if isfunction(func) then
+                    table.insert(handles.client, func)
+                end
             end,
             Shared = function (func)
-                table.insert(handles.server, func)
-                table.insert(handles.client, func)
+                if isfunction(func) then
+                    table.insert(handles.server, func)
+                    table.insert(handles.client, func)
+                end
             end
         }, {__call = function (self, func)
             self.Shared(func)
         end}),
-        ExecutionTrace = function ()
-            local f_str, id = l:executionTraceLog(1)
+        ExecutionTrace = function (offset)
+            local f_str, id = l:executionTraceLog(1 + (offset or 0))
             if JAAS.Var.ExecutionRefusal and !d.VerifyFilepath_table(f_str, JAAS.Var.ValidFilepaths) then
                 return !l:removeTraceLog(id)
             end

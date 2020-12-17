@@ -436,18 +436,10 @@ MODULE.Handle.Server(function (jaas)
     */
     local sendFeedback = dev.sendUInt("JAAS_ModifyRankTable_Channel", 2)
     net.Receive("JAAS_ModifyRank_Channel", function (len, ply)
-        /*
-            0 :: Add Rank
-            1 :: Remove Rank
-            2 :: Remove Ranks
-            3 :: Set Power
-            4 :: Set Invisible
-        */
         if modify_rank:codeCheck(ply) then
             local sendCode = sendFeedback(ply)
-            local modify_code = net.ReadUInt(3)
             local modifyCase = dev.SwitchCase()
-            modifyCase:case(0, function ()
+            modifyCase:case(0, function () -- Add Rank
                 local name = SQL.ESCAPE(net.ReadString())
                 local power = net.ReadUInt(8)
                 local invis = net.ReadBool()
@@ -457,7 +449,7 @@ MODULE.Handle.Server(function (jaas)
                     return 1
                 end
             end)
-            modifyCase:case(1, function ()
+            modifyCase:case(1, function () -- Remove Rank
                 local name = SQL.ESCAPE(net.ReadString())
                 if rank.removeRank(name) then
                     return 0
@@ -465,7 +457,7 @@ MODULE.Handle.Server(function (jaas)
                     return 1
                 end
             end)
-            modifyCase:case(2, function ()
+            modifyCase:case(2, function () -- Remove Ranks
                 local len,t = net.ReadUInt(64),{}
                 for i=1,len do
                     t[i] = net.ReadString()
@@ -476,7 +468,7 @@ MODULE.Handle.Server(function (jaas)
                     return 1
                 end
             end)
-            modifyCase:case(3, function ()
+            modifyCase:case(3, function () -- Set Power
                 local name = SQL.ESCAPE(net.ReadString())
                 local power = net.ReadUInt(8)
                 local rnk = jaas.Rank(name)
@@ -490,7 +482,7 @@ MODULE.Handle.Server(function (jaas)
                     return 2
                 end
             end)
-            modifyCase:case(4, function ()
+            modifyCase:case(4, function () -- Set Invisible
                 local name = SQL.ESCAPE(net.ReadString())
                 local invis = net.ReadBool()
                 local rnk = jaas.Rank(name)
@@ -505,7 +497,7 @@ MODULE.Handle.Server(function (jaas)
                 end
             end)
             modifyCase:default(3)
-            sendCode(modifyCase:switch(modify_code))
+            sendCode(modifyCase:switch(net.ReadUInt(3)))
         end
     end)
 
