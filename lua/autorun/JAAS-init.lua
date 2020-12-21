@@ -166,7 +166,7 @@ JAAS.Hook = setmetatable({
                 end
             end
         end
-    end, __newindex = function () end}),
+    end, __newindex = function () end, __metatable = "jaas_hook_run"}),
     Remove = setmetatable({
         Permission = function (name) -- JAAS.Hook.Remove.Permission name identifier
             return function (identifier)
@@ -251,7 +251,7 @@ JAAS.Hook = setmetatable({
                 end
             end
         end
-    end, __newindex = function () end})
+    end, __newindex = function () end, __metatable = "jaas_hook_remove"})
 }, {__call = function (self, category) -- JAAS.Hook category name [identifier] = function () end
     return function (name)
         if hook_func.other == nil then
@@ -263,7 +263,7 @@ JAAS.Hook = setmetatable({
         end
         return hookNewFunction(hook_func.other[category][name])
     end
-end, __newindex = function () end})
+end, __newindex = function () end, __metatable = "jaas_hook"})
 
 local globalvar_table = {}
 JAAS.GlobalVar = setmetatable({
@@ -288,7 +288,7 @@ JAAS.GlobalVar = setmetatable({
             end
         end
     end
-}, {})
+}, {__newindex = function () end, __metatable = "jaas_globalvar"})
 
 local function includeLoop(table_)
     local message = false
@@ -318,11 +318,11 @@ local function includeLoop(table_)
             end
         end
     end
-    stateInclude("Shared")
+    stateInclude "Shared"
     if SERVER then
-        stateInclude("Server")
+        stateInclude "Server"
     else
-        stateInclude("Client")
+        stateInclude "Client"
     end
     if CLIENT and message then
         print "-------------------------------"
@@ -360,14 +360,15 @@ JAAS:PostInitialise()
 
 if CLIENT then print "------------------------------" end
 
-local dev = JAAS.Dev()
-local RefreshClientInclude = dev.SharedSync("JAAS_InitTableSync", function (_, ply)
-    local includeTable, count = {}, 0
-    for state,stage in pairs(jaas_registry) do
-        includeTable[state] = stage
+local RefreshClientInclude = JAAS.Dev().SharedSync("JAAS_InitTableSync", function (_, ply)
+    local r,count = {},0
+    for k,v in ipairs({"Shared", "Client"}) do
+        k = jaas_registry[v]
+        r[v] = k
+        count = #k + count
     end
     if count > 0 then
-        return includeTable
+        return r
     end
 end, "JAAS_ClientInit", function (_, ply, table)
     includeLoop(table)

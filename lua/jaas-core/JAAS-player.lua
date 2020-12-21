@@ -5,11 +5,8 @@ if !SQL.EXIST and SERVER then
 	SQL.CREATE.TABLE {steamid = "UNSIGNED BIG INT UNIQUE PRIMARY KEY", code = "UNSIGNED BIG INT DEFAULT 0"}
 end
 
-gameevent.Listen("player_connect")
-hook.Add("player_connect", "JAAS-player-registration", function(data) -- To be logged
-	if data.bot == 0 then
-		SQL.INSERT {steamid = Entity(data.index):SteamID64()}
-	end
+hook.Add("PlayerInitialSpawn", "JAAS-player-registration", function(ply, transition) -- To be logged
+	SQL.INSERT {steamid = ply:SteamID64()}
 end)
 
 local user = {["userIterator"] = true}
@@ -76,25 +73,23 @@ MODULE.Handle.Server(function (jaas)
 	local rank = jaas.Rank()
 
 	function user_local:canTarget(code)
-		if dev.isRankLibrary(rank) then
-			if isnumber(code) then
-				if self:getCode() > 0 and code > 0 then
-					return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code)
-				elseif self:getCode() > 0 then
-					return rank.getMaxPower(self:getCode()) > 0
-				end
-			elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
-				if self:getCode() > 0 and code:getCode() > 0 then
-					return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code:getCode())
-				elseif self:getCode() > 0 then
-					return rank.getMaxPower(self:getCode()) > 0
-				end
-			elseif dev.isPlayer(code) then
-				if self:getCode() > 0 and code:getJAASCode() > 0 then
-					return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code:getJAASCode())
-				elseif self:getCode() > 0 then
-					return rank.getMaxPower(self:getCode()) > 0
-				end
+		if isnumber(code) then
+			if self:getCode() > 0 and code > 0 then
+				return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code)
+			elseif self:getCode() > 0 then
+				return rank.getMaxPower(self:getCode()) > 0
+			end
+		elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
+			if self:getCode() > 0 and code:getCode() > 0 then
+				return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code:getCode())
+			elseif self:getCode() > 0 then
+				return rank.getMaxPower(self:getCode()) > 0
+			end
+		elseif dev.isPlayer(code) then
+			if self:getCode() > 0 and code:getJAASCode() > 0 then
+				return rank.getMaxPower(self:getCode()) > rank.getMaxPower(code:getJAASCode())
+			elseif self:getCode() > 0 then
+				return rank.getMaxPower(self:getCode()) > 0
 			end
 		end
 	end
@@ -158,7 +153,7 @@ function meta:getJAASObject()
 end
 
 function meta:getJAASCode()
-	return get_from_cache(self.SteamID64())
+	return get_from_cache(self:SteamID64())
 end
 
 MODULE.Handle.Server(function (jaas)

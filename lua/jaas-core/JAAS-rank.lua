@@ -155,13 +155,14 @@ MODULE.Handle.Server(function (jaas)
     end
 end)
 
+local AND = bit.band
 function local_rank:codeCheck(code)
     if isnumber(code) then
-        return bit.band(self:getCode(), code) > 0
+        return AND(self:getCode(), code) > 0
     elseif dev.isPlayerObject(code) or dev.isCommandObject(code) or dev.isPermissionObject(code) then
-        return bit.band(self:getCode(), code:getCode()) > 0
+        return AND(self:getCode(), code:getCode()) > 0
     elseif dev.isPlayer(code) then
-        return bit.band(self:getCode(), code:getJAASCode()) > 0
+        return AND(self:getCode(), code:getJAASCode()) > 0
     end
 end
 
@@ -224,6 +225,7 @@ function rank.rankIterator(key)
     end
 end
 
+local bit = bit
 function rank.codeIterator(code)
     if code == 0 then
         return function () end

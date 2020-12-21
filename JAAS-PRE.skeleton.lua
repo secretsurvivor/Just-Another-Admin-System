@@ -66,10 +66,13 @@ if not JAAS then
                             self.internal = {}
                             return old
                         end
-                    }})
+                    , __metatable == "jaas_argumentbuilder"}})
                 end,
                 registerCommand = function (self, name, func, funcArgs, description, code, access)
-                    if !string.find(name, " ") then
+                    if !string.find(name, " ") and !string.find(name, "\t") and !string.find(name, "\n") then
+                        if getmetatable(funcArgs) == "jaas_argumentbuilder" then
+                            funcArgs = funcArgs:dispense()
+                        end
                         if JAAS_PRE_HOOK.Command == nil then
                             JAAS_PRE_HOOK.Command = {[self.category] = {{name, func, funcArgs, description, code, access}}}
                         elseif JAAS_PRE_HOOK.Command[self.category] == nil then
@@ -77,6 +80,8 @@ if not JAAS then
                         else
                             JAAS_PRE_HOOK.Command[self.category][1 + #JAAS_PRE_HOOK.Command[self.category]] = {name, func, funcArgs, description, code, access}
                         end
+                    else
+                        error("Command names cannot include whitespace", 2)
                     end
                 end
             }})

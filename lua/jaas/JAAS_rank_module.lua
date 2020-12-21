@@ -7,9 +7,9 @@ local ModifyUser_ArgTable = arg:add("Rank", "RANK", true):add("Target", "PLAYER"
 command:registerCommand("Add", function (ply, rank_object, target)
     if dev.isPlayer(target) then -- Apply rank change on target
         local target_object = target:getJAASObject()
-        if !IsValid(ply) or ply == target or ply:validPowerTarget(target) then
+        if !IsValid(ply) or ply == target or ply:validPowerTarget(target:getJAASCode()) then
             if !IsValid(ply) or rank_object:accessCheck(ply) then
-                if rank_object:codeCheck(target_object) then
+                if rank_object:codeCheck(target:getJAASCode()) then
                     target_object:xorCode(rank_object)
                 else
                     return target:Nick().." already has that rank"
@@ -24,7 +24,7 @@ command:registerCommand("Add", function (ply, rank_object, target)
         if IsValid(ply) then -- Apply rank change on caller
             local user = JAAS.Player(ply)
             if rank_object:accessCheck(user) then
-                if rank_object:codeCheck(user) then
+                if rank_object:codeCheck(ply:getJAASCode()) then
                     user:xorCode(rank_object)
                 else
                     return "You already have this rank"
@@ -41,9 +41,9 @@ end, ModifyUser_ArgTable)
 command:registerCommand("Remove", function (ply, rank_object, target)
     if dev.isPlayer(target) then -- Apply rank change on target
         local target_object = target:getJAASObject()
-        if !IsValid(ply) or ply == target or ply:validPowerTarget(target) then
+        if !IsValid(ply) or ply == target or ply:validPowerTarget(target:getJAASCode()) then
             if !IsValid(ply) or rank_object:accessCheck(ply) then
-                if rank_object:codeCheck(target) then
+                if rank_object:codeCheck(target:getJAASCode()) then
                     target_object:xorCode(rank_object)
                 else
                     return target:Nick().." already does not have rank"
@@ -58,7 +58,7 @@ command:registerCommand("Remove", function (ply, rank_object, target)
         if IsValid(ply) then -- Apply rank change on caller
             local user = JAAS.Player(ply)
             if rank_object:accessCheck(user) then
-                if rank_object:codeCheck(user) then
+                if rank_object:codeCheck(ply:getJAASCode()) then
                     user:xorCode(rank_object)
                 else
                     return "You already have this rank"
@@ -76,7 +76,7 @@ command:setCategory "Utility"
 
 command:registerCommand("Toggle_Flight", function (ply, target)
     if dev.isPlayer(target) then
-        if !IsValid(ply) or ply:validPowerTarget(target) then
+        if !IsValid(ply) or ply:validPowerTarget(target:getJAASCode()) then
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_FLY)
             else
@@ -92,7 +92,7 @@ end, arg:add("Target", "PLAYER", true))
 
 command:registerCommand("Toggle_Gravity_Flight", function (ply, target)
     if dev.isPlayer(target) then
-        if !IsValid(ply) or ply:validPowerTarget(target) then
+        if !IsValid(ply) or ply:validPowerTarget(target:getJAASCode()) then
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_FLYGRAVITY)
             else
@@ -108,7 +108,7 @@ end, arg:add("Target", "PLAYER", true))
 
 command:registerCommand("Toggle_Noclip", function (ply, target)
     if dev.isPlayer(target) then
-        if !IsValid(ply) or ply:validPowerTarget(target) then
+        if !IsValid(ply) or ply:validPowerTarget(target:getJAASCode()) then
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_NOCLIP)
             else
@@ -124,7 +124,7 @@ end, arg:add("Target", "PLAYER", true))
 
 command:registerCommand("Kick", function (ply, target, reason)
     if dev.isPlayer(target) then
-        if !IsValid(ply) or ply:validPowerTarget(target) then
+        if !IsValid(ply) or ply:validPowerTarget(target:getJAASCode()) then
             if reason then
                 ply:Kick(string.format(":: JAAS ::\n%s\n%s kicked you", reason, ply:Nick()))
             else

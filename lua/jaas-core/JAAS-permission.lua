@@ -58,16 +58,17 @@ function permission_local:setAccess(value)
     return false
 end
 
+local AND = bit.band
 function permission_local:codeCheck(code)
     if self:defaultAccess() then
         return true
     else
         if isnumber(code) then
-            return bit.band(self:getCode(), code) > 0
+            return AND(self:getCode(), code) > 0
         elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
-            return bit.band(self:getCode(), code:getCode()) > 0
+            return AND(self:getCode(), code:getCode()) > 0
         elseif dev.isPlayer(code) then
-            return bit.band(self:getCode(), code:getJAASCode()) > 0
+            return AND(self:getCode(), code:getJAASCode()) > 0
         end
     end
 end

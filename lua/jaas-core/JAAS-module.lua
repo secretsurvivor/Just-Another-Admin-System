@@ -168,12 +168,13 @@ do -- Developer Module Initialisation
         end})
     end
 
+    local e,v = isentity,IsValid
     function devFunctions.isPlayer(v)
-        return isentity(v) and IsValid(v) and v:IsPlayer()
+        return e(v) and v(v) and v:IsPlayer()
     end
 
     function devFunctions.isBot(v)
-        return isentity(v) and IsValid(v) and v:IsBot()
+        return e(v) and v(v) and v:IsBot()
     end
 
     if SERVER then
@@ -245,6 +246,21 @@ do -- Developer Module Initialisation
         return setmetatable({default = function () end, internal = {}}, {__index = t})
     end
 
+    function devFunctions.WhiteSpace(str)
+        local str_func = gmatch(str, ".")
+        local c,whitespace = str_func(),false
+        local whitespaceCase = devFunctions.SwitchCase()
+        whitespaceCase:case(" ", true)
+        whitespaceCase:case("\t", true)
+        whitespaceCase:case("\n", true)
+        whitespaceCase:default(false)
+        while c != nil and not whitespace do
+            whitespace = whitespaceCase:switch(c)
+            c = str_func()
+        end
+        return whitespace
+    end
+
     function devFunctions:isTypeFunc(name, metatable)
         self["is" .. name] = function (v)
             return getmetatable(v) == metatable
@@ -253,6 +269,11 @@ do -- Developer Module Initialisation
 
     devFunctions:isTypeFunc("DevLibrary", "jaas_developer_library")
     devFunctions:isTypeFunc("LogLibrary", "jaas_log_library")
+    devFunctions:isTypeFunc("SQLInterface", "jaas_sql_interface")
+    devFunctions:isTypeFunc("HookRemoveLibrary", "jaas_hook_remove")
+    devFunctions:isTypeFunc("HookRunLibrary", "jaas_hook_run")
+    devFunctions:isTypeFunc("HookLibrary", "jaas_hook")
+    devFunctions:isTypeFunc("GlobalVarLibrary", "jaas_globalvar")
 
     function math.PercentageDif(a, b)
         return (math.abs(a - b) / ((a + b) / 2)) * 100
@@ -350,9 +371,12 @@ local SQL
 do
     local q,isS,isT,pairs,isnumber,isstring,t = sql.Query,isstring,istable,pairs,isnumber,isstring,table
     local QUERY,db
-    if JAAS.Var.MySQLServer then
+    if JAAS.Var.MySQLServer then -- MySQL Functions not tested, may not work in this current version
         require("mysqloo")
-        db = mysqloo.connect(JAAS.Var.MySQLServerInformation.host, JAAS.Var.MySQLServerInformation.username, JAAS.Var.MySQLServerInformation.password, JAAS.Var.MySQLServerInformation.database)
+        do
+            local info = JAAS.Var.MySQLServerInformation
+            db = mysqloo.connect(info.host, info.username, info.password, info.database)
+        end
         db.onConnected = function ()
             print("MySQL Database Connected")
         end
@@ -562,7 +586,7 @@ do
             ESCAPE = sql.SQLStr
         }, {__call = function (self, str)
             return QUERY(str)
-        end})
+        end, __metatable = "jaas_sql_interface"})
     end
 
     /*   TEST 1
@@ -708,13 +732,13 @@ function JAAS:PostInitialise()
     if SERVER and 0 < #handles.server then
         for k,v in ipairs(handles.server) do
             v(setmetatable({}, {__index = modules}))
-            handles[k] = nil
         end
+        handles.server = {}
     elseif CLIENT and 0 < #handles.client then
         for k,v in ipairs(handles.client) do
             v(setmetatable({}, {__index = modules}))
-            handles[k] = nil
         end
+        handles.client = {}
     end
 end
 

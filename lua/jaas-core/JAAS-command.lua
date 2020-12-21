@@ -85,7 +85,7 @@ local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] =
 local command = {["registerCommand"] = true, ["setCategory"] = true, ["clearCategory"] = true, ["argumentTableBuilder"] = true} -- Used for global functions, for command table
 
 function command:setCategory(name)
-    if isstring(name) and !string.find(name, " ") then
+    if isstring(name) and !dev.WhiteSpace(name) then
         self.category = name
         return true
     end
@@ -174,8 +174,8 @@ if SERVER then
     })
 
     function command:registerCommand(name, func, funcArgs, description, code, access)
-        if string.find(name, " ") then
-            return false
+        if dev.WhiteSpace(name) then
+            error("Commands cannot have whitespace in name", 2)
         end
         local q = SQL.SELECT "code, access_group" {name = name, category = self.category}
         if q then
@@ -203,8 +203,8 @@ if SERVER then
     end
 elseif CLIENT then
     function command:registerCommand(name, func, funcArgs, description, code, access)
-        if string.find(name, " ") then
-            return false
+        if dev.WhiteSpace(name) then
+            error("Commands cannot have whitespace in name", 2)
         end
         if dev.isArgumentBuilder(funcArgs) then
             funcArgs = funcArgs:dispense()
@@ -307,17 +307,16 @@ elseif CLIENT then
 end
 
 local RefreshClientCodes = dev.SharedSync("JAAS_CommandCodeSync", function (_, ply)
-    local command_code_table = {}
-    for category, c_table in pairs(command_table) do
-        for name, n_table in pairs(c_table) do
-            if command_code_table[category] ~= nil then
-                command_code_table[category][name] = n_table[1]
-            else
-                command_code_table[category] = {[name] = n_table[1]}
-            end
+    local c = {}
+    for category,v in pairs(command_table) do
+        if c[category] == nil then
+            c[category] = {}
+        end
+        for name,t in pairs(v) do
+            c[category][name] = t[1]
         end
     end
-    return command_code_table
+    return c
 end, "JAAS_ClientCommand", function (_, ply, code_table)
     for category, c_table in pairs(code_table) do
         for name, code in pairs(c_table) do
@@ -463,12 +462,13 @@ if SERVER then
         Category : String
         Name : String
     */
+    local AND = bit.band
     net.Receive("JAAS_ClientCommand", function(_, ply)
         local category, name = net.ReadString(), net.ReadString()
         if command_table[category] ~= nil and command_table[category][name] ~= nil then -- Command is valid
             local rankCode = command_table[category][name][1] or 0
             local playerData = JAAS.Player(ply) or 0
-            if rankCode == 0 or bit.band(rankCode, playerData:getCode()) > 0 then -- Player has access to execute command
+            if rankCode == 0 or AND(rankCode, playerData:getCode()) > 0 then -- Player has access to execute command
                 local funcArgs, funcArgs_toBeExecuted = command_table[category][name][2], {}
                 for i, arg in ipairs(funcArgs) do -- Read Function Arguments
                     local readArg
@@ -564,7 +564,7 @@ if SERVER then
             if IsValid(ply) then
                 local rankCode = command_table[category][name][1] or 0
                 local playerData = JAAS.Player(ply) or 0
-                if not bit.band(rankCode, playerData:getCode()) > 0 then
+                if not AND(rankCode, playerData:getCode()) > 0 then
                     return
                 end
             end
