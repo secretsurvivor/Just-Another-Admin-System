@@ -8,7 +8,7 @@ command:registerCommand("Add", function (ply, rank_object, target)
     if dev.isPlayer(target) then -- Apply rank change on target
         local target_object = target:getJAASObject()
         if !IsValid(ply) or ply == target or ply:validPowerTarget(target:getJAASCode()) then
-            if !IsValid(ply) or rank_object:accessCheck(ply) then
+            if !IsValid(ply) or rank_object:accessCheck(ply:getJAASCode()) then
                 if rank_object:codeCheck(target:getJAASCode()) then
                     target_object:xorCode(rank_object)
                 else
@@ -42,7 +42,7 @@ command:registerCommand("Remove", function (ply, rank_object, target)
     if dev.isPlayer(target) then -- Apply rank change on target
         local target_object = target:getJAASObject()
         if !IsValid(ply) or ply == target or ply:validPowerTarget(target:getJAASCode()) then
-            if !IsValid(ply) or rank_object:accessCheck(ply) then
+            if !IsValid(ply) or rank_object:accessCheck(ply:getJAASCode()) then
                 if rank_object:codeCheck(target:getJAASCode()) then
                     target_object:xorCode(rank_object)
                 else

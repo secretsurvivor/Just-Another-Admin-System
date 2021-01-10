@@ -2,7 +2,12 @@ local MODULE, log, dev, SQL = JAAS:RegisterModule "Access Group"
 SQL = SQL"JAAS_access_group"
 
 if !SQL.EXIST and SERVER then
-    SQL.CREATE.TABLE {name = "TEXT NOT NULL UNIQUE", code = "UNSIGNED BIGINT NOT NULL DEFAULT 0", access_value = "UNSIGNED INT UNIQUE DEFAULT 0", access_type = "UNSIGNED INT NOT NULL"}
+    SQL.CREATE.TABLE {
+        name = "TEXT NOT NULL UNIQUE",
+        code = "UNSIGNED BIGINT NOT NULL DEFAULT 0",
+        access_value = "UNSIGNED INT UNIQUE DEFAULT 0",
+        access_type = "UNSIGNED INT NOT NULL"
+    }
 end
 
 local access_local = {}
@@ -85,15 +90,23 @@ setmetatable(access_local, {
     end
 })
 
+local access_count = access_count or SQL.SELECT "COUNT(rowid)" () ["COUNT(rowid)"]
 local cv_cache = dev.Cache()
 JAAS.Hook "AccessGroup" "GlobalAccessChange" ["AccessGroup_module_codeCheck_cache"] = function ()
     cv_cache()
 end
 
 local access = {
-    registerAccess = function (name, type, value)
+    addAccessGroup = function (name, type, value)
         if SQL.INSERT {name = name, access_type = type, access_value = value} then
+            access_count = 1 + access_count
             return access_local(name)
+        end
+        return false
+    end,
+    removeAccessGroup = function (name)
+        if SQL.DELETE {name = name} then
+            return true
         end
         return false
     end,
@@ -108,6 +121,9 @@ local access = {
         end
     end,
     codeCheck = function (value, type, code) -- Checks if player has access to this group
+        if access_count == 0 then
+            return true
+        end
         if cv_cache[type] ~= nil and cv_cache[type][code] ~= nil and cv_cache[type][code][value] ~= nil then
             return v_cache[type][code][value]
         else
@@ -117,8 +133,8 @@ local access = {
             if cv_cache[type][code] == nil then
                 cv_cache[type][code] = {}
             end
-            local q = SQL.SELECT "code" ("access_value <= value AND code & ".. code .." > 0 AND access_type ="..type) != false
-            cv_cache[type][code][value] = q
+            cv_cache[type][code][value] = SQL.SELECT "code" ("access_value <= value AND code & ".. code .." > 0 AND access_type ="..type) != false
+            return cv_cache[type][code][value]
         end
     end,
     PERMISSION = 0,
