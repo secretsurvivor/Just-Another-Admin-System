@@ -170,6 +170,20 @@ net.Receive("JAAS_PermissionModify_Channel", function (len, ply) -- All changes 
     end
 end)
 
+MODULE.Handle.Server(function (jaas)
+    util.AddNetworkString "JAAS_PermissionClientCheck"
+    net.Receive("JAAS_PermissionClientCheck", function (perm, ply)
+        local name = net.ReadString()
+        perm = jaas.Permission(name)
+        if dev.isPermissionObject(perm) then
+            net.Start "JAAS_PermissionClientCheck"
+            net.WriteString(name)
+            net.WriteBool(perm:codeCheck(ply:getJAASCode()))
+            net.Send(ply)
+        end
+    end)
+end)
+
 concommand.Add("JAAS_printPermissions", function ()
     for k,v in pairs(permission_table) do
         print(k, v[1], v[2])

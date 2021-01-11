@@ -1,4 +1,4 @@
-local MODULE, log = JAAS:RegisterModule "Panel"
+local MODULE, log, dev = JAAS:RegisterModule "Panel"
 
 local drawColor = surface.SetDrawColor
 function surface.SetDrawColor(r, g, b, a)
@@ -18,9 +18,34 @@ function surface.SetTextColor(r, g, b, a)
     end
 end
 
-local function ControlBuilder(base)
+local panel = {PermissionCheck = true, ControlBuilder = true}
+local permissionCheck = {}
+
+local function panel.PermissionCheck(permName, success, failure)
+    net.Start "JAAS_PermissionClientCheck"
+    net.WriteString(permName)
+    net.SendToServer()
+    permissionCheck[permName] = {success, failure}
+end
+
+net.Receive("JAAS_PermissionClientCheck" , function (name, check)
+    name = net.ReadString()
+    if permissionCheck[name] then
+        check = net.ReadBool() and 1 or 2
+        if isfunction(permissionCheck[name][check]) then
+            permissionCheck[name][check]()
+        end
+        permissionCheck[name] = nil
+    end
+end)
+
+local function panel.ControlBuilder(base)
     return function (name, description)
-        return setmetatable({internal = {}}, {
+        return setmetatable({internal = {PermissionAdd = function (self, permName, panel)
+                panel.PermissionCheck(permName, function ()
+                    self:Add(panel)
+                end)
+            end}}, {
             __newindex = function (self, k, v)
                 self.internal[k] = v
             end,
@@ -78,7 +103,7 @@ local function ControlBuilder(base)
     end
 end
 
-MODULE.Access(MODULE.Class({ControlBuilder = ControlBuilder}, "jaas_panel_library"))
+MODULE.Access(MODULE.Class(panel, "jaas_panel_library"))
 
 /* Custom Element List
     Vertical Icon Tab List
