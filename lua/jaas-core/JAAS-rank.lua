@@ -504,26 +504,8 @@ MODULE.Handle.Server(function (jaas)
 
     local showInvisibleRanks = perm.registerPermission("Show Invisible Ranks", "This permission will show invisible ranks clientside")
 
-    local refreshRankTable = dev.SharedSync("JAAS_RankTableSync", function (_, ply)
-        local net_table, show_invisible_rank = {}, showInvisibleRanks:codeCheck(ply:getJAASCode())
-        for t in rank.rankIterator() do
-            if !t.invisible or (t.invisible and show_invisible_rank) then
-                net_table[1 + #net_table] = t
-            end
-        end
-        if net_table then
-            return net_table
-        end
-    end)
-
     concommand.Add("JAAS_RefreshRankTableSync", function ()
         refreshRankTable()
-    end)
-end)
-
-MODULE.Handle.Client(function (jaas)
-    local dev = jaas.Dev()
-    dev.SharedSync("JAAS_RankTableSync", _, "JAAS_RankSyncClient", function (_, ply, table) -- TODO
     end)
 end)
 
