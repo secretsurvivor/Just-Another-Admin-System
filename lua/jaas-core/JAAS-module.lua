@@ -42,7 +42,7 @@ local function class(table, metatable, readonly, properties)
     end
 end
 
-local handles = {}
+local delayedHandles = {}
 
 local dev
 do -- Developer Module Initialisation
@@ -281,6 +281,43 @@ do -- Developer Module Initialisation
         return (math.abs(a - b) / ((a + b) / 2)) * 100
     end
 
+    local f = FindMetaTable "File"
+    function f:ReadU64Int()
+        return self:ReadULong() + bit.lshift(self:ReadULong(), 32)
+    end
+
+    function f:WriteU64Int(v)
+        self:WriteULong(bit.band(v, 0xFFFF))
+        self:WriteULong(bit.rshift(v, 32))
+    end
+
+    function f:Read64Int()
+        return self:ReadLong() + bit.lshift(self:ReadLong(), 32)
+    end
+
+    function f:Write64Int(v)
+        self:WriteLong(bit.band(v, 0xFFFF))
+        self:WriteLong(bit.rshift(v, 32))
+    end
+
+    function net.ReadLong() -- Actual legnth of Long; 64 bits (8 bytes)
+        return net.ReadInt(32) + bit.lshift(net.ReadInt(32), 32)
+    end
+
+    function net.WriteLong(v)
+        net.WriteInt(bit.band(v, 0xFFFF), 32)
+        net.WriteInt(bit.rshift(v, 32), 32)
+    end
+
+    function net.ReadULong()
+        return net.ReadUInt(32) + bit.lshift(net.ReadUInt(32), 32)
+    end
+
+    function net.WriteULong(v)
+        net.WriteUInt(bit.band(v, 0xFFFF), 32)
+        net.WriteUInt(bit.rshift(v, 32), 32)
+    end
+
     dev = class(devFunctions, "jaas_developer_library")
 end
 
@@ -288,346 +325,515 @@ local log
 do -- Log Module Initialisation
     local logFunctions = {["getLogFile"] = true, ["writeToLogFile"] = true, ["printLog"] = true, ["silentLog"] = true}
 
-    local registeredLogs = {} -- [Label][] = Log Display
-    function logFunctions:registerLog(t) -- {1, was, 6, killed, by, 1, using, 3} {1, 6, added, 1, to, 2}
-        /*
-            Player - 1
-            Rank - 2
-            Tool - 3
-            Data - 4
-            String - 5
-            Action - 6, action
-        */
-        registeredLogs[self.label][1 + #registeredLogs[self.label]] = t
+    function logFunctions:printLog(str) -- [JAAS::Rank] - Module Loaded
+        print("[JAAS::"..self.label.."] - "..str)
     end
 
-    function logFunctions.IGetLogToken(date) --
-        local f = file.Open("jslogs/"..date..".dat", "rb", "DATA")
-        /* type [Usage] - Opcode - Description
-            Record O - 0x1 - Open block
-            Record C - 0xA - Close block
-            Timestamp O - 0x2 - Unix epoch ULong
-            Label O/C - 0x3 - Char*
-                Type O - 0x4 - UShort > 0
-            Rank* O/C - 0x5 - Char*
-            Player* O/C - 0x6 - ULong ULong (SteamID64)
-            Tool* O/C - 0x7 - Char*
-            Data* O/C - 0x8 - Float
-            String* O/C - 0x9 - Char*
-            Seperator - 0x0
-        */
-        local function readToken()
-            local byte,value = f:ReadByte()
-            if byte == 0x1 then -- Open Record
-                return 0x1,nil
-            elseif byte == 0xA then -- Close Record
-                return 0xA,nil
-            elseif byte == 0x2 then -- Timestamp
-                return 0x2,f:ReadULong()
-            elseif byte == 0x3 then -- Label
-                byte,value = f:ReadByte(),""
-                while byte != 0x3 do
-                    value = value + string.char(byte)
-                    byte = f:ReadByte()
-                end
-                return 0x3,value
-            elseif byte == 0x4 then -- Type
-                return 0x4,f:ReadUShort()
-            elseif byte == 0x5 then -- Rank
-                byte,value = f:ReadByte(),""
-                while byte != 0x5 do
-                    if byte == 0x0 then
-                        if istable(value) then
+    delayedHandles.log = {}
+    if SERVER then
+        local registeredLogs = {} -- [Label][] = Log Display
+        function logFunctions:registerLog(t) -- {1, was, 6, killed, by, 1, using, 3} {1, 6, added, 1, to, 2}
+            /*
+                Player - 1
+                Rank - 2
+                Tool - 3
+                Data - 4
+                String - 5
+                Action - 6, action
+            */
+            if registeredLogs[self.label] then
+                registeredLogs[self.label][1 + #registeredLogs[self.label]] = t
+            else
+                registeredLogs[self.label] = {t}
+            end
+            return #registeredLogs[self.label]
+        end
+
+        function logFunctions.IGetLogToken(date) -- 05-09-1999
+            if istable(date) then
+                date = date.day.."-"..date.month.."-"..date.year
+            elseif isnumber(date) then -- Unix Epoch
+                date = ox.date("%d-%m-%Y", date)
+            end
+            local f = file.Open("jslogs/"..date..".dat", "rb", "DATA")
+            /* type [Usage] - Opcode - Description
+                Record O - 0x1 - Open block
+                Record C - 0xA - Close block
+                Timestamp O - 0x2 - Unix epoch ULong
+                Label O - 0x3 - String
+                    Type O - 0x4 - UShort > 0
+                Rank* O/C - 0x5 - String
+                Player* O/C - 0x6 - ULong ULong (SteamID64)
+                Tool* O/C - 0x7 - String
+                Data* O/C - 0x8 - Float
+                String* O/C - 0x9 - String
+                Seperator - 0x0
+            */
+            local function readToken()
+                local byte,value = f:ReadByte()
+                if byte == 0x1 then -- Open Record
+                    return 0x1,nil
+                elseif byte == 0xA then -- Close Record
+                    return 0xA,nil
+                elseif byte == 0x2 then -- Timestamp
+                    return 0x2,f:ReadULong()
+                elseif byte == 0x3 then -- Label
+                    return 0x3,f:ReadString()
+                elseif byte == 0x4 then -- Type
+                    return 0x4,f:ReadUShort()
+                elseif byte == 0x5 then -- Rank
+                    byte,value = f:ReadByte(),{}
+                    while byte != 0x5 do
+                        if byte == 0x0 then
                             value[1 + #value] = ""
                         else
-                            value = {value}
+                            value[#value] = f:ReadString()
                         end
-                    else
-                        if istable(value) then
-                            value[#value] = value[#value] + string.char(byte)
-                        else
-                            value = value + string.char(byte)
+                        byte = f:ReadByte()
+                    end
+                    return 0x5,value
+                elseif byte == 0x6 then -- Player
+                    byte,value = f:ReadByte(),{}
+                    while byte != 0x6 do
+                        if byte == 0x0 then
+                            if !istable(value) then
+                                value = {value}
+                            end
                         end
+                        value[1 + #value] = f:Read64Int()
+                        byte = f:ReadByte()
                     end
-                    byte = f:ReadByte()
-                end
-                return 0x5,value
-            elseif byte == 0x6 then -- Player
-                byte,value = f:ReadByte(),""
-                while byte != 0x6 then
-                    if byte == 0x0 then
-                        if !istable(value) then
-                            value = {value}
-                        end
-                    end
-                    if istable(value) then
-                        value[1 + #value] = f:ReadULong() + bit.lshift(f:ReadULong(),32)
-                    else
-                        value = f:ReadULong() + bit.lshift(f:ReadULong(),32)
-                    end
-                    byte = f:ReadByte()
-                end
-                return 0x6,value
-            elseif byte == 0x7 then -- Tool
-                byte,value = f:ReadByte(),""
-                while byte != 0x7 do
-                    if byte == 0x0 then
-                        if istable(value) then
+                    return 0x6,value
+                elseif byte == 0x7 then -- Tool
+                    byte,value = f:ReadByte(),{}
+                    while byte != 0x7 do
+                        if byte == 0x0 then
                             value[1 + #value] = ""
                         else
-                            value = {value}
+                            value[#value] = f:ReadString()
                         end
-                    else
+                        byte = f:ReadByte()
+                    end
+                    return 0x7,value
+                elseif byte == 0x8 then -- Data
+                    byte,value = f:ReadByte(),{}
+                    while byte != 0x8 do
+                        if byte == 0x0 then
+                            if !istable(value) then
+                                value = {value}
+                            end
+                        end
                         if istable(value) then
-                            value[#value] = value[#value] + string.char(byte)
+                            value[1 + #value] = f:ReadFloat()
                         else
-                            value = value + string.char(byte)
+                            value = f:ReadFloat()
                         end
+                        byte = f:ReadByte()
                     end
-                    byte = f:ReadByte()
-                end
-                return 0x7,value
-            elseif byte == 0x8 then -- Data
-                byte,value = f:ReadByte(),""
-                while byte != 0x8 then
-                    if byte == 0x0 then
-                        if !istable(value) then
-                            value = {value}
-                        end
-                    end
-                    if istable(value) then
-                        value[1 + #value] = f:ReadFloat()
-                    else
-                        value = f:ReadFloat()
-                    end
-                    byte = f:ReadByte()
-                end
-                return 0x8,value
-            elseif byte == 0x9 then -- String
-                byte,value = f:ReadByte(),""
-                while byte != 0x9 do
-                    if byte == 0x0 then
-                        if istable(value) then
+                    return 0x8,value
+                elseif byte == 0x9 then -- String
+                    byte,value = f:ReadByte(),{}
+                    while byte != 0x9 do
+                        if byte == 0x0 then
                             value[1 + #value] = ""
                         else
-                            value = {value}
+                            value[#value] = f:ReadString()
                         end
-                    else
-                        if istable(value) then
-                            value[#value] = value[#value] + string.char(byte)
-                        else
-                            value = value + string.char(byte)
-                        end
+                        byte = f:ReadByte()
                     end
-                    byte = f:ReadByte()
+                    return 0x9,value
+                elseif f:EndOfFile() then -- End of File
+                    return nil
                 end
-                return 0x9,value
-            elseif f:EndOfFile() then -- End of File
-                return nil
+            end
+            return function () -- Iterator
+                return readToken()
             end
         end
-        return function () -- Iterator
-            return readToken()
-        end
-    end
 
-    handles.log = {client = {function (jaas)
-        local panel = jaas.Panel()
-        local CONTROL = ControlBuilder "RichText" ("JLogReader", "Dedicated to reading and filtering JAAS Logs")
-        CONTROL:AccessorTableFunc "Module" -- Named Label in code
-        CONTROL:AccessorTableFunc "Player"
-        CONTROL:AccessorTableFunc "Rank"
-        CONTROL:AccessorTableFunc "Action"
-        CONTROL:AccessorFunc "Filter"
-        CONTROL:AccessorFunc "Date"
+        net.Receive("JAAS_RequestLogClient", function (_, ply)
+            net.Start("JAAS_RequestLogClient")
+            for byte,value in logFunctions.IGetLogToken(date) do
+                net.WriteUInt(byte, 8)
+                if byte == 0x1 or byte == 0xA then
+                elseif byte == 0x2 then
+                    net.WriteUInt(value, 32)
+                elseif byte == 0x3 then
+                    net.WriteString(value)
+                elseif byte == 0x4 then
+                    net.WriteUInt(value, 16)
+                elseif byte == 0x5 or byte == 0x7 or byte == 0x9 then
+                    net.WriteUInt(#value, 8)
+                    for k,v in ipairs(value) do
+                        net.WriteString(v)
+                    end
+                elseif byte == 0x6 then
+                    net.WriteUInt(#value, 8)
+                    for k,v in ipairs(value) do
+                        net.WriteULong(v)
+                    end
+                elseif byte == 0x8 then
+                    net.WriteUInt(#value, 8)
+                    for k,v in ipairs(value) do
+                        net.WriteFloat(v)
+                    end
+                end
+            end
+            net.Send(ply)
+        end)
 
-        function CONTROL:Init()--[[
-            self:SetModule({})
-            self:SetPlayer({})
-            self:SetRank({})
-            self:SetAction({}) ]]
-            self:SetFilter({})
-        end
-
-        function CONTROL:AddLog(t) -- {timestamp=, label=, type=, player=, rank=, tool=, data=, string=}
-            if t.type then
-                self:InsertColorChange(237, 125, 49, 255)
-                self:AppendText(os.date("[%H:%M]", t.timestamp))
-                self:InsertColorChange(112, 173, 71, 255)
-                self:AppendText(t.label.." ")
-                local p,r,d,to,s = 1,1,1,1,1
-                local func = t.type
-                local _,v = func()
-                while v != nil do
-                    if isnumber(v) then
-                        if v == 1 then -- Player
-                            v = player.GetBySteamID64(t.player[p])
-                            if v then
-                                self:InsertColorChange(91, 155, 213, 255)
-                                self:AppendText(v:Nick().." ")
-                                p = 1 + p
+        function logFunctions:Log(type_, t) -- {rank=, player=, tool=, data=, string=}
+            if !(self.label and type_ > 0) then return end
+            local f
+            if file.Exists(os.date("jslogs/%d-%m-%Y.dat"), "DATA") then
+                f = file.Open(os.date("jslogs/%d-%m-%Y.dat"), "ab", "DATA")
+            else
+                f = file.Open(os.date("jslogs/%d-%m-%Y.dat"), "wb", "DATA")
+            end
+            f:WriteByte(0x1) -- Open Record
+            f:WriteByte(0x2) f:WriteULong(os.time()) -- Timestamp
+            f:WriteByte(0x3) f:WriteString(self.label) -- Label
+            f:WriteByte(0x4) f:WriteUShort(type_) -- Type
+            if t.rank then
+                f:WriteByte(0x5) -- Open
+                    if istable(t.rank) then
+                        if #t.rank > 1 then
+                            for i=1,#t.rank - 1 do
+                                f:WriteString(t.rank[i])
+                                f:WriteByte(0x0)
                             end
-                        elseif v == 2 then -- Rank
-                            self:InsertColorChange(112, 48, 160, 255)
-                            self:AppendText(t.rank[r].." ")
-                            r = 1 + r
-                        elseif v == 3 then -- Tool
-                            self:InsertColorChange(255, 217, 102, 255)
-                            self:AppendText(t.tool[to].." ")
-                            to = 1 + to
-                        elseif v == 4 then -- Data
-                            self:InsertColorChange(173, 79, 15, 255)
-                            self:AppendText(t.data[d].." ")
-                            d = 1 + d
-                        elseif v == 5 then -- String
-                            self:InsertColorChange(173, 79, 15, 255)
-                            self:AppendText("“"..t.string[s].."” ")
-                            s = 1 + s
-                        elseif v == 6 then -- Action
-                            _,v = func()
-                            self:InsertColorChange(192, 0, 0, 255)
+                            f:WriteString(t.rank[#t.rank])
+                        else
+                            f:WriteString(t.rank[1])
+                        end
+                    else
+                        f:WriteString(t.rank)
+                    end
+                f:WriteByte(0x5) -- Close
+            end
+            if t.player then
+                f:WriteByte(0x6) -- Open
+                    if istable(t.player) then
+                        if #t.player > 1 then
+                            for i=1,#t.player - 1 do
+                                f:WriteU64Int(t.player[i])
+                                f:WriteByte(0x0)
+                            end
+                            f:WriteU64Int(t.player[#t.player])
+                        else
+                            f:WriteU64Int(t.player[1])
+                        end
+                    else
+                        f:WriteU64Int(t.player)
+                    end
+                f:WriteByte(0x6) -- Close
+            end
+            if t.tool then
+                f:WriteByte(0x7) -- Open
+                    if istable(t.tool) then
+                        if #t.tool > 1 then
+                            for i=1,#t.tool - 1 do
+                                f:WriteString(t.tool[i])
+                                f:WriteByte(0x0)
+                            end
+                            f:WriteString(t.tool[#t.tool])
+                        else
+                            f:WriteString(t.tool[1])
+                        end
+                    else
+                        f:WriteString(t.tool)
+                    end
+                f:WriteByte(0x7) -- Close
+            end
+            if t.data then
+                f:WriteByte(0x8) -- Open
+                    if istable(t.data) then
+                        if #t.data > 1 then
+                            for i=1,#t.data - 1 do
+                                f:WriteFloat(t.data[i])
+                                f:WriteByte(0x0)
+                            end
+                            f:WriteFloat(t.data[#t.data])
+                        else
+                            f:WriteFloat(t.data[1])
+                        end
+                    else
+                        f:WriteFloat(t.data)
+                    end
+                f:WriteByte(0x8) -- Close
+            end
+            if t.string then
+                f:WriteByte(0x9) -- Open
+                    if istable(t.string) then
+                        if #t.string > 1 then
+                            for i=1,#t.string - 1 do
+                                f:WriteString(t.string[i])
+                                f:WriteByte(0x0)
+                            end
+                            f:WriteString(t.string[#t.string])
+                        else
+                            f:WriteString(t.string[1])
+                        end
+                    else
+                        f:WriteString(t.string)
+                    end
+                f:WriteByte(0x9) -- Close
+            end
+            f:WriteByte(0xA) -- Close Record
+        end
+
+        function logFunctions:chatLog(str) -- [JAAS] - secret_survivor added to Superadmin
+            PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
+        end
+
+        function logFunctions:adminChatLog(str)
+            for k,v in ipairs(player.GetAll()) do
+                if v:IsAdmin() then
+                    v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
+                end
+            end
+        end
+
+        function logFunctions:superadminChatLog()
+            for k,v in ipairs(player.GetAll()) do
+                if v:IsSuperAdmin() then
+                    v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
+                end
+            end
+        end
+    else
+        local logs = {}
+
+        local function ILog(date, func)
+            if logs[date] then
+                func(function ()
+                    local i,x = 1
+                    return function ()
+                        x = logs[date][i]
+                        if x then
+                            i = 1 + i
+                            return x[1],x[2]
+                        end
+                    end
+                end)
+            else
+                net.Start("JAAS_RequestLogClient") net.SendToServer()
+                logs[date] = func
+            end
+        end
+
+        net.Receive("JAAS_RequestLogClient", function ()
+            local date,func = net.ReadString()
+            if logs[date] and isfunction(logs[date]) then
+                func = logs[date]
+            end
+            logs[date] = {}
+            local byte,value,length
+            while net.BytesLeft() > 0 do
+                byte = net.ReadInt(8)
+                if byte == 0x1 or byte == 0xA then
+                    value = nil
+                elseif byte == 0x2 then
+                    value = net.ReadUInt(32)
+                elseif byte == 0x3 then
+                    value = net.ReadString()
+                elseif byte == 0x4 then
+                    value = net.ReadUInt(16)
+                elseif byte == 0x5 or byte == 0x7 or byte == 0x9 then
+                    length = net.ReadUInt(8)
+                    value = {}
+                    for i=1,length do
+                        value[i] = net.ReadString()
+                    end
+                elseif byte == 0x6 then
+                    length = net.ReadUInt(8)
+                    value = {}
+                    for i=1,length do
+                        value[i] = net.ReadULong()
+                    end
+                elseif byte == 0x8 then
+                    length = net.ReadUInt(8)
+                    value = {}
+                    for i=1,length do
+                        value[i] = net.ReadFloat()
+                    end
+                end
+                logs[date][1 + #logs[date]] = {byte,value}
+            end
+            if func then
+                ILog(date, func)
+            end
+        end)
+
+        delayedHandles.log.client = {function (jaas)
+            local CONTROL = jaas.Panel().ControlBuilder "RichText" ("JLogReader", "Dedicated to reading and filtering JAAS Logs")
+            CONTROL:AccessorTableFunc "Module" -- Named Label in code
+            CONTROL:AccessorTableFunc "Player"
+            CONTROL:AccessorTableFunc "Rank"
+            CONTROL:AccessorTableFunc "Action"
+            CONTROL:AccessorFunc "Filter"
+            CONTROL:AccessorFunc "Date"
+
+            function CONTROL:Init()--[[
+                self:SetModule({})
+                self:SetPlayer({})
+                self:SetRank({})
+                self:SetAction({}) ]]
+                self:SetFilter({})
+            end
+
+            function CONTROL:AddLog(t) -- {timestamp=, label=, type=, player=, rank=, tool=, data=, string=}
+                if t.type then
+                    self:InsertColorChange(237, 125, 49, 255)
+                    self:AppendText(os.date("[%H:%M]", t.timestamp))
+                    self:InsertColorChange(112, 173, 71, 255)
+                    self:AppendText(t.label.." ")
+                    local p,r,d,to,s = 1,1,1,1,1
+                    local func = t.type
+                    local _,v = func()
+                    while v != nil do
+                        if isnumber(v) then
+                            if v == 1 then -- Player
+                                v = player.GetBySteamID64(t.player[p])
+                                if v then
+                                    self:InsertColorChange(91, 155, 213, 255)
+                                    self:AppendText(v:Nick().." ")
+                                    p = 1 + p
+                                end
+                            elseif v == 2 then -- Rank
+                                self:InsertColorChange(112, 48, 160, 255)
+                                self:AppendText("["..t.rank[r].."] ")
+                                r = 1 + r
+                            elseif v == 3 then -- Tool
+                                self:InsertColorChange(255, 217, 102, 255)
+                                self:AppendText(t.tool[to].." ")
+                                to = 1 + to
+                            elseif v == 4 then -- Data
+                                self:InsertColorChange(173, 79, 15, 255)
+                                self:AppendText(t.data[d].." ")
+                                d = 1 + d
+                            elseif v == 5 then -- String
+                                self:InsertColorChange(173, 79, 15, 255)
+                                self:AppendText("“"..t.string[s].."” ")
+                                s = 1 + s
+                            elseif v == 6 then -- Action
+                                _,v = func()
+                                self:InsertColorChange(192, 0, 0, 255)
+                                self:AppendText(v.." ")
+                            end
+                        else
+                            self:InsertColorChange(0, 0, 0, 255)
                             self:AppendText(v.." ")
                         end
-                    else
-                        self:InsertColorChange(0, 0, 0, 255)
-                        self:AppendText(v.." ")
+                        _,v = func()
                     end
-                    _,v = func()
-                end
-                self:AppendText("\n")
-            end
-        end
-
-        function CONTROL:SetDate(date)
-            self.___Date = date
-            for t,v in logFunctions.IGetLogToken(self:GetDate()) do
-                if t == 0x3 then -- Label
-                    self:AppendModule(v)
-                elseif t == 0x4 then -- Type
-                    self:AppendAction(v)
-                elseif t == 0x5 then -- Rank
-                    self:AppendRank(v)
-                elseif t == 0x6 then -- Player
-                    self:AppendPlayer(v)
+                    self:AppendText("\n")
                 end
             end
-        end
 
-        function CONTROL:SetFilter(type, v)
-            if type == "module" or type == "action" or type == "rank" or type == "player" then
-                self.___Filter[type] = v
-            end
-        end
-
-        function CONTROL:Display()
-            local record,filtered = {},#self:GetFilter() == 0
-            for t,v in logFunctions.IGetLogToken(self:GetDate()) do
-                if t == 0x1 then -- Open Record
-                    record = {}
-                elseif t == 0xA then -- Close Record
-                    if filtered then
-                        self:AddLog(record)
-                    end
-                elseif t == 0x2 then -- Timestamp
-                    record.timestamp = v
-                elseif t == 0x3 then -- Label
-                    if !filtered then
-                        filtered = self:GetFilter().module == v
-                    end
-                    record.label = v
-                elseif t == 0x4 and record.label then -- Type
-                    if v < 1 then
-                        v = 1
-                    end
-                    if !filtered then
-                        local func = ipairs(registeredLogs[record.label][v])
-                        local _,i = func()
-                        while i != nil do
-                            if i == 6 then
-                                _,i = func()
-                                if i == self:GetFilter().action then
-                                    filtered = true
-                                    break
-                                end
-                            end
-                            _,i = func()
-                        end
-                    end
-                    record.type = registeredLogs[record.label][v]
-                elseif t == 0x5 then -- Rank
-                    if !filtered then
-                        if istable(v) then
+            function CONTROL:SetDate(date)
+                self.___Date = date
+                ILog(self:GetDate(), function (iterator)
+                    for t,v in iterator() do
+                        if t == 0x3 then -- Label
+                            self:AppendModule(v)
+                        elseif t == 0x4 then -- Type
+                            self:AppendAction(v)
+                        elseif t == 0x5 then -- Rank
                             for k,v in ipairs(v) do
-                                if self:GetFilter().rank == v then
-                                    filtered = true
-                                    break
-                                end
+                                self:AppendRank(v)
                             end
-                        else
-                            filtered = self:GetFilter().rank == v
-                        end
-                    end
-                    record.rank = v
-                elseif t == 0x6 then -- Player
-                    if !filtered then
-                        if istable(v) then
+                        elseif t == 0x6 then -- Player
                             for k,v in ipairs(v) do
-                                if self:GetFilter().player == v then
-                                    filtered = true
-                                    break
-                                end
+                                self:AppendPlayer(player.GetBySteamID64(v))
                             end
-                        else
-                            filtered = self:GetFilter().player == v
                         end
                     end
-                    record.player = v
-                elseif t == 0x7 then -- Tool
-                    record.tool = v
-                elseif t == 0x8 then -- Data
-                    record.data = v
-                elseif t == 0x9 then -- String
-                    record.string = v
+                end)
+
+            end
+
+            function CONTROL:SetFilter(type, v)
+                if type == "module" or type == "action" or type == "rank" or type == "player" then
+                    self.___Filter[type] = v
                 end
             end
-        end
-    end}}
 
-    function logFunctions.writeToLogFile(t)
-        if SERVER and file.Exists("", "DATA") then
-        elseif SERVER then
-        end
-    end
-
-    function logFunctions:printLog(str)
-        local str = "[JAAS] ["..self.label.."] - "..str
-        print(str)
-        log.writeToLogFile(str)
-    end
-
-    function logFunctions:silentLog(str)
-        log.writeToLogFile(str)
-    end
-
-    function logFunctions:chatLog(str)
-        local str = "[JAAS] - "..str
-        PrintMessage(HUD_PRINTTALK, str)
-        log.writeToLogFile(str)
-    end
-
-    function logFunctions:adminPrintLog()
-    end
-
-    function logFunctions:superadminPrintLog()
-    end
-
-    function logFunctions:adminChatLog()
-    end
-
-    function logFunctions:superadminChatLog()
-    end
-
-    function logFunctions:gameLog(action, str)
+            function CONTROL:Display()
+                local record,filtered = {},#self:GetFilter() == 0
+                ILog(self:GetDate(), function (iterator)
+                    for t,v in ILog(self:GetDate()) do
+                        if t == 0x1 then -- Open Record
+                            record = {}
+                        elseif t == 0xA then -- Close Record
+                            if filtered then
+                                self:AddLog(record)
+                            end
+                        elseif t == 0x2 then -- Timestamp
+                            record.timestamp = v
+                        elseif t == 0x3 then -- Label
+                            if !filtered then
+                                filtered = self:GetFilter().module == v
+                            end
+                            record.label = v
+                        elseif t == 0x4 and record.label then -- Type
+                            if v < 1 then
+                                v = 1
+                            end
+                            if !filtered then
+                                local func = ipairs(registeredLogs[record.label][v])
+                                local _,i = func()
+                                while i != nil do
+                                    if i == 6 then
+                                        _,i = func()
+                                        if i == self:GetFilter().action then
+                                            filtered = true
+                                            break
+                                        end
+                                    end
+                                    _,i = func()
+                                end
+                            end
+                            record.type = registeredLogs[record.label][v]
+                        elseif t == 0x5 then -- Rank
+                            if !filtered then
+                                if istable(v) then
+                                    for k,v in ipairs(v) do
+                                        if self:GetFilter().rank == v then
+                                            filtered = true
+                                            break
+                                        end
+                                    end
+                                else
+                                    filtered = self:GetFilter().rank == v
+                                end
+                            end
+                            record.rank = v
+                        elseif t == 0x6 then -- Player
+                            if !filtered then
+                                if istable(v) then
+                                    for k,v in ipairs(v) do
+                                        if self:GetFilter().player == v then
+                                            filtered = true
+                                            break
+                                        end
+                                    end
+                                else
+                                    filtered = self:GetFilter().player == v
+                                end
+                            end
+                            record.player = v
+                        elseif t == 0x7 then -- Tool
+                            record.tool = v
+                        elseif t == 0x8 then -- Data
+                            record.data = v
+                        elseif t == 0x9 then -- String
+                            record.string = v
+                        end
+                    end
+                end)
+            end
+        end}
     end
 
     local executionTrace = executionTrace or {} -- [label][id] = {file path, line}
@@ -1051,9 +1257,13 @@ function JAAS:PostInitialise()
     end
 end
 
-local MODULE = JAAS:RegisterModule"Log".Access(log)
-for k,v in ipairs(handles.log.client) do
-    MODULE.Handle.Client(v)
+local MODULE = JAAS:RegisterModule"Log"
+MODULE.Access(log)
+if SERVER then
+else
+    for k,v in ipairs(delayedHandles.log.client) do
+        MODULE.Handle.Client(v)
+    end
 end
 JAAS:RegisterModule"Developer".Access(dev, true, "Dev")
 JAAS:RegisterModule"SQL".Access(SQL, false)
