@@ -320,7 +320,9 @@ local RefreshClientCodes = dev.SharedSync("JAAS_CommandCodeSync", function (_, p
 end, "JAAS_ClientCommand", function (_, ply, code_table)
     for category, c_table in pairs(code_table) do
         for name, code in pairs(c_table) do
-            command_table[category][name][1] = code
+            if command_table[category][name] then
+                command_table[category][name][1] = code
+            end
         end
     end
 end)

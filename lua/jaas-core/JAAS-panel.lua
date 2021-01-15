@@ -21,7 +21,7 @@ end
 local panel = {PermissionCheck = true, ControlBuilder = true}
 local permissionCheck = {}
 
-local function panel.PermissionCheck(permName, success, failure)
+function panel.PermissionCheck(permName, success, failure)
     net.Start "JAAS_PermissionClientCheck"
     net.WriteString(permName)
     net.SendToServer()
@@ -39,7 +39,7 @@ net.Receive("JAAS_PermissionClientCheck" , function (name, check)
     end
 end)
 
-local function panel.ControlBuilder(base)
+function panel.ControlBuilder(base)
     return function (name, description)
         return setmetatable({internal = {PermissionAdd = function (self, permName, panel)
                 panel.PermissionCheck(permName, function ()
@@ -49,56 +49,54 @@ local function panel.ControlBuilder(base)
             __newindex = function (self, k, v)
                 self.internal[k] = v
             end,
-            Derma_Hook = function (self, func)
-                Derma_Hook(self.internal, func, func, name)
-            end,
-            AccessorFunc = function (self, name, force)
-                self.internal["Get" .. name] = function (self)
-                    return self["___" .. name]
-                end
-                if force == 1 then -- String
-                    self.internal["Set" .. name] = function (self, v)
-                        self["___" .. name] = tostring(v)
+            __index = {
+                Derma_Hook = function (self, func)
+                    Derma_Hook(self.internal, func, func, name)
+                end,
+                AccessorFunc = function (self, name, force)
+                    self.internal["Get" .. name] = function (self)
+                        return self["___" .. name]
                     end
-                elseif force == 2 then -- Number
-                    self.internal["Set" .. name] = function (self, v)
-                        self["___" .. name] = tonumber(v)
+                    if force == 1 then -- String
+                        self.internal["Set" .. name] = function (self, v)
+                            self["___" .. name] = tostring(v)
+                        end
+                    elseif force == 2 then -- Number
+                        self.internal["Set" .. name] = function (self, v)
+                            self["___" .. name] = tonumber(v)
+                        end
+                    elseif force == 3 then -- Bool
+                        self.internal["Set" .. name] = function (self, v)
+                            self["___" .. name] = tobool(v)
+                        end
+                    else
+                        self.internal["Set" .. name] = function (self, v)
+                            self["___" .. name] = v
+                        end
                     end
-                elseif force == 3 then -- Bool
-                    self.internal["Set" .. name] = function (self, v)
-                        self["___" .. name] = tobool(v)
+                end,
+                AccessorTableFunc = function (self, name)
+                    self.internal["___" .. name] = {}
+                    self.internal["Get" .. name] = function (self)
+                        return self["___" .. name]
                     end
-                else
+                    self.internal["Append" .. name] = function (self, v)
+                        self["___" .. name][1 + #self["___" .. name]] = v
+                        return #self["___" .. name]
+                    end
                     self.internal["Set" .. name] = function (self, v)
-                        self["___" .. name] = v
+                        self["___" .. name] = {v}
+                    end
+                end,
+                Define = function (self, n, d)
+                    derma.DefineControl(name, description, self.internal, base)
+                    if n and d then
+                        self.internal = {}
+                        name = n
+                        description = d
                     end
                 end
-            end,
-            AccessorTableFunc = function (self, name)
-                self.internal["___" .. name] = {}
-                self.internal["Get" .. name] = function (self)
-                    return self["___" .. name]
-                end
-                self.internal["Append" .. name] = function (self, v)
-                    self["___" .. name][1 + #self["___" .. name]] = v
-                    return #self["___" .. name]
-                end
-                self.internal["Set" .. name] = function (self, v)
-                    self["___" .. name] = {v}
-                end
-            end,
-            Define = function (self, n, d)
-                derma.DefineControl(name, description, self.internal, base)
-                if n and d then
-                    self.internal = {}
-                    name = n
-                    description = d
-                end
-            end,
-            Builder = function (self, b)
-                derma.DefineControl(name, description, self.internal, base)
-                self = ControlBuilder(b)
-            end
+            }
         })
     end
 end
@@ -138,7 +136,7 @@ MODULE.Access(MODULE.Class(panel, "jaas_panel_library"))
         Scrollbar
 */
 
-local CONTROL = ControlBuilder "DButton" ("", "")
+local CONTROL = panel.ControlBuilder "DButton" ("", "")
 CONTROL:Derma_Hook "Paint"
 CONTROL:AccessorFunc "Title"
 CONTROL:AccessorFunc "Panel"
@@ -162,10 +160,10 @@ function CONTROL:Paint(w, h)
     end
     surface.SetTextColor(242, 242, 242)
     h = w - (surface.GetTextSize(self:GetTitle()) * 0.5)
-    surface.SetTextPos(number x, number y)
+    --surface.SetTextPos(number x, number y)
 end
 
-CONTROL:Builder "DPanel" ("JMenu", "Menu for JAAS")
+CONTROL = panel.ControlBuilder "DPanel" ("JMenu", "Menu for JAAS")
 CONTROL:Derma_Hook "Paint"
 CONTROL:AccessorFunc "TabList"
 
@@ -182,7 +180,5 @@ end
 
 function CONTROL:AddTab()
 end
-
-CONTROL:Builder "" ("", "")
 
 log:printLog "Module Loaded"

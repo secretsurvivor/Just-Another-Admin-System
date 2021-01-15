@@ -103,6 +103,9 @@ setmetatable(permission_local, {
 })
 
 function permission.registerPermission(name, description, code, access)
+    if !name or name == "" then
+        error("Permission name cannot be empty", 2)
+    end
     local q = SQL.SELECT "code, access_group" {name = name}
     if q then
         code = tonumber(q["code"])
