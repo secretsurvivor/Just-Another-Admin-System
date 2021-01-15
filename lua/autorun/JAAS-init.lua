@@ -339,6 +339,8 @@ for _, file_ in ipairs(file.Find("jaas/autorun/*.lua", "lsv")) do
     include.Server("jaas/autorun/"..file_)
 end
 
+JAAS.include = false
+
 print "-------- JAAS Modules --------"
 
 include.Shared {
@@ -356,20 +358,14 @@ include.Server {
 
 include.Client "jaas-core/JAAS-panel.lua"
 
-JAAS:PostInitialise()
-
 if CLIENT then print "------------------------------" end
 
 local RefreshClientInclude = JAAS.Dev().SharedSync("JAAS_InitTableSync", function (_, ply)
-    local r,count = {},0
+    local r = {}
     for k,v in ipairs({"Shared", "Client"}) do
-        k = jaas_registry[v]
-        r[v] = k
-        count = #k + count
+        r[v] = jaas_registry[v]
     end
-    if count > 0 then
-        return r
-    end
+    return r
 end, "JAAS_ClientInit", function (_, ply, table)
     includeLoop(table)
 end)
