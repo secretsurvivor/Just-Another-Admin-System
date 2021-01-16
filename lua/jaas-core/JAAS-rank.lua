@@ -509,4 +509,4 @@ MODULE.Handle.Server(function (jaas)
     end)
 end)
 
-log:printLog "Module Loaded"
+log:print "Module Loaded"

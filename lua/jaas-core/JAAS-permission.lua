@@ -193,4 +193,4 @@ concommand.Add("JAAS_printPermissions", function ()
     end
 end)
 
-log:printLog "Module Loaded"
+log:print "Module Loaded"

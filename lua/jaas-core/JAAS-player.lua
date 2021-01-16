@@ -6,7 +6,9 @@ if !SQL.EXIST and SERVER then
 end
 
 hook.Add("PlayerInitialSpawn", "JAAS-player-registration", function(ply, transition) -- To be logged
-	SQL.INSERT {steamid = ply:SteamID64()}
+	if !transition then
+		SQL.INSERT {steamid = ply:SteamID64()}
+	end
 end)
 
 local user = {["userIterator"] = true}
@@ -184,4 +186,4 @@ MODULE.Handle.Server(function (jaas)
 	end
 end)
 
-log:printLog "Module Loaded"
+log:print "Module Loaded"

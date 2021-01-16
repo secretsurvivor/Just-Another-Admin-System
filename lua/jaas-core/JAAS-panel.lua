@@ -181,4 +181,4 @@ end
 function CONTROL:AddTab()
 end
 
-log:printLog "Module Loaded"
+log:print "Module Loaded"

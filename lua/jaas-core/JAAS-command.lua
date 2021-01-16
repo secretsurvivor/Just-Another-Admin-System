@@ -667,4 +667,4 @@ concommand.Add("JAAS_printCommands", function ()
     PrintTable(command_table)
 end)
 
-log:printLog "Module Loaded"
+log:print "Module Loaded"

@@ -325,7 +325,7 @@ local log
 do -- Log Module Initialisation
     local logFunctions = {["getLogFile"] = true, ["writeToLogFile"] = true, ["printLog"] = true, ["silentLog"] = true}
 
-    function logFunctions:printLog(str) -- [JAAS::Rank] - Module Loaded
+    function logFunctions:print(str) -- [JAAS::Rank] - Module Loaded
         print("[JAAS::"..self.label.."] - "..str)
     end
 
@@ -484,6 +484,47 @@ do -- Log Module Initialisation
 
         function logFunctions:Log(type_, t) -- {rank=, player=, entity=, data=, string=}
             if !(self.label and type_ > 0) then return end
+            if t.rank then
+                for k,v in ipairs(t.rank) do
+                    if !isstring(v) then
+                        error("Rank inputs must be strings", 2)
+                    end
+                end
+            end
+            if t.player then
+                for i=1,#t.player do
+                    if IsPlayer(t.player[i]) then
+                        t.player[i] = t.player[i]:SteamID64()
+                    end
+                    if !isnumber(t.player[i]) then
+                        error("Player inputs must be player entity or numbers", 2)
+                    end
+                end
+            end
+            if t.entity then
+                for i=1,#t.entity do
+                    if isentity(t.entity[i]) then
+                        t.entity[i] = t.entity[i]:GetName()
+                    end
+                    if !isstring(t.entity[i]) do
+                        error("Entity inputs must be strings", 2)
+                    end
+                end
+            end
+            if t.data then
+                for k,v in ipairs(t.data) do
+                    if !isnumber(v) then
+                        error("Data inputs must be numbers", 2)
+                    end
+                end
+            end
+            if t.string then
+                for k,v in ipairs(t.string) do
+                    if !isstring(v) then
+                        error("String inputs must be strings", 2)
+                    end
+                end
+            end
             local f
             if file.Exists(os.date("jslogs/%d-%m-%Y.dat"), "DATA") then
                 f = file.Open(os.date("jslogs/%d-%m-%Y.dat"), "ab", "DATA")
@@ -582,11 +623,11 @@ do -- Log Module Initialisation
             f:WriteByte(0xA) -- Close Record
         end
 
-        function logFunctions:chatLog(str) -- [JAAS] - secret_survivor added to Superadmin
+        function logFunctions:chat(str) -- [JAAS] - secret_survivor added to Superadmin
             PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
         end
 
-        function logFunctions:adminChatLog(str)
+        function logFunctions:adminChat(str)
             for k,v in ipairs(player.GetAll()) do
                 if v:IsAdmin() then
                     v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
@@ -594,7 +635,7 @@ do -- Log Module Initialisation
             end
         end
 
-        function logFunctions:superadminChatLog()
+        function logFunctions:superadminChat(str)
             for k,v in ipairs(player.GetAll()) do
                 if v:IsSuperAdmin() then
                     v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
