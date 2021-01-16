@@ -5,7 +5,7 @@ hook.Add("PlayerNoClip", "JAAS_noclipPermission", function (ply, desiredNoClipSt
     return noclip:codeCheck(ply:getJAASCode()) or !desiredNoClipState
 end)
 
-local pickup = permission.registerPermission("Pickup", "Player will be able to pick up objects")
+local pickup = permission.registerPermission("Pickup", "Player will be able to pick up objects with +USE")
 hook.Add("AllowPlayerPickup", "JAAS_pickupPermission", function (ply)
     return pickup:codeCheck(ply:getJAASCode())
 end)
@@ -46,6 +46,42 @@ end)
 local canPickupWeapon = permission.registerPermission("Can Pickup Weapon", "Player will be able to pickup weapons")
 hook.Add("PlayerCanPickupWeapon", "JAAS_canPickupWeaponPermission", function (ply, wep)
     return canPickupWeapon:codeCheck(ply:getJAASCode())
+end)
+
+local canSeeAllChatMessages = permission.registerPermission("Listen to Other Player's Chat", "Player will be able to see all chats be it team only or not.")
+hook.Add("PlayerCanSeePlayersChat", "JAAS_canSeeAllChatMessages", function (text, teamOnly, listener, speaker)
+    for k,ply in ipairs(player.GetAll()) do
+        if canSeeAllChatMessages:codeCheck(ply:getJAASCode()) and listener != ply and speaker:IsValid() and ply:canTarget(listener:getJAASCode()) and ply:canTarget(speaker:getJAASCode()) then
+            ply:PrintMessage(HUD_PRINTTALK, speaker:Nick().." to "..listener:Nick()..": "..text) --secret_survivor to Dempsy40: Can you stop killing me!
+        end
+    end
+end)
+
+local ignoreDamage = permission.registerPermission("Ignore Damage", "Player won't be able to take damage")
+hook.Add("PlayerShouldTakeDamage", "JAAS_allowDamage", function (ply, attacker)
+    return !ignoreDamage:codeCheck(ply:getJAASCode())
+end)
+
+local ignoreFallDamage = permission.registerPermission("Ignore Fall Damage", "Player will ignore all fall damage")
+hook.Add("GetFallDamage", "JAAS_ignoreFallDamage", function (ply, speed)
+    if ignoreFallDamage:codeCheck(ply:getJAASCode()) then
+        return 0
+    end
+end)
+
+local canSuicide = permission.registerPermission("Can Suicide", "Player will be able to kill themself")
+hook.Add("CanPlayerSuicide", "JAAS_canSuicide", function (ply)
+    return canSuicide:codeCheck(ply:getJAASCode())
+end)
+
+local gravGunPickup = permission.registerPermission("Gravity Gun Pickup", "Player will be able to pick up entities with the Gravity Gun")
+hook.Add("GravGunPickupAllowed", "JAAS_gravGunPickup", function (ply, ent)
+    return gravGunPickup:codeCheck(ply:getJAASCode())
+end)
+
+local canGravGunPunt = permission.registerPermission("Can Gravity Gun Punt", "Player will be able to punt entities with the Gravity Gun (Primary Fire)")
+hook.Add("GravGunPunt", "JAAS_canGravGunPunt", function (ply, ent)
+    return canGravGunPunt:codeCheck(ply:getJAASCode())
 end)
 
 local meta = FindMetaTable("Player")
