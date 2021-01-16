@@ -336,7 +336,7 @@ do -- Log Module Initialisation
             /*
                 Player - 1
                 Rank - 2
-                Tool - 3
+                Entity - 3
                 Data - 4
                 String - 5
                 Action - 6, action
@@ -364,7 +364,7 @@ do -- Log Module Initialisation
                     Type O - 0x4 - UShort > 0
                 Rank* O/C - 0x5 - String
                 Player* O/C - 0x6 - ULong ULong (SteamID64)
-                Tool* O/C - 0x7 - String
+                Entity* O/C - 0x7 - String
                 Data* O/C - 0x8 - Float
                 String* O/C - 0x9 - String
                 Seperator - 0x0
@@ -404,7 +404,7 @@ do -- Log Module Initialisation
                         byte = f:ReadByte()
                     end
                     return 0x6,value
-                elseif byte == 0x7 then -- Tool
+                elseif byte == 0x7 then -- Entity
                     byte,value = f:ReadByte(),{}
                     while byte != 0x7 do
                         if byte == 0x0 then
@@ -482,7 +482,7 @@ do -- Log Module Initialisation
             net.Send(ply)
         end)
 
-        function logFunctions:Log(type_, t) -- {rank=, player=, tool=, data=, string=}
+        function logFunctions:Log(type_, t) -- {rank=, player=, entity=, data=, string=}
             if !(self.label and type_ > 0) then return end
             local f
             if file.Exists(os.date("jslogs/%d-%m-%Y.dat"), "DATA") then
@@ -528,20 +528,20 @@ do -- Log Module Initialisation
                     end
                 f:WriteByte(0x6) -- Close
             end
-            if t.tool then
+            if t.entity then
                 f:WriteByte(0x7) -- Open
-                    if istable(t.tool) then
-                        if #t.tool > 1 then
-                            for i=1,#t.tool - 1 do
-                                f:WriteString(t.tool[i])
+                    if istable(t.entity) then
+                        if #t.entity > 1 then
+                            for i=1,#t.entity - 1 do
+                                f:WriteString(t.entity[i])
                                 f:WriteByte(0x0)
                             end
-                            f:WriteString(t.tool[#t.tool])
+                            f:WriteString(t.entity[#t.entity])
                         else
-                            f:WriteString(t.tool[1])
+                            f:WriteString(t.entity[1])
                         end
                     else
-                        f:WriteString(t.tool)
+                        f:WriteString(t.entity)
                     end
                 f:WriteByte(0x7) -- Close
             end
@@ -682,7 +682,7 @@ do -- Log Module Initialisation
                 self:SetFilter({})
             end
 
-            function CONTROL:AddLog(t) -- {timestamp=, label=, type=, player=, rank=, tool=, data=, string=}
+            function CONTROL:AddLog(t) -- {timestamp=, label=, entity=, player=, rank=, tool=, data=, string=}
                 if t.type then
                     self:InsertColorChange(237, 125, 49, 255)
                     self:AppendText(os.date("[%H:%M]", t.timestamp))
@@ -704,9 +704,9 @@ do -- Log Module Initialisation
                                 self:InsertColorChange(112, 48, 160, 255)
                                 self:AppendText("["..t.rank[r].."] ")
                                 r = 1 + r
-                            elseif v == 3 then -- Tool
+                            elseif v == 3 then -- Entity
                                 self:InsertColorChange(255, 217, 102, 255)
-                                self:AppendText(t.tool[to].." ")
+                                self:AppendText(t.entity[to].." ")
                                 to = 1 + to
                             elseif v == 4 then -- Data
                                 self:InsertColorChange(173, 79, 15, 255)
@@ -823,8 +823,8 @@ do -- Log Module Initialisation
                                 end
                             end
                             record.player = v
-                        elseif t == 0x7 then -- Tool
-                            record.tool = v
+                        elseif t == 0x7 then -- Entity
+                            record.entity = v
                         elseif t == 0x8 then -- Data
                             record.data = v
                         elseif t == 0x9 then -- String
