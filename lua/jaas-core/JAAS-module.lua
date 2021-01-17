@@ -519,9 +519,9 @@ do -- Log Module Initialisation
                 end
             end
             if t.string then
-                for k,v in ipairs(t.string) do
-                    if !isstring(v) then
-                        error("String inputs must be strings", 2)
+                for i=1,t.string do
+                    if !isstring(t.string[i]) then
+                        t.string[i] = tostring(t.string[i])
                     end
                 end
             end
@@ -639,6 +639,16 @@ do -- Log Module Initialisation
             for k,v in ipairs(player.GetAll()) do
                 if v:IsSuperAdmin() then
                     v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
+                end
+            end
+        end
+
+        function logFunctions:adminOrSuperChat(admin, superadmin)
+            for k,v in ipairs(player.GetAll()) do
+                if v:IsAdmin() then
+                    v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..admin)
+                elseif v:IsSuperAdmin() then
+                    v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..superadmin)
                 end
             end
         end
