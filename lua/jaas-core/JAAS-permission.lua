@@ -33,6 +33,9 @@ function permission_local:setCode(code)
 end
 
 function permission_local:xorCode(code)
+    if dev.isRankObject(code) then
+        code = code:getCode()
+    end
     local before = permission_table[self.name][1]
     local c_xor = bit.bxor(before, code)
     if SQL.UPDATE {code = c_xor} {name = self.name} then
@@ -144,33 +147,55 @@ dev:isTypeFunc("PermissionLibrary","jaas_permission_library")
 
 local modify_permission = permission.registerPermission("Can Modify Permissions", "Player will be able to change what permissions ranks have access to")
 
-util.AddNetworkString "JAAS_PermissionModify_Channel"
-/* Permission feedback codes :: 2 Bits
-    0 :: Permission Change was a success
-    1 :: Code could not be changed
-    2 :: Unknown Permission identifier
-    3 :: Not part of Access Group
-*/
-local sendFeedback = dev.sendUInt("JAAS_PermissionModify_Channel", 2)
-net.Receive("JAAS_PermissionModify_Channel", function (len, ply) -- All changes will be xor
-    if modify_permission:codeCheck(ply) then
-        local name = net.ReadString()
-        local code = net.ReadUInt(64)
-        local perm, sendCode = jaas.Permission(name), sendFeedback(ply)
-        if dev.isPermissionObject(perm) then
-            if perm:accessCheck(ply) then
-                if perm:xorCode(code) then
-                    sendCode(0)
+log:registerLog {3, "was", 6, "added", "to", 2, "by", 1} -- [1] Noclip was added to Moderator by secret_survivor
+log:registerLog {3, "was", 6, "removed", "from", 2, "by", 1} -- [2] Physgun Player Pickup Allow was removed from Admin by secret_survivor
+log:registerLog {3, "has", 6, "default access", "by", 1} -- [3] Can Player Spray has default access by secret_survivor
+log:registerLog {1, 6, "attempted", "to add/remove", 3} -- [4] Dempsy40 attempted to add/remove a player Can Suicide
+MODULE.Handle.Server(function (jaas)
+    util.AddNetworkString "JAAS_PermissionModify_Channel"
+    /* Permission feedback codes :: 2 Bits
+        0 :: Permission Change was a success
+        1 :: Code could not be changed
+        2 :: Unknown Permission identifier
+        3 :: Not part of Access Group
+    */
+    local sendFeedback = dev.sendUInt("JAAS_PermissionModify_Channel", 2)
+    net.Receive("JAAS_PermissionModify_Channel", function (len, ply) -- All changes will be xor
+        if modify_permission:codeCheck(ply) then
+            local perm = jaas.Permission(net.ReadString())
+            local rank = jaas.Rank(net.ReadString())
+            local sendCode = sendFeedback(ply)
+            if dev.isPermissionObject(perm) and dev.isRankObject(rank) then
+                if perm:accessCheck(ply) then
+                    if perm:xorCode(rank) then
+                        sendCode(0)
+                        if perm:getCode() == 0 then -- Default access
+                            log:Log(3, {player = {ply}, entity = {perm:getName()}})
+                            log:superadminChat("%e has default access by %p", perm:getName(), ply:Nick())
+                        elseif bit.band(perm:getCode(), rank:getCode()) then -- Added
+                            log:Log(1, {player = {ply}, rank = {rank}, entity = {perm:getName()}})
+                            log:superadminChat("%p added %e to %r", ply:Nick(), perm:getName(), rank:getName())
+                        else -- Removed
+                            log:Log(2, {player = {ply}, rank = {rank}, entity = {perm:getName()}})
+                            log:superadminChat("%p removed %e to %r", ply:Nick(), perm:getName(), rank:getName())
+                        end
+                    else
+                        sendCode(1)
+                    end
                 else
-                    sendCode(1)
+                    sendCode(3)
                 end
             else
-                sendCode(3)
+                sendCode(2)
             end
         else
-            sendCode(2)
+            local perm = jaas.Permission(net.ReadString())
+            if dev.isPermissionObject(perm) then
+                log:Log(4, {player = {ply}, entity = {perm:getCode()}})
+                log:superadminChat("%p attempted to modify %e", ply:Nick(), perm:getName())
+            end
         end
-    end
+    end)
 end)
 
 MODULE.Handle.Server(function (jaas)

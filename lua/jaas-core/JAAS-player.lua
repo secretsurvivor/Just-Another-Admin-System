@@ -186,4 +186,140 @@ MODULE.Handle.Server(function (jaas)
 	end
 end)
 
+log:registerLog {1, "was", 6, "added", "to", 2, "by", 1} -- [1] secret_survivor was added to Donator by secret_survivor
+log:registerLog {1, "was", 6, "removed", "from", 2, "by", 1} -- [2] Dempsy40 was removed from T-Mod by secret_survivor
+log:registerLog {1, "has", 6, "default access", "by", 1} -- [3] Dempsy40 has default access by secret_survivor
+log:registerLog {1, 6, "attempted", "to add/remove a player to", 2} -- [4] Dempsy40 attempted to add/remove a player to Superadmin
+MODULE.Handle.Server(function (jaas)
+	local modify_player = jaas.Permission(),registerPermission("Can Modify Player", "Player will be able to modify what ranks players are in")
+	util.AddNetworkString("JAAS_PlayerModify_Channel")
+    /* Player feedback codes :: 2 Bits
+        0 :: Player Change was a success
+        1 :: Player could not be changed
+        2 :: Unknown Rank identifier
+        3 :: Not part of Access Group
+    */
+	local sendFeedback = dev.sendUInt("JAAS_PlayerModify_Channel", 2)
+	net.Receive(JAAS_PlayerModify_Channel, function (len, ply)
+		if modify_player:codeCheck(ply:getJAASCode()) then
+			local rank = jaas.Rank(net.ReadString())
+			local target = net.ReadEntity():getJAASObject()
+			local sendCode = sendFeedback(ply)
+			if dev.isRankObject(rank) then
+				if rank:accessCheck(target:getCode()) then
+					if target:xorCode(rank) then
+						sendCode(0)
+						if target:getCode() == 0 then -- Default Access
+							log:Log(3, {player = {target, ply}})
+							log:adminChat("%p made %p a default user", ply:Nick(), target:Nick())
+						elseif bit.band(target:getCode(), rank:getCode()) > 0 then -- Added
+							log:Log(1, {player = {target, ply}, rank = {rank}})
+							log:adminChat("%p added %p to %r", ply:Nick(), target:Nick(), rank:getName())
+						else -- Removed
+							log:Log(2, {played = {target, ply}, rank = {rank}})
+							log:adminChat("%p removed %p from %r", ply:Nick(), target:Nick(), rank:getName())
+						end
+					else
+						sendCode(1)
+					end
+				else
+					sendCode(3)
+				end
+			else
+				sendCode(2)
+			end
+		else
+			local rank = jaas.Rank(net.ReadString())
+			if dev.isRankObject(rank) then
+				log:Log(4, {player = {ply}, rank = {rank:getName()}})
+				log:superadminChat("%p attempted to add/remove a player to %r", ply:Nick(), rank:getName())
+			end
+		end
+	end)
+end)
+
+MODULE.Handle.Shared(function (jaas)
+	local command = jaas.Command()
+	local arg = command.argumentTableBuilder()
+
+	command:setCategory "User"
+
+	local ModifyUser_ArgTable = arg:add("Rank", "RANK", true):add("Target", "PLAYER"):dispense()
+	command:registerCommand("Add", function (ply, rank_object, target)
+		if dev.isPlayer(target) then -- Apply rank change on target
+			local target_object = target:getJAASObject()
+			if !IsValid(ply) or ply == target or ply:validPowerTarget(target:getJAASCode()) then
+				if !IsValid(ply) or rank_object:accessCheck(ply:getJAASCode()) then
+					if rank_object:codeCheck(target:getJAASCode()) then
+						target_object:xorCode(rank_object)
+						log:Log(1, {player = {target, ply}, rank = rank_object})
+						log:adminChat("%p added %p to %r", ply:Nick(), target:Nick(), rank_object:getName())
+					else
+						return target:Nick().." already has that rank"
+					end
+				else
+					return "Cannot add target to " .. rank_object:getName()
+				end
+			else
+				return "Cannot Target "..target:Nick()
+			end
+		else
+			if IsValid(ply) then -- Apply rank change on caller
+				local user = JAAS.Player(ply)
+				if rank_object:accessCheck(user) then
+					if rank_object:codeCheck(ply:getJAASCode()) then
+						user:xorCode(rank_object)
+						log:Log(1, {player = {ply, ply}, rank = rank_object})
+						log:adminChat("%p added %p to %r", ply:Nick(), ply:Nick(), rank_object:getName())
+					else
+						return "You already have this rank"
+					end
+				else
+					return "Cannot add yourself to " .. rank_object:getName()
+				end
+			else
+				return "Target must be valid to change rank" -- Can't change server's rank
+			end
+		end
+	end, ModifyUser_ArgTable)
+
+	command:registerCommand("Remove", function (ply, rank_object, target)
+		if dev.isPlayer(target) then -- Apply rank change on target
+			local target_object = target:getJAASObject()
+			if !IsValid(ply) or ply == target or ply:validPowerTarget(target:getJAASCode()) then
+				if !IsValid(ply) or rank_object:accessCheck(ply:getJAASCode()) then
+					if rank_object:codeCheck(target:getJAASCode()) then
+						target_object:xorCode(rank_object)
+						log:Log(2, {player = {target, ply}, rank = {rank_object}})
+						log:adminChat("%p removed %p from %r", ply:Nick(), target:Nick(), rank_object:getName())
+					else
+						return target:Nick().." already does not have rank"
+					end
+				else
+					return "Cannot remove target from "..rank_object:getName()
+				end
+			else
+				return "Cannot Target "..target:Nick()
+			end
+		else
+			if IsValid(ply) then -- Apply rank change on caller
+				local user = JAAS.Player(ply)
+				if rank_object:accessCheck(user) then
+					if rank_object:codeCheck(ply:getJAASCode()) then
+						user:xorCode(rank_object)
+						log:Log(2, {player = {ply, ply}, rank = {rank_object}})
+						log:adminChat("%p removed %p from %r", ply:Nick(), ply:Nick(), rank_object:getName())
+					else
+						return "You already have this rank"
+					end
+				else
+					return "Cannot remove yourself from " .. rank_object:getName()
+				end
+			else
+				return "Target must be valid to change rank" -- Can't change server's rank
+			end
+		end
+	end, ModifyUser_ArgTable)
+end)
+
 log:print "Module Loaded"

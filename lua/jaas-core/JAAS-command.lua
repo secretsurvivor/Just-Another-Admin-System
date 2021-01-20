@@ -23,7 +23,6 @@ local function typeMap(typ)
     typeCase:case("PLAYER", 0x5)
     typeCase:case("PLAYERS", 0x6)
     typeCase:case("RANK", 0x7)
-    typeCase:case("RANKS", 0x8)
     typeCase:case("OPTION", 0x9)
     typeCase:case("OPTIONS", 0xA)
     typeCase:default(function ()
@@ -128,6 +127,9 @@ if SERVER then
     end
 
     function local_command:xorCode(code)
+        if dev.isRankObject(code) then
+            code = code:getCode()
+        end
         local before = command_table[self.category][self.name][1]
         local c_xor = bit.bxor(before, code)
         if SQL.UPDATE {code = c_xor} {name = self.name, category = self.category} then
@@ -140,6 +142,9 @@ if SERVER then
     end
 
     function local_command:setAccess(value)
+        if dev.isAccessObject(value) then
+            value = value:getValue()
+        end
         if SQL.UPDATE {access_group = value} {name = self.name, category = self.category} then
             command_table[self.category][self.name][4] = value
             return true
@@ -170,7 +175,10 @@ if SERVER then
             return setmetatable({name = command_name, category = command_category}, {__index = local_command, __metatable = "jaas_command_object"})
         end,
         __newindex = function() end,
-        __metatable = "jaas_command_object"
+        __metatable = "jaas_command_object",
+        __tostring = function ()
+            return self.category.."."..self.name
+        end
     })
 
     function command:registerCommand(name, func, funcArgs, description, code, access)
@@ -270,16 +278,13 @@ elseif CLIENT then
                 for i,p in ipairs(v) do
                     v[i] = getPlyFromNick(p)
                 end
-                net.WriteTable(v)
+                net.WriteUInt(#v, 16)
+                for k,v in ipairs(v) do
+                    net.WriteEntity(v)
+                end
             end)
             commandCase:case(7, function () -- Rank
                 net.WriteString(v)
-            end)
-            commandCase:case(8, function () -- Ranks
-                if isstring(v) then
-                    v = string.ToTable(v)
-                end
-                net.WriteTable(v)
             end)
             commandCase:case(9, function () -- Option
                 if isstring(v) then
@@ -340,8 +345,13 @@ end)
 dev:isTypeFunc("CommandObject","jaas_command_object")
 dev:isTypeFunc("CommandLibrary","jaas_command_library")
 
+log:registerLog {3, "was", 6, "added", "to", 2, "by", 1} -- [1] Utility.Toggle_Flight was added to Moderator by secret_survivor
+log:registerLog {3, "was", 6, "removed", "from", 2, "by", 1} -- [2] Utility.Toggle_Flight was removed from T-Mod by secret_survivor
+log:registerLog {3, "has", 6, "default access", "by", 1} -- [3] Test.Bacon has default access by secret_survivor
+log:registerLog {1, 6, "attempted", "to modify", 3} -- [4] Dempsy40 attempted to modify User.Add
 MODULE.Handle.Server(function (jaas)
     local modify_command = jaas.Permission().registerPermission("Can Modify Commands", "Player will be able to change what command ranks have access to")
+    local rank = jaas.Rank()
 
     util.AddNetworkString "JAAS_CommandModify_Channel"
     /* Command feedback codes :: 2 Bits
@@ -353,14 +363,24 @@ MODULE.Handle.Server(function (jaas)
     local sendFeedback = dev.sendUInt("JAAS_CommandModify_Channel", 2)
     net.Receive("JAAS_CommandModify_Channel", function (len, ply)
         if modify_command:codeCheck(ply) then
-            local category = net.ReadString()
-            local name = net.ReadString()
-            local code = net.ReadUInt(64)
+            local category,name = net.ReadString(),net.ReadString()
+            local rank = jaas.Rank(net.ReadString())
             local cmd, sendCode = jaas.Command(name, category), sendFeedback(ply)
-            if dev.isCommandObject(cmd) then
+            if dev.isCommandObject(cmd) and dev.isRankObject(rank) then
                 if cmd:accessCheck(ply) then
-                    if cmd:xorCode(code) then
+                    local before = cmd:getCode()
+                    if cmd:xorCode(rank) then
                         sendCode(0)
+                        if cmd:getCode() == 0 then -- Default access
+                            log:Log(3, {player = {ply}, entity = {category.."."..name}})
+                            log:superadminChat("%e has default access by %p", category.."."..name, ply:Nick())
+                        elseif bit.band(cmd:getCode(), rank:getCode()) > 0 then -- Added
+                            log:Log(1, {player = {ply}, rank = {rank}, entity = {category.."."..name}})
+                            log:superadminChat("%p added %e to %r", ply:Nick(), category.."."..name, rank:getName())
+                        else -- Removed
+                            log:Log(2, {player = {ply}, rank = {rank}, entity = {category.."."..name}})
+                            log:superadminChat("%p removed %e from %r", ply:Nick(), category.."."..name, rank:getName())
+                        end
                     else
                         sendCode(1)
                     end
@@ -369,6 +389,12 @@ MODULE.Handle.Server(function (jaas)
                 end
             else
                 sendCode(2)
+            end
+        else
+            local cmd = jaas.Command(net.ReadString(), net.ReadString())
+            if dev.isCommandObject(cmd) then
+                log:Log(4, {player = {ply}, entity = {category.."."..name}})
+                log:superadminChat("%p attempted to modify %e", ply:Nick(), category.."."..name)
             end
         end
     end)
@@ -406,18 +432,18 @@ local function commandAutoComplete(cmd, args_str)
                                         end
                                     end
                                 end)
-                                autocomplete:case(6, function () -- Players
+                                autocompleteCase:case(6, function () -- Players
                                 end)
-                                autocomplete:case(7, function () -- Rank
+                                autocompleteCase:case(7, function () -- Rank
                                 end)
-                                autocomplete:case(8, function () -- Ranks
+                                autocompleteCase:case(8, function () -- Ranks
                                 end)
-                                autocomplete:case(9, function () -- Option
+                                autocompleteCase:case(9, function () -- Option
                                     for k,_ in pairs(t[2][i-2][4]) do
                                         autocomplete[1 + #autocomplete] = "JAAS "..category.." "..name..cmd_args.." "..k
                                     end
                                 end)
-                                autocomplete:case(10, function () -- Options
+                                autocompleteCase:case(10, function () -- Options
                                 end)
                                 autocompleteCase:switch(arg_type)
                             end
@@ -465,6 +491,9 @@ if SERVER then
         Name : String
     */
     local AND = bit.band
+
+    log.registerLog({label = "__Command"}, {1, 6, "executed", 3}) -- [1] secret_survivor executed Test.Bacon
+    log.registerLog({label = "__Command"}, {1, 6, "attempted", "to execute", 3}) -- [2] Dempsy40 attempted to execute User.Add
     net.Receive("JAAS_ClientCommand", function(_, ply)
         local category, name = net.ReadString(), net.ReadString()
         if command_table[category] ~= nil and command_table[category][name] ~= nil then -- Command is valid
@@ -475,40 +504,36 @@ if SERVER then
                 for i, arg in ipairs(funcArgs) do -- Read Function Arguments
                     local readArg
                     local readArgCase = dev.SwitchCase()
-                    readArgCase:case(1, function ()
+                    readArgCase:case(1, function () -- Bool
                         return net.ReadBool()
                     end)
-                    readArgCase:case(2, function ()
+                    readArgCase:case(2, function () -- Int
                         return net.ReadInt(64)
                     end)
-                    readArgCase:case(3, function ()
+                    readArgCase:case(3, function () -- Float
                         return net.ReadFloat()
                     end)
-                    readArgCase:case(4, function ()
+                    readArgCase:case(4, function () -- String
                         return net.ReadString()
                     end)
-                    readArgCase:case(5, function ()
+                    readArgCase:case(5, function () -- Player
                         return net.ReadEntity()
                     end)
-                    readArgCase:case(6, function ()
-                        return net.ReadTable()
+                    readArgCase:case(6, function () -- Players, table of entities
+                        local length,_table = net.ReadUInt(16),{}
+                        for i=1,length do
+                            _table[i] = net.ReadEntity()
+                        end
+                        return _table
                     end)
-                    readArgCase:case(7, function ()
+                    readArgCase:case(7, function () -- Rank
                         local rank_name = net.ReadString()
                         return JAAS.Rank(rank_name)
                     end)
-                    readArgCase:case(8, function ()
-                        local rank_table = net.ReadTable()
-                        local t = {}
-                        for k,v in ipairs(rank_table) do
-                            t[k] = JAAS.Rank(v)
-                        end
-                        return t
-                    end)
-                    readArgCase:case(9, function ()
+                    readArgCase:case(9, function () -- Option
                         return net.ReadInt(math.ceil(math.log(#arg[4], 2)))
                     end)
-                    readArgCase:case(10, function ()
+                    readArgCase:case(10, function () -- Options, table of ints
                         return net.ReadTable()
                     end)
                     readArgCase:default(arg[4])
@@ -520,6 +545,7 @@ if SERVER then
                     local a = command_table[category][name][3](ply, unpack(funcArgs_toBeExecuted))
                     if a then
                         returnCommandErrors(ply, 4, category, name, a) -- Function Feedback
+                        log.Log({label = "__Command"}, 1, {player = {ply}, entity = {category.."."..name}})
                     else
                         returnCommandErrors(ply, 0, category, name) -- Executed Successfully
                     end
@@ -528,6 +554,7 @@ if SERVER then
                 end
             else
                 returnCommandErrors(ply, 2, category, name) -- Player is not authorised
+                log.Log({label = "__Command"}, 2, {player = {ply}, entity = {category.."."..name}})
             end
         else
             returnCommandErrors(ply, 1, category, name) -- Category or name is invalid

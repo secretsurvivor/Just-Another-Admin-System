@@ -134,6 +134,9 @@ function local_rank:getAccess()
 end
 
 function local_rank:setAccess(value)
+    if dev.isAccessObject(value) then
+        value = value:getValue()
+    end
     if SQL.UPDATE {access_group = value} {rowid = self.id} then
         JAAS.Hook.Run "Rank" "GlobalChange" ()
         return true
@@ -411,19 +414,25 @@ function rank.getRank(name)
 end
 
 MODULE.Access(function (rank_name)
+    rank_name = SQL.ESCAPE(rank_name)
     if rank_name then
         local a = SQL.SELECT "rowid" {name = rank_name}
         if a then
             return local_rank(tonumber(a["id"]))
         end
-    else
-        return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})
     end
+    return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})
 end)
 
 dev:isTypeFunc("RankObject","jaas_rank_object")
 dev:isTypeFunc("RankLibrary","jaas_rank_library")
 
+log:registerLog {1, 6, "created", 2} -- [1] secret_survivor created Moderator
+log:registerLog {1, 6, "deleted", 2} -- [2] secret_survivor deleted T-Mod
+log:registerLog {1, 6, "set", "power to", 4, "on", 2} -- [3] secret_survivor set power to 3 on Moderator
+log:registerLog {1, 6, "set", "invisible to", 5, "on", 2} -- [4] secret_survivor set invisible to true on Trusted
+log:registerLog {1, 6, "set", "access value to", 4, "on", 2} -- [5] secret_survivor set access value to 2 on Manager
+log:registerLog {1, 6, "attempted", "to modify a rank"} -- [6] Dempsy40 attempted to modify a rank
 MODULE.Handle.Server(function (jaas)
     local perm = jaas.Permission()
     local modify_rank = perm.registerPermission("Can Modify Rank Table", "Player will be able to modify the rank table - this is required to add, remove, and modify existing ranks")
@@ -445,6 +454,8 @@ MODULE.Handle.Server(function (jaas)
                 local power = net.ReadUInt(8)
                 local invis = net.ReadBool()
                 if rank.addRank(name, power, invis) then
+                    log:Log(1, {player = {ply}, rank = {name}})
+                    log:superadminChat("%p created %r", ply:Nick(), name)
                     return 0
                 else
                     return 1
@@ -453,6 +464,8 @@ MODULE.Handle.Server(function (jaas)
             modifyCase:case(1, function () -- Remove Rank
                 local name = SQL.ESCAPE(net.ReadString())
                 if rank.removeRank(name) then
+                    log:Log(2, {player = {ply}, rank = {name}})
+                    log:superadminChat("%p removed %r", ply:Nick(), name)
                     return 0
                 else
                     return 1
@@ -464,17 +477,22 @@ MODULE.Handle.Server(function (jaas)
                     t[i] = net.ReadString()
                 end
                 if rank.removeRanks(unpack(t)) then
+                    for k,v in ipairs(t) do
+                        log:Log(2, {player = {ply}, rank = {v}})
+                        log:superadminChat("%p removed %r", ply:Nick(), v)
+                    end
                     return 0
                 else
                     return 1
                 end
             end)
             modifyCase:case(3, function () -- Set Power
-                local name = SQL.ESCAPE(net.ReadString())
+                local rnk = jaas.Rank(net.ReadString())
                 local power = net.ReadUInt(8)
-                local rnk = jaas.Rank(name)
                 if dev.isRankObject(rnk) then
                     if rnk:setPower(power) then
+                        log:Log(3, {player = {ply}, rank = {rnk}, data = {power}})
+                        log:superadminChat("%p set %r's power to %d", ply:Nick(), rnk:getName(), power)
                         return 0
                     else
                         return 1
@@ -484,11 +502,31 @@ MODULE.Handle.Server(function (jaas)
                 end
             end)
             modifyCase:case(4, function () -- Set Invisible
-                local name = SQL.ESCAPE(net.ReadString())
+                local rnk = jaas.Rank(net.ReadString())
                 local invis = net.ReadBool()
-                local rnk = jaas.Rank(name)
                 if dev.isRankObject(rnk) then
                     if rnk:setInvis(invis) then
+                        log:Log(4, {player = {ply}, rank = {rnk}, string = {invis}})
+                        if invis then
+                            log:superadminChat("%p made %r invisible")
+                        else
+                            log:superadminChat("%p made %r not invisible")
+                        end
+                        return 0
+                    else
+                        return 1
+                    end
+                else
+                    return 2
+                end
+            end)
+            modifyCase:case(5, function () -- Set Access Value
+                local rnk = jaas.Rank(net.ReadString())
+                local value = net.ReadUInt(16)
+                if dev.isRankObject(rnk) then
+                    if rnk:setAccess(value) then
+                        log:Log(5, {player = {ply}, rank = {rnk}, data = {value}})
+                        log:superadminChat("%p set %r's access value to %d", ply:Nick(), rnk:getName(), value)
                         return 0
                     else
                         return 1
@@ -499,6 +537,9 @@ MODULE.Handle.Server(function (jaas)
             end)
             modifyCase:default(3)
             sendCode(modifyCase:switch(net.ReadUInt(3)))
+        else
+            log:Log(6, {player = {ply}})
+            log:superadminChat("%p attempted to modify a rank", ply:Nick())
         end
     end)
 

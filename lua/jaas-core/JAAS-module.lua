@@ -170,13 +170,13 @@ do -- Developer Module Initialisation
         end})
     end
 
-    local e,v = isentity,IsValid
+    local ise,isv = isentity,IsValid
     function devFunctions.isPlayer(v)
-        return e(v) and v(v) and v:IsPlayer()
+        return ise(v) and isv(v) and v:IsPlayer()
     end
 
     function devFunctions.isBot(v)
-        return e(v) and v(v) and v:IsBot()
+        return ise(v) and isv(v) and v:IsBot()
     end
 
     if SERVER then
@@ -282,13 +282,31 @@ do -- Developer Module Initialisation
     end
 
     local f = FindMetaTable "File"
+
     function f:ReadU64Int()
         return self:ReadULong() + bit.lshift(self:ReadULong(), 32)
     end
 
     function f:WriteU64Int(v)
-        self:WriteULong(bit.band(v, 0xFFFF))
-        self:WriteULong(bit.rshift(v, 32))
+        local hex = bit.tohex(v)
+        self:WriteULong(v)
+        self:WriteULong(bit.rshift(v, 31))
+    end
+
+    function f:WriteString(str)
+        for c in gmatch(str, ".") do
+            self:WriteByte(string.byte(c))
+        end
+        self:WriteByte(0x0)
+    end
+
+    function f:ReadString()
+        local byte,str = self:ReadByte(),""
+        while byte > 0x0 do
+            str = str .. string.char(byte)
+            byte = self:ReadByte()
+        end
+        return str
     end
 
     function f:Read64Int()
@@ -300,7 +318,7 @@ do -- Developer Module Initialisation
         self:WriteLong(bit.rshift(v, 32))
     end
 
-    function net.ReadLong() -- Actual legnth of Long; 64 bits (8 bytes)
+    function net.ReadLong() -- Actual length of Long; 64 bits (8 bytes)
         return net.ReadInt(32) + bit.lshift(net.ReadInt(32), 32)
     end
 
@@ -340,6 +358,7 @@ do -- Log Module Initialisation
                 Data - 4
                 String - 5
                 Action - 6, action
+                Var String - 7
             */
             if registeredLogs[self.label] then
                 registeredLogs[self.label][1 + #registeredLogs[self.label]] = t
@@ -355,7 +374,7 @@ do -- Log Module Initialisation
             elseif isnumber(date) then -- Unix Epoch
                 date = ox.date("%d-%m-%Y", date)
             end
-            local f = file.Open("jslogs/"..date..".dat", "rb", "DATA")
+            local f = file.Open("jaas/logs/"..date..".dat", "rb", "DATA")
             /* type [Usage] - Opcode - Description
                 Record O - 0x1 - Open block
                 Record C - 0xA - Close block
@@ -372,9 +391,9 @@ do -- Log Module Initialisation
             local function readToken()
                 local byte,value = f:ReadByte()
                 if byte == 0x1 then -- Open Record
-                    return 0x1,nil
+                    return 0x1,0x0
                 elseif byte == 0xA then -- Close Record
-                    return 0xA,nil
+                    return 0xA,0x0
                 elseif byte == 0x2 then -- Timestamp
                     return 0x2,f:ReadULong()
                 elseif byte == 0x3 then -- Label
@@ -451,6 +470,16 @@ do -- Log Module Initialisation
             end
         end
 
+        concommand.Add("JAAS_PrintLogTokens", function ()
+            print(os.time())
+            for byte,value in logFunctions.IGetLogToken(os.date("%d-%m-%Y")) do
+                print(byte, value)
+                if istable(value) then
+                    PrintTable(value)
+                end
+            end
+        end)
+
         net.Receive("JAAS_RequestLogClient", function (_, ply)
             net.Start("JAAS_RequestLogClient")
             for byte,value in logFunctions.IGetLogToken(date) do
@@ -485,16 +514,19 @@ do -- Log Module Initialisation
         function logFunctions:Log(type_, t) -- {rank=, player=, entity=, data=, string=}
             if !(self.label and type_ > 0) then return end
             if t.rank then
-                for k,v in ipairs(t.rank) do
-                    if !isstring(v) then
+                for i=1,#t.rank do
+                    if getmetatable(t.rank[i]) == "jaas_rank_object" then
+                        t.rank[i] = t.rank[i]:getName()
+                    end
+                    if !isstring(t.rank[i]) then
                         error("Rank inputs must be strings", 2)
                     end
                 end
             end
             if t.player then
                 for i=1,#t.player do
-                    if IsPlayer(t.player[i]) then
-                        t.player[i] = t.player[i]:SteamID64()
+                    if isentity(t.player[i]) and IsValid(t.player[i]) and t.player[i]:IsPlayer() then
+                        t.player[i] = tonumber(t.player[i]:SteamID64())
                     end
                     if !isnumber(t.player[i]) then
                         error("Player inputs must be player entity or numbers", 2)
@@ -506,7 +538,7 @@ do -- Log Module Initialisation
                     if isentity(t.entity[i]) then
                         t.entity[i] = t.entity[i]:GetName()
                     end
-                    if !isstring(t.entity[i]) do
+                    if !isstring(t.entity[i]) then
                         error("Entity inputs must be strings", 2)
                     end
                 end
@@ -519,17 +551,20 @@ do -- Log Module Initialisation
                 end
             end
             if t.string then
-                for i=1,t.string do
+                for i=1,#t.string do
                     if !isstring(t.string[i]) then
                         t.string[i] = tostring(t.string[i])
                     end
                 end
             end
             local f
-            if file.Exists(os.date("jslogs/%d-%m-%Y.dat"), "DATA") then
-                f = file.Open(os.date("jslogs/%d-%m-%Y.dat"), "ab", "DATA")
+            if file.Exists(os.date("jaas/logs/%d-%m-%Y.dat"), "DATA") then
+                f = file.Open(os.date("jaas/logs/%d-%m-%Y.dat"), "ab", "DATA")
             else
-                f = file.Open(os.date("jslogs/%d-%m-%Y.dat"), "wb", "DATA")
+                if !file.Exists("jaas", "DATA") then
+                    file.CreateDir("jaas/logs")
+                end
+                f = file.Open(os.date("jaas/logs/%d-%m-%Y.dat"), "wb", "DATA")
             end
             f:WriteByte(0x1) -- Open Record
             f:WriteByte(0x2) f:WriteULong(os.time()) -- Timestamp
@@ -621,38 +656,100 @@ do -- Log Module Initialisation
                 f:WriteByte(0x9) -- Close
             end
             f:WriteByte(0xA) -- Close Record
+            f:Close()
         end
 
-        function logFunctions:chat(str) -- [JAAS] - secret_survivor added to Superadmin
-            PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
+        util.AddNetworkString "JAAS_ChatChannel"
+
+        function logFunctions:chatText(ply, str, t)
+            net.Start "JAAS_ChatChannel"
+            net.WriteString("[JAAS] - "..str)
+            net.WriteTable(t)
+            net.Send(ply)
         end
 
-        function logFunctions:adminChat(str)
+        /*
+            %p :: Player
+            %r :: Rank
+            %a :: Action
+            %e :: Entity
+            %d :: Data
+            %s :: String
+        */
+        function logFunctions:chat(str, ...) -- %p added to %r -> [JAAS] - secret_survivor added to Superadmin
+            for k,v in ipairs(player.GetAll()) do
+                logFunctions:chatText(v, str, {...})
+            end
+        end
+
+        function logFunctions:adminChat(str, ...)
             for k,v in ipairs(player.GetAll()) do
                 if v:IsAdmin() then
-                    v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
+                    logFunctions:chatText(v, str, {...})
                 end
             end
         end
 
-        function logFunctions:superadminChat(str)
+        function logFunctions:superadminChat(str, ...)
             for k,v in ipairs(player.GetAll()) do
                 if v:IsSuperAdmin() then
-                    v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..str)
-                end
-            end
-        end
-
-        function logFunctions:adminOrSuperChat(admin, superadmin)
-            for k,v in ipairs(player.GetAll()) do
-                if v:IsAdmin() then
-                    v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..admin)
-                elseif v:IsSuperAdmin() then
-                    v:PrintMessage(HUD_PRINTTALK, "[JAAS] - "..superadmin)
+                    logFunctions:chatText(v, str, {...})
                 end
             end
         end
     else
+        function logFunctions:Log() end -- To avoid Clientside errors
+        function logFunctions:registerLog() end
+
+        net.Receive("JAAS_ChatChannel", function (len, ply)
+            local func = string.gmatch(net.ReadString(), ".")
+            local var_table = net.ReadTable()
+            local char,chat_table,str,index = func(),{Color(137, 222, 255)},"",1
+            while char != nil do
+                if char == "%" then
+                    chat_table[1 + #chat_table] = Color(137, 222, 255) -- Default Text Colour
+                    chat_table[1 + #chat_table] = str
+                    str = ""
+                    char = func()
+                    if char == "p" then -- Player
+                        chat_table[1 + #chat_table] = Color(91, 155, 213)
+                        if LocalPlayer() == var_table[index] then
+                            chat_table[1 + #chat_table] = "You"
+                        else
+                            chat_table[1 + #chat_table] = var_table[index]
+                        end
+                        index = 1 + index
+                    elseif char == "r" then -- Rank
+                        chat_table[1 + #chat_table] = Color(112, 48, 160)
+                        chat_table[1 + #chat_table] = var_table[index]
+                        index = 1 + index
+                    elseif char == "a" then -- Action
+                        chat_table[1 + #chat_table] = Color(192, 0, 0)
+                        chat_table[1 + #chat_table] = var_table[index]
+                        index = 1 + index
+                    elseif char == "e" then -- Entity
+                        chat_table[1 + #chat_table] = Color(255, 217, 102)
+                        chat_table[1 + #chat_table] = var_table[index]
+                        index = 1 + index
+                    elseif char == "d" then -- Data
+                        chat_table[1 + #chat_table] = Color(173, 79, 15)
+                        chat_table[1 + #chat_table] = var_table[index]
+                        index = 1 + index
+                    elseif char == "s" then -- String
+                        chat_table[1 + #chat_table] = Color(173, 79, 15)
+                        chat_table[1 + #chat_table] = "“"..var_table[index].."”"
+                        index = 1 + index
+                    elseif char == "%" then
+                        str = str .. char
+                    end
+                else
+                    str = str .. char
+                end
+                char = func()
+            end
+            chat.AddText(unpack(chat_table))
+        end)
+
         local logs = {}
 
         local function ILog(date, func)
@@ -738,7 +835,7 @@ do -- Log Module Initialisation
                     self:InsertColorChange(237, 125, 49, 255)
                     self:AppendText(os.date("[%H:%M]", t.timestamp))
                     self:InsertColorChange(112, 173, 71, 255)
-                    self:AppendText(t.label.." ")
+                    self:AppendText("["..t.label.."] ")
                     local p,r,d,to,s = 1,1,1,1,1
                     local func = t.type
                     local _,v = func()
@@ -753,7 +850,7 @@ do -- Log Module Initialisation
                                 end
                             elseif v == 2 then -- Rank
                                 self:InsertColorChange(112, 48, 160, 255)
-                                self:AppendText("["..t.rank[r].."] ")
+                                self:AppendText(t.rank[r].." ")
                                 r = 1 + r
                             elseif v == 3 then -- Entity
                                 self:InsertColorChange(255, 217, 102, 255)
@@ -771,6 +868,14 @@ do -- Log Module Initialisation
                                 _,v = func()
                                 self:InsertColorChange(192, 0, 0, 255)
                                 self:AppendText(v.." ")
+                            elseif v == 7 then -- Var String
+                                self:InsertColorChange(173, 79, 15, 255)
+                                for i=s,#t.string-1 do
+                                    self:AppendText("“"..t.string[s].."”, ")
+                                    s = 1 + s
+                                end
+                                self:AppendText("“"..t.string[s].."” ")
+                                s = 1 + s
                             end
                         else
                             self:InsertColorChange(0, 0, 0, 255)
@@ -787,16 +892,24 @@ do -- Log Module Initialisation
                 ILog(self:GetDate(), function (iterator)
                     for t,v in iterator() do
                         if t == 0x3 then -- Label
-                            self:AppendModule(v)
+                            if !table.HasValue(self:GetModule(), v) then
+                                self:AppendModule(v)
+                            end
                         elseif t == 0x4 then -- Type
-                            self:AppendAction(v)
+                            if !table.HasValue(self:GetAction(), v) then
+                                self:AppendAction(v)
+                            end
                         elseif t == 0x5 then -- Rank
                             for k,v in ipairs(v) do
-                                self:AppendRank(v)
+                                if !table.HasValue(self:GetRank(), v) then
+                                    self:AppendRank(v)
+                                end
                             end
                         elseif t == 0x6 then -- Player
                             for k,v in ipairs(v) do
-                                self:AppendPlayer(player.GetBySteamID64(v))
+                                if !table.HasValue(self:GetPlayer(), v) then
+                                    self:AppendPlayer(v)
+                                end
                             end
                         end
                     end
@@ -823,6 +936,9 @@ do -- Log Module Initialisation
                         elseif t == 0x2 then -- Timestamp
                             record.timestamp = v
                         elseif t == 0x3 then -- Label
+                            if string.Left(v, 2) == "__" then
+                                filtered = false
+                            end
                             if !filtered then
                                 filtered = self:GetFilter().module == v
                             end
@@ -885,6 +1001,12 @@ do -- Log Module Initialisation
                 end)
             end
         end}
+
+        hook.Add("ChatText", "JAAS_ChatText", function (index, name, text, type) -- I've just had to stick this anywhere clientside sadly
+            if type == "joinleave" and type == "teamchange" then
+                return true
+            end
+        end)
     end
 
     local executionTrace = executionTrace or {} -- [label][id] = {file path, line}
