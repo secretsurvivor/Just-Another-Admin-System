@@ -283,16 +283,6 @@ do -- Developer Module Initialisation
 
     local f = FindMetaTable "File"
 
-    function f:ReadU64Int()
-        return self:ReadULong() + bit.lshift(self:ReadULong(), 32)
-    end
-
-    function f:WriteU64Int(v)
-        local hex = bit.tohex(v)
-        self:WriteULong(v)
-        self:WriteULong(bit.rshift(v, 31))
-    end
-
     function f:WriteString(str)
         for c in gmatch(str, ".") do
             self:WriteByte(string.byte(c))
@@ -307,33 +297,6 @@ do -- Developer Module Initialisation
             byte = self:ReadByte()
         end
         return str
-    end
-
-    function f:Read64Int()
-        return self:ReadLong() + bit.lshift(self:ReadLong(), 32)
-    end
-
-    function f:Write64Int(v)
-        self:WriteLong(bit.band(v, 0xFFFF))
-        self:WriteLong(bit.rshift(v, 32))
-    end
-
-    function net.ReadLong() -- Actual length of Long; 64 bits (8 bytes)
-        return net.ReadInt(32) + bit.lshift(net.ReadInt(32), 32)
-    end
-
-    function net.WriteLong(v)
-        net.WriteInt(bit.band(v, 0xFFFF), 32)
-        net.WriteInt(bit.rshift(v, 32), 32)
-    end
-
-    function net.ReadULong()
-        return net.ReadUInt(32) + bit.lshift(net.ReadUInt(32), 32)
-    end
-
-    function net.WriteULong(v)
-        net.WriteUInt(bit.band(v, 0xFFFF), 32)
-        net.WriteUInt(bit.rshift(v, 32), 32)
     end
 
     dev = class(devFunctions, "jaas_developer_library")
@@ -358,7 +321,6 @@ do -- Log Module Initialisation
                 Data - 4
                 String - 5
                 Action - 6, action
-                Var String - 7
             */
             if registeredLogs[self.label] then
                 registeredLogs[self.label][1 + #registeredLogs[self.label]] = t
@@ -369,7 +331,8 @@ do -- Log Module Initialisation
         end
 
         function logFunctions.IGetLogToken(date) -- 05-09-1999
-            if istable(date) then
+            if isstring(date) then
+            elseif istable(date) then
                 date = date.day.."-"..date.month.."-"..date.year
             elseif isnumber(date) then -- Unix Epoch
                 date = ox.date("%d-%m-%Y", date)
@@ -381,19 +344,18 @@ do -- Log Module Initialisation
                 Timestamp O - 0x2 - Unix epoch ULong
                 Label O - 0x3 - String
                     Type O - 0x4 - UShort > 0
-                Rank* O/C - 0x5 - String
-                Player* O/C - 0x6 - ULong ULong (SteamID64)
-                Entity* O/C - 0x7 - String
-                Data* O/C - 0x8 - Float
-                String* O/C - 0x9 - String
-                Seperator - 0x0
+                Rank* O - 0x5 - String
+                Player* O - 0x6 - ULong ULong (SteamID64)
+                Entity* O - 0x7 - String
+                Data* O - 0x8 - Float
+                String* O - 0x9 - String
             */
             local function readToken()
-                local byte,value = f:ReadByte()
+                local byte,value,length = f:ReadByte()
                 if byte == 0x1 then -- Open Record
-                    return 0x1,0x0
+                    return 0x1,"Record Open"
                 elseif byte == 0xA then -- Close Record
-                    return 0xA,0x0
+                    return 0xA,"Record Close"
                 elseif byte == 0x2 then -- Timestamp
                     return 0x2,f:ReadULong()
                 elseif byte == 0x3 then -- Label
@@ -401,64 +363,33 @@ do -- Log Module Initialisation
                 elseif byte == 0x4 then -- Type
                     return 0x4,f:ReadUShort()
                 elseif byte == 0x5 then -- Rank
-                    byte,value = f:ReadByte(),{}
-                    while byte != 0x5 do
-                        if byte == 0x0 then
-                            value[1 + #value] = ""
-                        else
-                            value[#value] = f:ReadString()
-                        end
-                        byte = f:ReadByte()
+                    length,value = f:ReadByte(),{}
+                    for i=1,length do
+                        value[1 + #value] = f:ReadString()
                     end
                     return 0x5,value
                 elseif byte == 0x6 then -- Player
-                    byte,value = f:ReadByte(),{}
-                    while byte != 0x6 do
-                        if byte == 0x0 then
-                            if !istable(value) then
-                                value = {value}
-                            end
-                        end
-                        value[1 + #value] = f:Read64Int()
-                        byte = f:ReadByte()
+                    length,value = f:ReadByte(),{}
+                    for i=1,length do
+                        value[1 + #value] = f:ReadString()
                     end
                     return 0x6,value
                 elseif byte == 0x7 then -- Entity
-                    byte,value = f:ReadByte(),{}
-                    while byte != 0x7 do
-                        if byte == 0x0 then
-                            value[1 + #value] = ""
-                        else
-                            value[#value] = f:ReadString()
-                        end
-                        byte = f:ReadByte()
+                    length,value = f:ReadByte(),{}
+                    for i=1,length do
+                        value[1 + #value] = f:ReadString()
                     end
                     return 0x7,value
                 elseif byte == 0x8 then -- Data
-                    byte,value = f:ReadByte(),{}
-                    while byte != 0x8 do
-                        if byte == 0x0 then
-                            if !istable(value) then
-                                value = {value}
-                            end
-                        end
-                        if istable(value) then
-                            value[1 + #value] = f:ReadFloat()
-                        else
-                            value = f:ReadFloat()
-                        end
-                        byte = f:ReadByte()
+                    length,value = f:ReadByte(),{}
+                    for i=1,length do
+                        value[1 + #value] = f:ReadFloat()
                     end
                     return 0x8,value
                 elseif byte == 0x9 then -- String
-                    byte,value = f:ReadByte(),{}
-                    while byte != 0x9 do
-                        if byte == 0x0 then
-                            value[1 + #value] = ""
-                        else
-                            value[#value] = f:ReadString()
-                        end
-                        byte = f:ReadByte()
+                    length,value = f:ReadByte(),{}
+                    for i=1,length do
+                        value[1 + #value] = f:ReadString()
                     end
                     return 0x9,value
                 elseif f:EndOfFile() then -- End of File
@@ -475,41 +406,114 @@ do -- Log Module Initialisation
             for byte,value in logFunctions.IGetLogToken(os.date("%d-%m-%Y")) do
                 print(byte, value)
                 if istable(value) then
+
                     PrintTable(value)
                 end
             end
         end)
 
-        net.Receive("JAAS_RequestLogClient", function (_, ply)
-            net.Start("JAAS_RequestLogClient")
-            for byte,value in logFunctions.IGetLogToken(date) do
-                net.WriteUInt(byte, 8)
-                if byte == 0x1 or byte == 0xA then
-                elseif byte == 0x2 then
-                    net.WriteUInt(value, 32)
-                elseif byte == 0x3 then
-                    net.WriteString(value)
-                elseif byte == 0x4 then
-                    net.WriteUInt(value, 16)
-                elseif byte == 0x5 or byte == 0x7 or byte == 0x9 then
-                    net.WriteUInt(#value, 8)
-                    for k,v in ipairs(value) do
+        util.AddNetworkString "JAAS_RequestLogClient"
+        util.AddNetworkString "JAAS_RequestLogDates"
+        local function echoToClient()
+            print "Before Handle"
+        end
+
+        delayedHandles.log.server = {function (jaas)
+            local permission = jaas.Permission()
+            local logAccess = permission.registerPermission("Can Access Logs", "Player will be able to access all server logs")
+            net.Receive("JAAS_RequestLogClient", function (date, ply)
+                if logAccess:codeCheck(ply:getJAASCode()) then
+                    date = net.ReadString()
+                    if file.Exists("jaas/logs/"..date..".dat", "DATA") then
+                        net.Start("JAAS_RequestLogClient")
+                        for byte,value in logFunctions.IGetLogToken(date) do
+                            net.WriteUInt(byte, 8)
+                            if byte == 0x1 or byte == 0xA then
+                            elseif byte == 0x2 then
+                                net.WriteUInt(value, 32)
+                            elseif byte == 0x3 then
+                                net.WriteString(value)
+                            elseif byte == 0x4 then
+                                net.WriteUInt(value, 16)
+                            elseif byte == 0x5 or byte == 0x7 or byte == 0x9 then
+                                net.WriteUInt(#value, 8)
+                                for k,v in ipairs(value) do
+                                    net.WriteString(v)
+                                end
+                            elseif byte == 0x6 then
+                                net.WriteUInt(#value, 8)
+                                for k,v in ipairs(value) do
+                                    net.WriteString(v)
+                                end
+                            elseif byte == 0x8 then
+                                net.WriteUInt(#value, 8)
+                                for k,v in ipairs(value) do
+                                    net.WriteFloat(v)
+                                end
+                            end
+                        end
+                        net.Send(ply)
+                    end
+                end
+            end)
+
+            net.Receive("JAAS_RequestLogDates", function (_, ply)
+                if logAccess:codeCheck(ply:getJAASCode()) then
+                    net.Start "JAAS_RequestLogDates"
+                    for k,v in ipairs(file.Find("jaas/logs/*.dat", "DATA")) do
                         net.WriteString(v)
                     end
-                elseif byte == 0x6 then
-                    net.WriteUInt(#value, 8)
-                    for k,v in ipairs(value) do
-                        net.WriteULong(v)
+                    net.WriteString ""
+                    net.Send(ply)
+                end
+            end)
+
+            local echoLogs = permission.registerPermission("Echo Logs To Console", "Player will have server logs echoed to their console")
+            echoToClient = function (type_, t)
+                local func,iTable,i = ipairs(type_)
+                local str,table_ = "",{}
+                local player_count, rank_count, entity_count, data_count, string_count = 1,1,1,1,1
+                local _,v = func(iTable,i)
+                while v != nil do
+                    if isnumber(v) then
+                        if v == 1 then
+                            str = str.."%p "
+                            table_[1 + #table_] = t.player[player_count]
+                            player_count = 1 + player_count
+                        elseif v == 2 then
+                            str = str.."%r "
+                            table_[1 + #table_] = t.rank[rank_count]
+                            rank_count = 1 + rank_count
+                        elseif v == 3 then
+                            str = str.."%e "
+                            table_[1 + #table_] = t.entity[entity_count]
+                            entity_count = 1 + entity_count
+                        elseif v == 4 then
+                            str = str.."%d "
+                            table_[1 + #table_] = t.data[data_count]
+                            data_count = 1 + data_count
+                        elseif v == 5 then
+                            str = str.."%s "
+                            table_[1 + #table_] = t.string[string_count]
+                            string_count = 1 + string_count
+                        elseif v == 6 then
+                            _,v = func(iTable,_)
+                            str = str.."%a "
+                            table_[1 + #table_] = v
+                        end
+                    else
+                        str = str..v.." "
                     end
-                elseif byte == 0x8 then
-                    net.WriteUInt(#value, 8)
-                    for k,v in ipairs(value) do
-                        net.WriteFloat(v)
+                    _,v = func(iTable, _)
+                end
+                for k,v in ipairs(player.GetAll()) do
+                    print(v, echoLogs:codeCheck(v:getJAASCode()))
+                    if echoLogs:codeCheck(v:getJAASCode()) then
+                        logFunctions.printText({label = "Log"}, v, str, table_)
                     end
                 end
             end
-            net.Send(ply)
-        end)
+        end}
 
         function logFunctions:Log(type_, t) -- {rank=, player=, entity=, data=, string=}
             if !(self.label and type_ > 0) then return end
@@ -526,9 +530,9 @@ do -- Log Module Initialisation
             if t.player then
                 for i=1,#t.player do
                     if isentity(t.player[i]) and IsValid(t.player[i]) and t.player[i]:IsPlayer() then
-                        t.player[i] = tonumber(t.player[i]:SteamID64())
+                        t.player[i] = t.player[i]:SteamID64()
                     end
-                    if !isnumber(t.player[i]) then
+                    if !isstring(t.player[i]) then
                         error("Player inputs must be player entity or numbers", 2)
                     end
                 end
@@ -571,99 +575,58 @@ do -- Log Module Initialisation
             f:WriteByte(0x3) f:WriteString(self.label) -- Label
             f:WriteByte(0x4) f:WriteUShort(type_) -- Type
             if t.rank then
-                f:WriteByte(0x5) -- Open
-                    if istable(t.rank) then
-                        if #t.rank > 1 then
-                            for i=1,#t.rank - 1 do
-                                f:WriteString(t.rank[i])
-                                f:WriteByte(0x0)
-                            end
-                            f:WriteString(t.rank[#t.rank])
-                        else
-                            f:WriteString(t.rank[1])
-                        end
-                    else
-                        f:WriteString(t.rank)
-                    end
-                f:WriteByte(0x5) -- Close
+                f:WriteByte(0x5)
+                f:WriteByte(#t.rank)
+                for k,v in ipairs(t.rank) do
+                    f:WriteString(v)
+                end
             end
             if t.player then
-                f:WriteByte(0x6) -- Open
-                    if istable(t.player) then
-                        if #t.player > 1 then
-                            for i=1,#t.player - 1 do
-                                f:WriteU64Int(t.player[i])
-                                f:WriteByte(0x0)
-                            end
-                            f:WriteU64Int(t.player[#t.player])
-                        else
-                            f:WriteU64Int(t.player[1])
-                        end
-                    else
-                        f:WriteU64Int(t.player)
-                    end
-                f:WriteByte(0x6) -- Close
+                f:WriteByte(0x6)
+                f:WriteByte(#t.player)
+                for k,v in ipairs(t.player) do
+                    f:WriteString(v)
+                end
             end
             if t.entity then
-                f:WriteByte(0x7) -- Open
-                    if istable(t.entity) then
-                        if #t.entity > 1 then
-                            for i=1,#t.entity - 1 do
-                                f:WriteString(t.entity[i])
-                                f:WriteByte(0x0)
-                            end
-                            f:WriteString(t.entity[#t.entity])
-                        else
-                            f:WriteString(t.entity[1])
-                        end
-                    else
-                        f:WriteString(t.entity)
-                    end
-                f:WriteByte(0x7) -- Close
+                f:WriteByte(0x7)
+                f:WriteByte(#t.entity)
+                for k,v in ipairs(t.entity) do
+                    f:WriteString(v)
+                end
             end
             if t.data then
-                f:WriteByte(0x8) -- Open
-                    if istable(t.data) then
-                        if #t.data > 1 then
-                            for i=1,#t.data - 1 do
-                                f:WriteFloat(t.data[i])
-                                f:WriteByte(0x0)
-                            end
-                            f:WriteFloat(t.data[#t.data])
-                        else
-                            f:WriteFloat(t.data[1])
-                        end
-                    else
-                        f:WriteFloat(t.data)
-                    end
-                f:WriteByte(0x8) -- Close
+                f:WriteByte(0x8)
+                f:WriteByte(#t.data)
+                for k,v in ipairs(t.data) do
+                    f:WriteFloat(v)
+                end
             end
             if t.string then
                 f:WriteByte(0x9) -- Open
-                    if istable(t.string) then
-                        if #t.string > 1 then
-                            for i=1,#t.string - 1 do
-                                f:WriteString(t.string[i])
-                                f:WriteByte(0x0)
-                            end
-                            f:WriteString(t.string[#t.string])
-                        else
-                            f:WriteString(t.string[1])
-                        end
-                    else
-                        f:WriteString(t.string)
-                    end
-                f:WriteByte(0x9) -- Close
+                f:WriteByte(#t.string)
+                for k,v in ipairs(t.string) do
+                    f:WriteString(v)
+                end
             end
             f:WriteByte(0xA) -- Close Record
             f:Close()
+            echoToClient(registeredLogs[self.label][type_], t)
         end
 
         util.AddNetworkString "JAAS_ChatChannel"
+        util.AddNetworkString "JAAS_PrintChannel"
 
         function logFunctions:chatText(ply, str, t)
             net.Start "JAAS_ChatChannel"
             net.WriteString("[JAAS] - "..str)
+            net.WriteTable(t)
+            net.Send(ply)
+        end
+
+        function logFunctions:printText(ply, str, t)
+            net.Start "JAAS_PrintChannel"
+            net.WriteString("[JAAS::"..self.label.."]"..str)
             net.WriteTable(t)
             net.Send(ply)
         end
@@ -697,47 +660,97 @@ do -- Log Module Initialisation
                 end
             end
         end
+
+        function logFunctions:printAll(str, ...)
+            for k,v in ipairs(player.GetAll()) do
+                logFunctions:printText(v, str, {...})
+            end
+        end
+
+        function logFunctions:printAdmin(str, ...)
+            for k,v in ipairs(player.GetAll()) do
+                if v:IsAdmin() then
+                    logFunctions:printText(v, str, {...})
+                end
+            end
+        end
+
+        function logFunctions:printSuperadmin(str, ...)
+            for k,v in ipairs(player.GetAll()) do
+                if v:IsSuperAdmin() then
+                    logFunctions:printText(v, str, {...})
+                end
+            end
+        end
     else
         function logFunctions:Log() end -- To avoid Clientside errors
         function logFunctions:registerLog() end
 
-        net.Receive("JAAS_ChatChannel", function (len, ply)
-            local func = string.gmatch(net.ReadString(), ".")
-            local var_table = net.ReadTable()
-            local char,chat_table,str,index = func(),{Color(137, 222, 255)},"",1
+        local dates -- Tables of Strings
+        function logFunctions:getLogDates(func)
+            net.Start "JAAS_RequestLogDates"
+            net.SendToServer()
+            dates = "checked"
+            while dates == "checked" do end -- Wait for response
+            return dates -- Return response
+        end
+
+        net.Receive("JAAS_RequestLogDates", function (len, ply)
+            if len > 0 then
+                local t = {}
+                len = net.ReadString() -- Why waste a perfectly good memory address
+                while len != "" do
+                    t[1 + #t] = len
+                    len = net.ReadString()
+                end
+                dates = t
+            else -- Client does not have access to dates
+                dates = nil
+            end
+        end)
+
+        local function colourParser(str, var_table)
+            local func = string.gmatch(str, ".")
+            local char,text_table,str,index = func(),{Color(137, 222, 255)},"",1
             while char != nil do
                 if char == "%" then
-                    chat_table[1 + #chat_table] = Color(137, 222, 255) -- Default Text Colour
-                    chat_table[1 + #chat_table] = str
+                    text_table[1 + #text_table] = Color(137, 222, 255) -- Default Text Colour
+                    text_table[1 + #text_table] = str
                     str = ""
                     char = func()
                     if char == "p" then -- Player
-                        chat_table[1 + #chat_table] = Color(91, 155, 213)
-                        if LocalPlayer() == var_table[index] then
-                            chat_table[1 + #chat_table] = "You"
+                        text_table[1 + #text_table] = Color(91, 155, 213)
+                        local v = player.GetBySteamID64(var_table[index])
+                        print(v)
+                        if v and IsValid(v) then
+                            if LocalPlayer() == v then
+                                text_table[1 + #text_table] = "You"
+                            else
+                                text_table[1 + #text_table] = v:Nick()
+                            end
                         else
-                            chat_table[1 + #chat_table] = var_table[index]
+                            text_table[1 + #text_table] = var_table[index]
                         end
                         index = 1 + index
                     elseif char == "r" then -- Rank
-                        chat_table[1 + #chat_table] = Color(112, 48, 160)
-                        chat_table[1 + #chat_table] = var_table[index]
+                        text_table[1 + #text_table] = Color(112, 48, 160)
+                        text_table[1 + #text_table] = var_table[index]
                         index = 1 + index
                     elseif char == "a" then -- Action
-                        chat_table[1 + #chat_table] = Color(192, 0, 0)
-                        chat_table[1 + #chat_table] = var_table[index]
+                        text_table[1 + #text_table] = Color(192, 0, 0)
+                        text_table[1 + #text_table] = var_table[index]
                         index = 1 + index
                     elseif char == "e" then -- Entity
-                        chat_table[1 + #chat_table] = Color(255, 217, 102)
-                        chat_table[1 + #chat_table] = var_table[index]
+                        text_table[1 + #text_table] = Color(255, 217, 102)
+                        text_table[1 + #text_table] = var_table[index]
                         index = 1 + index
                     elseif char == "d" then -- Data
-                        chat_table[1 + #chat_table] = Color(173, 79, 15)
-                        chat_table[1 + #chat_table] = var_table[index]
+                        text_table[1 + #text_table] = Color(173, 79, 15)
+                        text_table[1 + #text_table] = var_table[index]
                         index = 1 + index
                     elseif char == "s" then -- String
-                        chat_table[1 + #chat_table] = Color(173, 79, 15)
-                        chat_table[1 + #chat_table] = "“"..var_table[index].."”"
+                        text_table[1 + #text_table] = Color(173, 79, 15)
+                        text_table[1 + #text_table] = "“"..var_table[index].."”"
                         index = 1 + index
                     elseif char == "%" then
                         str = str .. char
@@ -747,35 +760,35 @@ do -- Log Module Initialisation
                 end
                 char = func()
             end
-            chat.AddText(unpack(chat_table))
+            return text_table
+        end
+
+        net.Receive("JAAS_ChatChannel", function (len, ply)
+            chat.AddText(unpack(colourParser(net.ReadString(), net.ReadTable())))
+        end)
+
+        net.Receive("JAAS_PrintChannel", function (len, ply)
+            MsgC(unpack(table.Add(colourParser(net.ReadString(), net.ReadTable()), {"\n"}) ))
         end)
 
         local logs = {}
 
-        local function ILog(date, func)
-            if logs[date] then
-                func(function ()
-                    local i,x = 1
-                    return function ()
-                        x = logs[date][i]
-                        if x then
-                            i = 1 + i
-                            return x[1],x[2]
-                        end
-                    end
-                end)
-            else
-                net.Start("JAAS_RequestLogClient") net.SendToServer()
-                logs[date] = func
+        function logFunctions.ILog(date)
+            if !logs[date] then
+                net.Start("JAAS_RequestLogClient")
+                net.WriteString(date)
+                net.SendToServer()
+                while logs[date] == nil do end
+            end
+            local i = 1
+            return function ()
+                return logs[date][i][1],logs[date][i][2]
             end
         end
 
         net.Receive("JAAS_RequestLogClient", function ()
-            local date,func = net.ReadString()
-            if logs[date] and isfunction(logs[date]) then
-                func = logs[date]
-            end
-            logs[date] = {}
+            local date = net.ReadString()
+            local t = {}
             local byte,value,length
             while net.BytesLeft() > 0 do
                 byte = net.ReadInt(8)
@@ -797,7 +810,7 @@ do -- Log Module Initialisation
                     length = net.ReadUInt(8)
                     value = {}
                     for i=1,length do
-                        value[i] = net.ReadULong()
+                        value[i] = net.ReadString()
                     end
                 elseif byte == 0x8 then
                     length = net.ReadUInt(8)
@@ -806,11 +819,9 @@ do -- Log Module Initialisation
                         value[i] = net.ReadFloat()
                     end
                 end
-                logs[date][1 + #logs[date]] = {byte,value}
+                t[1 + #t] = {byte,value}
             end
-            if func then
-                ILog(date, func)
-            end
+            logs[date] = t
         end)
 
         delayedHandles.log.client = {function (jaas)
@@ -868,14 +879,6 @@ do -- Log Module Initialisation
                                 _,v = func()
                                 self:InsertColorChange(192, 0, 0, 255)
                                 self:AppendText(v.." ")
-                            elseif v == 7 then -- Var String
-                                self:InsertColorChange(173, 79, 15, 255)
-                                for i=s,#t.string-1 do
-                                    self:AppendText("“"..t.string[s].."”, ")
-                                    s = 1 + s
-                                end
-                                self:AppendText("“"..t.string[s].."” ")
-                                s = 1 + s
                             end
                         else
                             self:InsertColorChange(0, 0, 0, 255)
@@ -889,32 +892,30 @@ do -- Log Module Initialisation
 
             function CONTROL:SetDate(date)
                 self.___Date = date
-                ILog(self:GetDate(), function (iterator)
-                    for t,v in iterator() do
-                        if t == 0x3 then -- Label
-                            if !table.HasValue(self:GetModule(), v) then
-                                self:AppendModule(v)
+                for t,v in logFunctions.ILog(self:GetDate()) do
+                    if t == 0x3 then -- Label
+                        if !table.HasValue(self:GetModule(), v) then
+                            self:AppendModule(v)
+                        end
+                    elseif t == 0x4 then -- Type
+                        if !table.HasValue(self:GetAction(), v) then
+                            self:AppendAction(v)
+                        end
+                    elseif t == 0x5 then -- Rank
+                        for k,v in ipairs(v) do
+                            if !table.HasValue(self:GetRank(), v) then
+                                self:AppendRank(v)
                             end
-                        elseif t == 0x4 then -- Type
-                            if !table.HasValue(self:GetAction(), v) then
-                                self:AppendAction(v)
-                            end
-                        elseif t == 0x5 then -- Rank
-                            for k,v in ipairs(v) do
-                                if !table.HasValue(self:GetRank(), v) then
-                                    self:AppendRank(v)
-                                end
-                            end
-                        elseif t == 0x6 then -- Player
-                            for k,v in ipairs(v) do
-                                if !table.HasValue(self:GetPlayer(), v) then
-                                    self:AppendPlayer(v)
-                                end
+                        end
+                    elseif t == 0x6 then -- Player
+                        for k,v in ipairs(v) do
+                            v = player.GetBySteamID64(v)
+                            if IsValid(v) and !table.HasValue(self:GetPlayer(), v:Nick()) then
+                                self:AppendPlayer(v:Nick())
                             end
                         end
                     end
-                end)
-
+                end
             end
 
             function CONTROL:SetFilter(type, v)
@@ -925,84 +926,82 @@ do -- Log Module Initialisation
 
             function CONTROL:Display()
                 local record,filtered = {},#self:GetFilter() == 0
-                ILog(self:GetDate(), function (iterator)
-                    for t,v in ILog(self:GetDate()) do
-                        if t == 0x1 then -- Open Record
-                            record = {}
-                        elseif t == 0xA then -- Close Record
-                            if filtered then
-                                self:AddLog(record)
-                            end
-                        elseif t == 0x2 then -- Timestamp
-                            record.timestamp = v
-                        elseif t == 0x3 then -- Label
-                            if string.Left(v, 2) == "__" then
-                                filtered = false
-                            end
-                            if !filtered then
-                                filtered = self:GetFilter().module == v
-                            end
-                            record.label = v
-                        elseif t == 0x4 and record.label then -- Type
-                            if v < 1 then
-                                v = 1
-                            end
-                            if !filtered then
-                                local func = ipairs(registeredLogs[record.label][v])
-                                local _,i = func()
-                                while i != nil do
-                                    if i == 6 then
-                                        _,i = func()
-                                        if i == self:GetFilter().action then
-                                            filtered = true
-                                            break
-                                        end
-                                    end
-                                    _,i = func()
-                                end
-                            end
-                            record.type = registeredLogs[record.label][v]
-                        elseif t == 0x5 then -- Rank
-                            if !filtered then
-                                if istable(v) then
-                                    for k,v in ipairs(v) do
-                                        if self:GetFilter().rank == v then
-                                            filtered = true
-                                            break
-                                        end
-                                    end
-                                else
-                                    filtered = self:GetFilter().rank == v
-                                end
-                            end
-                            record.rank = v
-                        elseif t == 0x6 then -- Player
-                            if !filtered then
-                                if istable(v) then
-                                    for k,v in ipairs(v) do
-                                        if self:GetFilter().player == v then
-                                            filtered = true
-                                            break
-                                        end
-                                    end
-                                else
-                                    filtered = self:GetFilter().player == v
-                                end
-                            end
-                            record.player = v
-                        elseif t == 0x7 then -- Entity
-                            record.entity = v
-                        elseif t == 0x8 then -- Data
-                            record.data = v
-                        elseif t == 0x9 then -- String
-                            record.string = v
+                for t,v in logFunctions.ILog(self:GetDate()) do
+                    if t == 0x1 then -- Open Record
+                        record = {}
+                    elseif t == 0xA then -- Close Record
+                        if filtered then
+                            self:AddLog(record)
                         end
+                    elseif t == 0x2 then -- Timestamp
+                        record.timestamp = v
+                    elseif t == 0x3 then -- Label
+                        if string.Left(v, 2) == "__" then
+                            filtered = false
+                        end
+                        if !filtered then
+                            filtered = self:GetFilter().module == v
+                        end
+                        record.label = v
+                    elseif t == 0x4 and record.label then -- Type
+                        if v < 1 then
+                            v = 1
+                        end
+                        if !filtered then
+                            local func = ipairs(registeredLogs[record.label][v])
+                            local _,i = func()
+                            while i != nil do
+                                if i == 6 then
+                                    _,i = func()
+                                    if i == self:GetFilter().action then
+                                        filtered = true
+                                        break
+                                    end
+                                end
+                                _,i = func()
+                            end
+                        end
+                        record.type = registeredLogs[record.label][v]
+                    elseif t == 0x5 then -- Rank
+                        if !filtered then
+                            if istable(v) then
+                                for k,v in ipairs(v) do
+                                    if self:GetFilter().rank == v then
+                                        filtered = true
+                                        break
+                                    end
+                                end
+                            else
+                                filtered = self:GetFilter().rank == v
+                            end
+                        end
+                        record.rank = v
+                    elseif t == 0x6 then -- Player
+                        if !filtered then
+                            if istable(v) then
+                                for k,v in ipairs(v) do
+                                    if self:GetFilter().player == v then
+                                        filtered = true
+                                        break
+                                    end
+                                end
+                            else
+                                filtered = self:GetFilter().player == v
+                            end
+                        end
+                        record.player = v
+                    elseif t == 0x7 then -- Entity
+                        record.entity = v
+                    elseif t == 0x8 then -- Data
+                        record.data = v
+                    elseif t == 0x9 then -- String
+                        record.string = v
                     end
-                end)
+                end
             end
         end}
 
-        hook.Add("ChatText", "JAAS_ChatText", function (index, name, text, type) -- I've just had to stick this anywhere clientside sadly
+        hook.Add("ChatText", "JAAS_ChatText", function (index, name, text, type) -- Override Connect/Disconnect and Team Change messages
             if type == "joinleave" and type == "teamchange" then
                 return true
             end
@@ -1109,53 +1108,54 @@ do
             return r
         end
     end
+    local q_str, first_str = "", true
     local function table_to_str(t)
-        local q, first = "", true
+        q_str, first_str = "", true
         for k,v in pairs(t) do
             if isnumber(v) then
-                if first then
-                    q = q .. k .. "=" .. v
-                    first = false
+                if first_str then
+                    q_str = q_str .. k .. "=" .. v
+                    first_str = false
                 else
-                    q = q .. "," .. k .. "=" .. v
+                    q_str = q_str .. "," .. k .. "=" .. v
                 end
             elseif isstring(v) then
-                if first then
-                    q = q .. k .. "=" .. "'" .. v .. "'"
-                    first = false
+                if first_str then
+                    q_str = q_str .. k .. "=" .. "'" .. v .. "'"
+                    first_str = false
                 else
-                    q = q .. "," .. k .. "=" .. "'" .. v .. "'"
+                    q_str = q_str .. "," .. k .. "=" .. "'" .. v .. "'"
                 end
             end
         end
-        return q
+        return q_str
     end
+    local q_where, first_where = "", true
     local function table_to_WHERE(t)
-        local q, first = "", true
+        q_where, first_where = "", true
         for k,v in pairs(t) do
             if isnumber(v) then
-                if first then
-                    q = q .. k .. "=" .. v
-                    first = false
+                if first_where then
+                    q_where = q_where .. k .. "=" .. v
+                    first_where = false
                 else
-                    q = q .. " AND " .. k .. "=" .. v
+                    q_where = q_where .. " AND " .. k .. "=" .. v
                 end
             elseif isstring(v) then
-                if first then
-                    q = q .. k .. "=" .. "'" .. v .. "'"
-                    first = false
+                if first_where then
+                    q_where = q_where .. k .. "=" .. "'" .. v .. "'"
+                    first_where = false
                 else
-                    q = q .. " AND " .. k .. "=" .. "'" .. v .. "'"
+                    q_where = q_where .. " AND " .. k .. "=" .. "'" .. v .. "'"
                 end
             end
         end
-        return q
+        return q_where
     end
     local function isstring(v) return v and isS(v) end
     local function istable(v) return v and isT(v) end
     SQL = function (sql_table)
         return setmetatable({
-            EXISTS = JAAS.Var.MySQLServer and QUERY("select * from information_schema.tables where table_name='".. sql_table .."'") or sql.TableExists(table),
             CREATE = setmetatable({
                 TABLE = function (columns)
                     if isstring(columns) then
@@ -1274,41 +1274,14 @@ do
             ESCAPE = sql.SQLStr
         }, {__call = function (self, str)
             return QUERY(str)
-        end, __metatable = "jaas_sql_interface"})
+        end, __metatable = "jaas_sql_interface", __index = function (self, k)
+            if k == "EXISTS" then
+                return JAAS.Var.MySQLServer and QUERY("select * from information_schema.tables where table_name='".. sql_table .."'") or sql.TableExists(sql_table)
+            else
+                return rawget(self, k)
+            end
+        end})
     end
-
-    /*   TEST 1
-        Module SQL:     0.0030246275247499
-        fQuery SQL:     0.0038082836274652
-        Module SQL is   0.0007836561027153 seconds faster and 22.9% faster
-         TEST 2
-        Module SQL:     0.0038284250674659
-        fQuery SQL:     0.0041772511323763
-        Module SQL is   0.00034882606491038 seconds faster and 8.7% faster
-         TEST 3
-        Module SQL:     0.0044253088625228
-        fQuery SQL:     0.0038262876559714
-        fQuery SQL is   0.00059902120655145 seconds faster and 14.5% faster
-         TEST 4
-        Module SQL:     0.0032171184375652
-        fQuery SQL:     0.003427164767123
-        Module SQL is   0.00021004632955776 seconds faster and 6.3% faster
-         TEST 5
-        Module SQL:     0.0032568432510215
-        fQuery SQL:     0.0030948519395239
-        fQuery SQL is   0.0001619913114976 seconds faster and 5.1% faster
-         TEST 6
-        Module SQL:     0.0034483948663395
-        fQuery SQL:     0.0033343231579222
-        fQuery SQL is   0.00011407170841739 seconds faster and 3.3% faster
-
-        So in some cases Module's SQL has been shown to be
-        faster but I would overall say that fQuery is the faster
-        function sadly but I would say the syntax of the
-        Module's SQL is much more useful and easier to use.
-        I will have to look into techniques to make the Module
-        SQL faster. Module SQL is -14.5% to 22.9% faster.
-    */
 end
 
 local modules = {}
@@ -1433,6 +1406,9 @@ end
 local MODULE = JAAS:RegisterModule"Log"
 MODULE.Access(log)
 if SERVER then
+    for k,v in ipairs(delayedHandles.log.server) do
+        MODULE.Handle.Server(v)
+    end
 else
     for k,v in ipairs(delayedHandles.log.client) do
         MODULE.Handle.Client(v)

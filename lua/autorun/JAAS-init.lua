@@ -300,8 +300,8 @@ local function includeLoop(table_)
                     print("  [".. state .."] "..v)
                     include[state](v)
                 end
-                JAAS:PostInitialise()
             end
+            JAAS:PostInitialise()
             if table_[state].Init ~= nil then
                 if !message then print "-------- JAAS Register --------" message = true end
                 for k,v in ipairs(table_[state].Init) do

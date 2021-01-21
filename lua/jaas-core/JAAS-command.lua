@@ -325,7 +325,7 @@ local RefreshClientCodes = dev.SharedSync("JAAS_CommandCodeSync", function (_, p
 end, "JAAS_ClientCommand", function (_, ply, code_table)
     for category, c_table in pairs(code_table) do
         for name, code in pairs(c_table) do
-            if command_table[category][name] then
+            if command_table[category] and command_table[category][name] then
                 command_table[category][name][1] = code
             end
         end
@@ -492,8 +492,9 @@ if SERVER then
     */
     local AND = bit.band
 
-    log.registerLog({label = "__Command"}, {1, 6, "executed", 3}) -- [1] secret_survivor executed Test.Bacon
-    log.registerLog({label = "__Command"}, {1, 6, "attempted", "to execute", 3}) -- [2] Dempsy40 attempted to execute User.Add
+    local hidden_log = JAAS.Log "__Command"
+    hidden_log:registerLog({1, 6, "executed", 3}) -- [1] secret_survivor executed Test.Bacon
+    hidden_log:registerLog({1, 6, "attempted", "to execute", 3}) -- [2] Dempsy40 attempted to execute User.Add
     net.Receive("JAAS_ClientCommand", function(_, ply)
         local category, name = net.ReadString(), net.ReadString()
         if command_table[category] ~= nil and command_table[category][name] ~= nil then -- Command is valid
@@ -543,9 +544,9 @@ if SERVER then
                 end
                 if #funcArgs == #funcArgs_toBeExecuted then -- All checks complete, command can be executed
                     local a = command_table[category][name][3](ply, unpack(funcArgs_toBeExecuted))
+                    hidden_log:Log(1, {player = {ply}, entity = {category.."."..name}})
                     if a then
                         returnCommandErrors(ply, 4, category, name, a) -- Function Feedback
-                        log.Log({label = "__Command"}, 1, {player = {ply}, entity = {category.."."..name}})
                     else
                         returnCommandErrors(ply, 0, category, name) -- Executed Successfully
                     end
@@ -554,7 +555,7 @@ if SERVER then
                 end
             else
                 returnCommandErrors(ply, 2, category, name) -- Player is not authorised
-                log.Log({label = "__Command"}, 2, {player = {ply}, entity = {category.."."..name}})
+                hidden_log:Log(2, {player = {ply}, entity = {category.."."..name}})
             end
         else
             returnCommandErrors(ply, 1, category, name) -- Category or name is invalid
@@ -650,7 +651,7 @@ elseif CLIENT then
         if code == 4 then
             message = net.ReadString()
         end
-        JAAS.Hook.run "Command" "CommandFeedback" (code, category, name, message)
+        JAAS.Hook.Run "Command" "CommandFeedback" (code, category, name, message)
     end)
 
     JAAS.Hook "Command" "CommandFeedback" ["ConsoleEcho"] = function(code, category, name, message)

@@ -40,7 +40,7 @@ hook.Add("PlayerInitialSpawn", "JAAS-Log_PlayerInitialSpawn", function (ply, tra
             if v:IsSuperAdmin() then
                 log:chatText(v, "%p joined from %e", {ply:Nick(), ply:IPAddress()})
             else
-                log:chatText(v, "%p joined", {ply:Nick()})
+                log:chatText(v, "%p has joined", {ply:Nick()})
             end
         end
         log:print(ply:Nick().." joined from "..ply:IPAddress())

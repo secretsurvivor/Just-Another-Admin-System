@@ -162,25 +162,23 @@ MODULE.Handle.Server(function (jaas)
 	local rank = jaas.Rank()
 
 	function meta:canTarget(code)
-		if dev.isRankLibrary(rank) then
-			if isnumber(code) then
-				if self:getJAASCode() > 0 and code > 0 then
-					return rank.getMaxPower(self:getJAASCode()) > rank.getMaxPower(code)
-				elseif self:getJAASCode() > 0 then
-					return rank.getMaxPower(self:getJAASCode()) > 0
-				end
-			elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
-				if self:getJAASCode() > 0 and code:getCode() > 0 then
-					return rank.getMaxPower(self:getJAASCode()) > rank.getMaxPower(code:getCode())
-				elseif self:getJAASCode() > 0 then
-					return rank.getMaxPower(self:getJAASCode()) > 0
-				end
-			elseif dev.isPlayer(code) then
-				if self:getJAASCode() > 0 and code:getJAASCode() > 0 then
-					return rank.getMaxPower(self:getJAASCode()) > rank.getMaxPower(code:getJAASCode())
-				elseif self:getJAASCode() > 0 then
-					return rank.getMaxPower(self:getJAASCode()) > 0
-				end
+		if isnumber(code) then
+			if self:getJAASCode() > 0 and code > 0 then
+				return rank.getMaxPower(self:getJAASCode()) > rank.getMaxPower(code)
+			elseif self:getJAASCode() > 0 then
+				return rank.getMaxPower(self:getJAASCode()) > 0
+			end
+		elseif dev.isCommandObject(code) or dev.isPermissionObject(code) or dev.isPlayerObject(code) then
+			if self:getJAASCode() > 0 and code:getCode() > 0 then
+				return rank.getMaxPower(self:getJAASCode()) > rank.getMaxPower(code:getCode())
+			elseif self:getJAASCode() > 0 then
+				return rank.getMaxPower(self:getJAASCode()) > 0
+			end
+		elseif dev.isPlayer(code) then
+			if self:getJAASCode() > 0 and code:getJAASCode() > 0 then
+				return rank.getMaxPower(self:getJAASCode()) > rank.getMaxPower(code:getJAASCode())
+			elseif self:getJAASCode() > 0 then
+				return rank.getMaxPower(self:getJAASCode()) > 0
 			end
 		end
 	end
@@ -191,7 +189,7 @@ log:registerLog {1, "was", 6, "removed", "from", 2, "by", 1} -- [2] Dempsy40 was
 log:registerLog {1, "has", 6, "default access", "by", 1} -- [3] Dempsy40 has default access by secret_survivor
 log:registerLog {1, 6, "attempted", "to add/remove a player to", 2} -- [4] Dempsy40 attempted to add/remove a player to Superadmin
 MODULE.Handle.Server(function (jaas)
-	local modify_player = jaas.Permission(),registerPermission("Can Modify Player", "Player will be able to modify what ranks players are in")
+	local modify_player = jaas.Permission().registerPermission("Can Modify Player", "Player will be able to modify what ranks players are in")
 	util.AddNetworkString("JAAS_PlayerModify_Channel")
     /* Player feedback codes :: 2 Bits
         0 :: Player Change was a success
@@ -200,7 +198,7 @@ MODULE.Handle.Server(function (jaas)
         3 :: Not part of Access Group
     */
 	local sendFeedback = dev.sendUInt("JAAS_PlayerModify_Channel", 2)
-	net.Receive(JAAS_PlayerModify_Channel, function (len, ply)
+	net.Receive("JAAS_PlayerModify_Channel", function (len, ply)
 		if modify_player:codeCheck(ply:getJAASCode()) then
 			local rank = jaas.Rank(net.ReadString())
 			local target = net.ReadEntity():getJAASObject()

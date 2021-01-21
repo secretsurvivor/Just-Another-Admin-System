@@ -1,4 +1,5 @@
 local permission = JAAS.Permission()
+local log = JAAS.Log "Core Permissions"
 
 local noclip = permission.registerPermission("Noclip", "Player will be able to use the noclip command to activate noclip")
 hook.Add("PlayerNoClip", "JAAS_noclipPermission", function (ply, desiredNoClipState)
@@ -61,7 +62,7 @@ local canSeeAllChatMessages = permission.registerPermission("Listen to Other Pla
 hook.Add("PlayerCanSeePlayersChat", "JAAS_canSeeAllChatMessages", function (text, teamOnly, listener, speaker)
     for k,ply in ipairs(player.GetAll()) do
         if canSeeAllChatMessages:codeCheck(ply:getJAASCode()) and listener != ply and speaker:IsValid() and ply:canTarget(listener:getJAASCode()) and ply:canTarget(speaker:getJAASCode()) then
-            ply:PrintMessage(HUD_PRINTTALK, speaker:Nick().." to "..listener:Nick()..": "..text) --secret_survivor to Dempsy40: Can you stop killing me!
+            log:chatText(v, "%p to %p: %e", speaker:Nick(), listener:Nick(), text) -- secret_survivor to Dempsy40: Can you stop killing me!
         end
     end
 end)

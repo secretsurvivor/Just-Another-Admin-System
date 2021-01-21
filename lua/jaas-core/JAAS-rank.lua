@@ -544,9 +544,16 @@ MODULE.Handle.Server(function (jaas)
     end)
 
     local showInvisibleRanks = perm.registerPermission("Show Invisible Ranks", "This permission will show invisible ranks clientside")
+    util.AddNetworkString "JAAS_RankPullChannel"
 
-    concommand.Add("JAAS_RefreshRankTableSync", function ()
-        refreshRankTable()
+    net.Receive("JAAS_RankPullChannel", function (len, ply)
+        net.Start "JAAS_RankPullChannel"
+        for t in rank.rankIterator() do
+            if !t.invisible or showInvisibleRanks:codeCheck(ply:getJAASCode()) then
+                net.WriteTable(t)
+            end
+        end
+        net.Send(ply)
     end)
 end)
 
