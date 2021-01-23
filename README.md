@@ -1,5 +1,6 @@
 # Just Another Admin System :: JAAS
 Advanced and High Performance Administration System for the game Garry's Mod
+
 Currently in no working order to be used, much still needs to be done before it can be released.
 ### About
 This is an admin system designed with performance in mind; although named in such a way it is no normal admin system. Most Garry's Mod admin systems, like ULX, use tables to hold rank information (How admin system determines if a player has access to a partiular command) - here we do no such thing, we use binary bit positions to determine such things. Tests have shown it to be 83% to 106% faster than using traditional tables. This method allows server owners and developers to add as many commands and permissions without ever affecting performance. JAAS also allows players to hold as many ranks as are added to the server without affecting performance so you can say goodbye to annoying ranks for staff members that are also donators - ranks also do not need to follow any inheritance rules allowing a fully customisable rank hierarchy.
