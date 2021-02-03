@@ -1,4 +1,4 @@
-JAAS = {["Command"] = false, ["Rank"] = false, ["Permission"] = false, ["Player"] = false}
+_G.JAAS = {["Command"] = false, ["Rank"] = false, ["Permission"] = false, ["Player"] = false}
 
 local i,c = include,AddCSLuaFile
 local include = setmetatable({}, {__call = function (self, _)
@@ -278,6 +278,7 @@ JAAS.GlobalVar = setmetatable({
                     globalvar_table[category][name] = var
                 end
                 JAAS.Hook.Run.GlobalVar(category)(name)(before, var)
+                return var
             end
         end
     end,
@@ -289,6 +290,10 @@ JAAS.GlobalVar = setmetatable({
         end
     end
 }, {__newindex = function () end, __metatable = "jaas_globalvar"})
+
+concommand.Add("JAAS_PrintGVars", function ()
+    PrintTable(globalvar_table)
+end)
 
 local function includeLoop(table_)
     local message = false
@@ -319,11 +324,8 @@ local function includeLoop(table_)
         end
     end
     stateInclude "Shared"
-    if SERVER then
-        stateInclude "Server"
-    else
-        stateInclude "Client"
-    end
+    stateInclude "Client"
+    stateInclude "Server"
     if CLIENT and message then
         print "-------------------------------"
     elseif !CLIENT then
@@ -338,8 +340,6 @@ end
 for _, file_ in ipairs(file.Find("jaas/autorun/*.lua", "lsv")) do
     include.Server("jaas/autorun/"..file_)
 end
-
-JAAS.include = false
 
 print "-------- JAAS Modules --------"
 
@@ -356,7 +356,10 @@ include.Server {
     "jaas-core/JAAS-access.lua"
 }
 
-include.Client "jaas-core/JAAS-panel.lua"
+include.Client {
+    "jaas-core/JAAS-panel.lua",
+    "jaas-core/JAAS-gui.lua"
+}
 
 if CLIENT then print "------------------------------" end
 

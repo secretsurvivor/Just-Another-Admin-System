@@ -223,7 +223,7 @@ do -- Developer Module Initialisation
             default = function (self, func)
                 self.default = func
             end,
-            switch = function (self, value)
+            switch = function (self, value, ...)
                 local r
                 if isnumber(value) then
                     r = self.internal[1 + value]
@@ -232,13 +232,13 @@ do -- Developer Module Initialisation
                 end
                 if r ~= nil then
                     if isfunction(r) then
-                        return r()
+                        return r(...)
                     else
                         return r
                     end
                 else
                     if isfunction(self.default) then
-                        return self.default()
+                        return self.default(...)
                     else
                         return self.default
                     end
@@ -297,6 +297,30 @@ do -- Developer Module Initialisation
             byte = self:ReadByte()
         end
         return str
+    end
+
+    Colour = Color -- A little bit of British love :D
+
+    function cookie.GetColour(name, default)
+        name = cookie.GetString(name)
+        return name and util.JSONToTable(name) or default
+    end
+
+    function cookie.SetColour(key, colour)
+        cookie.Set(key, util.TableToJSON(colour))
+    end
+
+    function cookie.GetBool(name, default)
+        name = cookie.GetString(name)
+        return name and tobool(name) or default
+    end
+
+    function cookie.SetBool(key, bool)
+        cookie.Set(key, tostring(bool))
+    end
+
+    function cookie.SetNumber(key, number)
+        cookie.Set(key, tostring(number))
     end
 
     dev = class(devFunctions, "jaas_developer_library")
@@ -478,7 +502,7 @@ do -- Log Module Initialisation
                     if isnumber(v) then
                         if v == 1 then
                             str = str.."%p "
-                            table_[1 + #table_] = t.player[player_count]
+                            table_[1 + #table_] = player.GetBySteamID64(string.Trim(t.player[player_count])):Nick()
                             player_count = 1 + player_count
                         elseif v == 2 then
                             str = str.."%r "
@@ -507,8 +531,7 @@ do -- Log Module Initialisation
                     _,v = func(iTable, _)
                 end
                 for k,v in ipairs(player.GetAll()) do
-                    print(v, echoLogs:codeCheck(v:getJAASCode()))
-                    if echoLogs:codeCheck(v:getJAASCode()) then
+                    if echoLogs:codeCheck(v:getJAASCode()) and v:Team() != 0 then
                         logFunctions.printText({label = "Log"}, v, str, table_)
                     end
                 end
@@ -626,7 +649,7 @@ do -- Log Module Initialisation
 
         function logFunctions:printText(ply, str, t)
             net.Start "JAAS_PrintChannel"
-            net.WriteString("[JAAS::"..self.label.."]"..str)
+            net.WriteString("[JAAS::"..self.label.."] "..str)
             net.WriteTable(t)
             net.Send(ply)
         end
@@ -720,14 +743,8 @@ do -- Log Module Initialisation
                     char = func()
                     if char == "p" then -- Player
                         text_table[1 + #text_table] = Color(91, 155, 213)
-                        local v = player.GetBySteamID64(var_table[index])
-                        print(v)
-                        if v and IsValid(v) then
-                            if LocalPlayer() == v then
-                                text_table[1 + #text_table] = "You"
-                            else
-                                text_table[1 + #text_table] = v:Nick()
-                            end
+                        if LocalPlayer().GetName and LocalPlayer():GetName() == var_table[index] then
+                            text_table[1 + #text_table] = "You"
                         else
                             text_table[1 + #text_table] = var_table[index]
                         end
@@ -1058,7 +1075,7 @@ local SQL
 do
     local q,isS,isT,pairs,isnumber,isstring,t = sql.Query,isstring,istable,pairs,isnumber,isstring,table
     local QUERY,db
-    if JAAS.Var.MySQLServer then -- MySQL Functions not tested, may not work in this current version
+    if SERVER and JAAS.Var.MySQLServer then -- MySQL Functions not tested, knowing me will definitely not work
         require("mysqloo")
         do
             local info = JAAS.Var.MySQLServerInformation
