@@ -84,6 +84,11 @@ hook.Add("CanPlayerSuicide", "JAAS_canSuicide", function (ply)
     return canSuicide:codeCheck(ply:getJAASCode())
 end)
 
+local canFlashlight = permission.registerPermission("Can Use Flashlight", "Player will be able to use their flashlight")
+hook.Add("PlayerSwitchFlashlight", "JAAS_CanUseFlashlight", function (ply, enabled)
+    return canFlashlight:codeCheck(ply:getJAASCode())
+end)
+
 local gravGunPickup = permission.registerPermission("Gravity Gun Pickup", "Player will be able to pick up entities with the Gravity Gun")
 local gravGunPlayerPickup = permission.registerPermission("Gravity Gun Player Pickup", "Player will be able to pickup players with Gravity Gun")
 hook.Add("GravGunPickupAllowed", "JAAS_gravGunPickup", function (ply, ent)
