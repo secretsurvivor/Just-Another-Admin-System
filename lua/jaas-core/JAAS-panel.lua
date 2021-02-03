@@ -1,23 +1,4 @@
 local MODULE, log, dev = JAAS:RegisterModule "Panel"
-
-local drawColor = surface.SetDrawColor
-function surface.SetDrawColor(r, g, b, a)
-    if IsColor(r) then
-        drawColor(r.r, r.g, r.b, r.a)
-    else
-        drawColor(r, g, b, a)
-    end
-end
-
-local textColor = surface.SetTextColor
-function surface.SetTextColor(r, g, b, a)
-    if IsColor(r) then
-        textColor(r.r, r.g, r.b, r.a)
-    else
-        textColor(r, g, b, a)
-    end
-end
-
 local panel = {PermissionCheck = true, ControlBuilder = true}
 local permissionCheck = {}
 
@@ -52,6 +33,21 @@ function panel.ControlBuilder(base)
             __index = {
                 Derma_Hook = function (self, func)
                     Derma_Hook(self.internal, func, func, name)
+                end,
+                Derma_Install_Convar_Functions = function ()
+                    Derma_Install_Convar_Functions(self.internal)
+                end,
+                Derma_Anim = function (name, func)
+                    Derma_Anim(name, self.internal, func)
+                end,
+                Derma_DrawBackgroundBlur = function (startTime)
+                    Derma_DrawBackgroundBlur(self.internal, startTime or 0)
+                end,
+                DermaMenu = function (keepOpen)
+                    DermaMenu(keepOpen or true, self.internal)
+                end,
+                RegisterDermaMenuForClose = function ()
+                    RegisterDermaMenuForClose(self.internal)
                 end,
                 AccessorFunc = function (self, name, force)
                     self.internal["Get" .. name] = function (self)
@@ -136,49 +132,162 @@ MODULE.Access(MODULE.Class(panel, "jaas_panel_library"))
         Scrollbar
 */
 
-local CONTROL = panel.ControlBuilder "DButton" ("", "")
+local CONTROL = panel.ControlBuilder "DButton" ("JColourPicker", "Interactive Button that opens DColorMixer")
 CONTROL:Derma_Hook "Paint"
-CONTROL:AccessorFunc "Title"
-CONTROL:AccessorFunc "Panel"
-CONTROL:AccessorFunc "Icon"
+CONTROL:AccessorFunc "Colour"
 
-function CONTROL:SetSize(w, h)
-    self:SetWidth(w)
-    self:SetHeight(w)
+function CONTROL:OnChange(colour)
 end
 
-function CONTROL:Setup(title, icon, panel)
-    self:SetPanel(panel)
-    self:SetTitle(title)
-    self:SetIcon(icon)
+local picker_panel
+function CONTROL:DoClick()
+    picker_panel = vgui.Create("DFrame")
+    local colour_picker = vgui.Create("DColorMixer", picker_panel)
+    local save_button = vgui.Create("DButton", picker_panel)
+    local w,h = self:GetPos()
+    picker_panel:SetPos(w, h)
+    picker_panel:SetSize(ScrW() * 0.2, ScrH() * 0.2)
+    picker_panel:SetSizable(true)
+    picker_panel:SetTitle("")
+    picker_panel.Paint = function (self, w, h)
+        surface.SetDrawColor(228, 228, 228)
+        for i=0,h do
+            surface.DrawLine(0, i, w, i)
+        end
+        surface.SetDrawColor(0, 0, 0)
+        surface.DrawRect(0, 0, w, h)
+    end
+    colour_picker:Dock(1)
+    save_button:Dock(5)
+    save_button.DoClick = function ()
+        self:SetColour(colour_picker:GetColor())
+        self:OnChange(self:GetColour())
+        picker_panel:Remove()
+    end
+    save_button:SetText("Save")
 end
 
 function CONTROL:Paint(w, h)
-    h = self:GetIcon()
-    if h then
-        h(w * 0.6, w * 0.2)
+    surface.SetDrawColor(self:GetColour() or Colour(0,0,0))
+    for i=0,h do
+        surface.DrawLine(0, i, w, i)
     end
-    surface.SetTextColor(242, 242, 242)
-    h = w - (surface.GetTextSize(self:GetTitle()) * 0.5)
-    --surface.SetTextPos(number x, number y)
 end
 
-CONTROL = panel.ControlBuilder "DPanel" ("JMenu", "Menu for JAAS")
+CONTROL:Define("JBoolButton", "Button that acts as a Checkbox")
 CONTROL:Derma_Hook "Paint"
-CONTROL:AccessorFunc "TabList"
+CONTROL:AccessorFunc "BackgroundColour"
+CONTROL:AccessorFunc "SelectedColour"
+CONTROL:AccessorFunc "AltSelectionColour"
+CONTROL:AccessorFunc "AltColour"
+CONTROL:AccessorFunc "Checked"
+CONTROL:AccessorFunc "LabelType"
+CONTROL:AccessorFunc "TextColour"
+CONTROL:AccessorFunc "AltTextColour"
+CONTROL:AccessorFunc "TextAlignment"
+CONTROL:AccessorFunc "AltTextAlignment"
+CONTROL:AccessorFunc "Padding"
 
 function CONTROL:Init()
-    self:SetPos(0, 0)
-    self:SetSize(ScrW(), ScrH())
+    self:SetAltColour(false)
+    self:SetPadding(0)
+    self:SetTextAlignment(2)
+    self:SetAltTextAlignment(1)
+    self:SetTextColour(Colour(0,0,0))
+    self:SetAltTextColour(Colour(127,127,127))
+    self:SetLabelType(1)
 end
 
-local panelWidth, panelHeight = ScrW() * 0.07, ScrH() * 0.85
+function CONTROL:SetLabelType(num)
+    self.___LabelType = math.Clamp(num, 1, 3)
+end
+
+function CONTROL:SetTextAlignment(num)
+    self.___TextAlignment = math.Clamp(num, 1, 3)
+end
+
+function CONTROL:SetAltTextAlignment(num)
+    self.___AltTextAlignment = math.Clamp(num, 1, 3)
+end
+
+function CONTROL:Setup(text, alt_text_1, alt_text_2)
+    self.main_text = vgui.Create("DLabel", self)
+    self.main_text:SetText(text)
+    self.main_text:SetSize(self:GetWide() - self:GetPadding() * 2, self.main_text:GetTall())
+    self.main_text:SetPos(self:GetPadding(), self:GetTall() * 0.21)
+    self.main_text:SetContentAlignment(3 + self:GetTextAlignment())
+    self.main_text:SetColor(self:GetTextColour())
+    if self:GetLabelType() == 2 then
+        self.alt_text = vgui.Create("DLabel", self)
+        self.alt_text:SetText(alt_text_1)
+        self.alt_text:SetSize(self:GetWide() - self:GetPadding() * 2, self.alt_text:GetTall())
+        self.alt_text:SetPos(self:GetPadding(), self:GetTall() * 0.65)
+        self.alt_text:SetContentAlignment(3 + self:GetTextAlignment())
+        self.alt_text:SetColor(self:AltTextColour())
+    else
+        self.alt_text_1 = vgui.Create("DLabel", self)
+        self.alt_text_1:SetText(alt_text_1)
+        self.alt_text_1:SetSize(self:GetWide() - self:GetPadding() * 2, self.alt_text_1:GetTall())
+        self.alt_text_1:SetPos(self:GetPadding(), self:GetTall() * 0.65)
+        self.alt_text_1:SetContentAlignment(4)
+        self.alt_text_1:SetColor(self:AltTextColour())
+        self.alt_text_2 = vgui.Create("DLabel", self)
+        self.alt_text_2:SetText(alt_text_2)
+        self.alt_text_2:SetSize(self:GetWide() - self:GetPadding() * 2, self.alt_text_2:GetTall())
+        self.alt_text_2:SetPos(self:GetPadding(), self:GetTall() * 0.65)
+        self.alt_text_2:SetContentAlignment(6)
+        self.alt_text_2:SetColor(self:AltTextColour())
+    end
+end
+
+function CONTROL:OnChange(bool)
+end
+
+function CONTROL:DoClick()
+    self:SetChecked(!self:GetChecked())
+    self:OnChange(self:GetChecked())
+end
+
 function CONTROL:Paint(w, h)
-    surface.DrawRect(0, 0, panelWidth, panelHeight)
-
+    if self:GetAltColour() then
+        surface.SetDrawColor(self:GetAltSelectionColour():Unpack())
+    elseif self:GetChecked() then
+        surface.SetDrawColor(self:GetSelectedColour():Unpack())
+    else
+        surface.SetDrawColor(self:GetBackgroundColour():Unpack())
+    end
+    for i=0,h do
+        surface.DrawLine(0, i, w, i)
+    end
+    surface.SetDrawColor(self:GetTextColour():Unpack())
+    surface.DrawLine(0, h, w, h)
 end
 
-function CONTROL:AddTab()
+CONTROL:Define()
+CONTROL = panel.ControlBuilder "DScrollPanel" ("JScrollPanel", "Used JAAS Menu, hidden scroll bar") -- Modified Code from https://github.com/Facepunch/garrysmod/blob/master/garrysmod/lua/vgui/dscrollpanel.lua
+
+function CONTROL:Init()
+	self.pnlCanvas = vgui.Create( "Panel", self )
+	self.pnlCanvas.OnMousePressed = function( self, code ) self:GetParent():OnMousePressed( code ) end
+	self.pnlCanvas:SetMouseInputEnabled( true )
+	self.pnlCanvas.PerformLayout = function( pnl )
+		self:PerformLayoutInternal()
+		self:InvalidateParent()
+	end
+	-- Create the scroll bar
+	self.VBar = vgui.Create( "DVScrollBar", self )
+    self.VBar:SetSize(0, self:GetTall())
+	self.VBar:SetHideButtons(true)
+
+	self:SetPadding( 0 )
+	self:SetMouseInputEnabled( true )
+
+	-- This turns off the engine drawing
+	self:SetPaintBackgroundEnabled( false )
+	self:SetPaintBorderEnabled( false )
+	self:SetPaintBackground( false )
 end
+
+CONTROL:Define()
 
 log:print "Module Loaded"
