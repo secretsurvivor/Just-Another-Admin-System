@@ -8,7 +8,7 @@ command:setCategory "Utility"
 log:registerLog {1, 6, "set", "move type on", 1, "to", 5} -- [1] secret_survivor set move type on Dempsy40 to "MOVETYPE_NOCLIP"
 command:registerCommand("Toggle_Flight", function (ply, target)
     if dev.isPlayer(target) then
-        if !IsValid(ply) or ply:canTarget(target:getJAASCode()) then
+        if !IsValid(ply) or ply == target or ply:canTarget(target:getJAASCode()) then
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_FLY)
                 log:adminChat("%p activated Flight on %p", ply:Nick(), target:Nick())
@@ -28,7 +28,7 @@ end, arg:add("Target", "PLAYER", true))
 
 command:registerCommand("Toggle_Gravity_Flight", function (ply, target)
     if dev.isPlayer(target) then
-        if !IsValid(ply) or ply:canTarget(target:getJAASCode()) then
+        if !IsValid(ply)  or ply == target or ply:canTarget(target:getJAASCode()) then
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_FLYGRAVITY)
                 log:adminChat("%p activated Gravity Flight on %p", ply:Nick(), target:Nick())
@@ -48,7 +48,7 @@ end, arg:add("Target", "PLAYER", true))
 
 command:registerCommand("Toggle_Noclip", function (ply, target)
     if dev.isPlayer(target) then
-        if !IsValid(ply) or ply:canTarget(target:getJAASCode()) then
+        if !IsValid(ply)  or ply == target or ply:canTarget(target:getJAASCode()) then
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_NOCLIP)
                 log:adminChat("%p activated Noclip on %p", ply:Nick(), target:Nick())
@@ -69,7 +69,7 @@ end, arg:add("Target", "PLAYER", true))
 log:registerLog {1, 6, "kicked", 1, "for", 5} -- [2] secret_survivor kicked Dempsy40 for "RDM"
 command:registerCommand("Kick", function (ply, target, reason)
     if dev.isPlayer(target) then
-        if !IsValid(ply) or ply:canTarget(target:getJAASCode()) then
+        if !IsValid(ply)  or ply == target or ply:canTarget(target:getJAASCode()) then
             if reason then
                 ply:Kick(string.format(":: JAAS ::\n%s\n%s kicked you", reason, ply:Nick()))
             else
