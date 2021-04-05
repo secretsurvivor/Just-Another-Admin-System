@@ -12,11 +12,15 @@ command:registerCommand("Toggle_Flight", function (ply, target)
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_FLY)
                 log:adminChat("%p activated Flight on %p", ply:Nick(), target:Nick())
-                log:Log(1, {player = {ply, target}, string = {"MOVETYPE_FLY"}})
+                if ply:IsPlayer() and target:IsPlayer() then
+                    log:Log(1, {player = {ply, target}, string = {"MOVETYPE_FLY"}})
+                end
             else
                 target:SetMoveType(MOVETYPE_WALK)
                 log:adminChat("%p deactivated Flight on %p", ply:Nick(), target:Nick())
-                log:Log(1, {player = {ply, target}, string = {"MOVETYPE_WALK"}})
+                if ply:IsPlayer() and target:IsPlayer() then
+                    log:Log(1, {player = {ply, target}, string = {"MOVETYPE_WALK"}})
+                end
             end
         else
             return "Cannot target "..target:Nick()
@@ -32,11 +36,15 @@ command:registerCommand("Toggle_Gravity_Flight", function (ply, target)
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_FLYGRAVITY)
                 log:adminChat("%p activated Gravity Flight on %p", ply:Nick(), target:Nick())
-                log:Log(1, {player = {ply, target}, string = {"MOVETYPE_FLYGRAVITY"}})
+                if ply:IsPlayer() and target:IsPlayer() then
+                    log:Log(1, {player = {ply, target}, string = {"MOVETYPE_FLYGRAVITY"}})
+                end
             else
                 target:SetMoveType(MOVETYPE_WALK)
                 log:adminChat("%p deactivated Gravity Flight on %p", ply:Nick(), target:Nick())
-                log:Log(1, {player = {ply, target}, string = {"MOVETYPE_WALK"}})
+                if ply:IsPlayer() and target:IsPlayer() then
+                    log:Log(1, {player = {ply, target}, string = {"MOVETYPE_WALK"}})
+                end
             end
         else
             return "Cannot target "..target:Nick()
@@ -52,11 +60,15 @@ command:registerCommand("Toggle_Noclip", function (ply, target)
             if target:GetMoveType() == MOVETYPE_WALK then
                 target:SetMoveType(MOVETYPE_NOCLIP)
                 log:adminChat("%p activated Noclip on %p", ply:Nick(), target:Nick())
-                log:Log(1, {player = {ply, target}, string = {"MOVETYPE_NOCLIP"}})
+                if ply:IsPlayer() and target:IsPlayer() then
+                    log:Log(1, {player = {ply, target}, string = {"MOVETYPE_NOCLIP"}})
+                end
             else
                 target:SetMoveType(MOVETYPE_WALK)
                 log:adminChat("%p deactivated Noclip on %p", ply:Nick(), target:Nick())
-                log:Log(1, {player = {ply, target}, string = {"MOVETYPE_WALK"}})
+                if ply:IsPlayer() and target:IsPlayer() then
+                    log:Log(1, {player = {ply, target}, string = {"MOVETYPE_WALK"}})
+                end
             end
         else
             return "Cannot target "..target:Nick()
@@ -76,7 +88,9 @@ command:registerCommand("Kick", function (ply, target, reason)
                 ply:Kick(":: JAAS ::\n"..ply:Nick().." kicked you")
             end
             log:chat("%p was kicked for %s", target:Nick(), reason)
-            log:Log(2, {player = {ply, target}, string = {reason}})
+            if ply:IsPlayer() and target:IsPlayer() then
+                log:Log(2, {player = {ply, target}, string = {reason}})
+            end
         else
             return "Cannot target "..target:Nick()
         end
@@ -104,10 +118,15 @@ end)
 log:registerLog {1, 6, "killed", 1} -- [5] secret_survivor killed Dempsy40
 log:registerLog {1, 6, "killed", "themself"} -- [6] secret_survivor killed themself
 command:registerCommand("Kill", function (ply, target)
-	if IsValid(target) and target:Alive() and ply:canTarget(target) then
-		target:Kill()
-        log:Log(5, {player = {ply, target}})
-        log:adminChat("%p killed %p", ply:Nick(), ply:Nick())
+	if IsValid(target) and target:Alive() then
+        if target:IsPlayer() and ply:canTarget(target) then
+            log:Log(5, {player = {ply, target}})
+            log:adminChat("%p killed %p", ply:Nick(), target:Nick())
+            target:Kill()
+        elseif target:IsBot() then
+            log:adminChat("%p killed %p", ply:Nick(), target:Nick())
+            target:Kill()
+        end
 	elseif ply:Alive() then
 		ply:Kill()
         log:Log(6, {player = {ply}})
@@ -127,7 +146,7 @@ log:registerLog {1, 6, "created", "bot"} -- [8] secret_survivor created bot
 command:registerCommand("Create_Bot", function (ply)
 	if (!game.SinglePlayer() and player.GetCount() < game.MaxPlayers()) then
         player.CreateNextBot("Bot_"..((#player.GetBots()) + 1))
-        log:Log(7, {player = {ply}})
+        log:Log(8, {player = {ply}})
     else
 	    return "Cannot create bot"
     end
