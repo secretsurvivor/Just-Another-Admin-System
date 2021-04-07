@@ -15,20 +15,18 @@ end
 local argTable = {["add"]=true, ["dispense"]=true} -- Argument Table Builder, for command registering and user interface
 
 local function typeMap(typ)
-    local typeCase = dev.SwitchCase()
-    typeCase:case("BOOL", 0x1)
-    typeCase:case("INT", 0x2)
-    typeCase:case("FLOAT", 0x3)
-    typeCase:case("STRING", 0x4)
-    typeCase:case("PLAYER", 0x5)
-    typeCase:case("PLAYERS", 0x6)
-    typeCase:case("RANK", 0x7)
-    typeCase:case("OPTION", 0x9)
-    typeCase:case("OPTIONS", 0xA)
-    typeCase:default(function ()
-        error("Unknown Datatype", 2)
-    end)
-    return typeCase:switch(typ)
+    local type_table = {
+        BOOL = 0x1,
+        INT = 0x2,
+        FLOAT = 0x3,
+        STRING = 0x4,
+        PLAYER = 0x5,
+        PLAYERS = 0x6,
+        RANK = 0x7,
+        OPTION = 0x9,
+        OPTIONS = 0xA
+    }
+    return type_table[typ] or error("Unknown Datatype", 2)
 end
 
 /*
@@ -80,7 +78,7 @@ dev:isTypeFunc("ArgumentBuilder", "jaas_argumentbuilder")
 
 local command_table = command_table or {} -- SERVER -- [category][name] = {code, funcArgs, function, access} -- CLIENT -- [category][name] = {code, funcArgs, description}
 
-local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] = true, ["setCode"] = true} -- Used for local functions, for command data
+local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] = true, ["setCode"] = true, ["accessCheck"] = true} -- Used for local functions, for command data
 local command = {["registerCommand"] = true, ["setCategory"] = true, ["clearCategory"] = true, ["argumentTableBuilder"] = true} -- Used for global functions, for command table
 
 function command:setCategory(name)
@@ -309,6 +307,10 @@ elseif CLIENT then
         end
         net.SendToServer()
     end
+
+    function command.ICommand()
+        return pairs(command_table)
+    end
 end
 
 local RefreshClientCodes = dev.SharedSync("JAAS_CommandCodeSync", function (_, ply)
@@ -334,9 +336,10 @@ end)
 
 MODULE.Access(function (command_name, command_category)
     if SERVER and command_name and command_category then
-        if command_table[category] ~= nil and command_table[category][name] ~= nil then
+        if command_table[command_category] ~= nil and command_table[command_category][command_name] ~= nil then
             return local_command(command_name, command_category)
         end
+        return false
     else
         return setmetatable({category = "default"}, {__index = command, __newindex = function () end, __metatable = "jaas_command_library"})
     end
@@ -366,11 +369,16 @@ MODULE.Handle.Server(function (jaas)
             local category,name = net.ReadString(),net.ReadString()
             local rank = jaas.Rank(net.ReadString())
             local cmd, sendCode = jaas.Command(name, category), sendFeedback(ply)
-            if dev.isCommandObject(cmd) and dev.isRankObject(rank) then
-                if cmd:accessCheck(ply) then
+            if dev.isCommandObject(cmd) and dev.isRankObject(rank) then -- If given arguments are valid identifiers
+                if cmd:accessCheck(ply) then -- If the Player is in the correct Access Group
                     local before = cmd:getCode()
-                    if cmd:xorCode(rank) then
-                        sendCode(0)
+                    if cmd:xorCode(rank) then -- Add/Remove Rank from Rank Code
+                        net.Start"JAAS_CommandModify_Channel"
+                        net.WriteUInt(0, 2)
+                        net.WriteString(category)
+                        net.WriteString(name)
+                        net.WriteFloat(cmd:getCode())
+                        net.Send(ply)
                         if cmd:getCode() == 0 then -- Default access
                             log:Log(3, {player = {ply}, entity = {category.."."..name}})
                             log:superadminChat("%e has default access by %p", category.."."..name, ply:Nick())
@@ -491,7 +499,6 @@ if SERVER then
         Name : String
     */
     local AND = bit.band
-
     local hidden_log = JAAS.Log "__Command"
     hidden_log:registerLog({1, 6, "executed", 3}) -- [1] secret_survivor executed Test.Bacon
     hidden_log:registerLog({1, 6, "attempted", "to execute", 3}) -- [2] Dempsy40 attempted to execute User.Add
@@ -637,12 +644,13 @@ if SERVER then
         end
     end
 
+    util.AddNetworkString"JAAS_CommandClientUpdate"
     JAAS.Hook "Command" "GlobalRankChange" ["ClientUpdate"] = function (category, name, code)
-        for _,ply in ipairs(player.GetAll()) do
-            net.Start("JAAS_ClientCommand")
-            net.WriteTable({[category] = {[name] = code}})
-            net.Send(ply)
-        end
+        net.Start("JAAS_CommandClientUpdate")
+        net.WriteString(category)
+        net.WriteString(name)
+        net.WriteFloat(code)
+        net.Broadcast()
     end
 elseif CLIENT then
     net.Receive("JAAS_ClientCommand", function()
@@ -651,30 +659,33 @@ elseif CLIENT then
         if code == 4 then
             message = net.ReadString()
         end
-        JAAS.Hook.Run "Command" "CommandFeedback" (code, category, name, message)
+        JAAS.Hook.Run "Command" "CommandFeedback" (tonumber(code), category, name, message)
+    end)
+
+    net.Receive("JAAS_CommandClientUpdate", function ()
+        local category = net.ReadString()
+        if command_table[category] then
+            local name = net.ReadString()
+            if command_table[category][name] then
+                command_table[category][name][1] = net.ReadFloat()
+            end
+        end
     end)
 
     JAAS.Hook "Command" "CommandFeedback" ["ConsoleEcho"] = function(code, category, name, message)
-        local logCase = dev.SwitchCase()
-        logCase:case(0, function () -- Successful Command Execution
-            log:printLog(category.." "..name.." Successfully Executed")
-        end)
-        logCase:case(1, function () -- Invalid Command Category or Name
-            log:printLog(category.." "..name.." Unknown Category or Name")
-        end)
-        logCase:case(2, function () -- Invalid Player Access
-            log:printLog(category.." "..name.." Invalid Access")
-        end)
-        logCase:case(3, function () -- Invalid Passed Argument
-            log:printLog(category.." "..name.." Invalid Arguments")
-        end)
-        logCase:case(4, function () -- Function Feedback
-            log:printLog(category.." "..name.." - "..message)
-        end)
-        logCase:default(function () -- Unknown Error Code
-            log:printLog(category.." "..name.." Returned Unknown Error")
-        end)
-        logCase:switch(code)
+        if code == 0 then
+            log:print(category.." "..name.." Successfully Executed")
+        elseif code == 1 then
+            log:print(category.." "..name.." Unknown Category or Name")
+        elseif code == 2 then
+            log:print(category.." "..name.." Invalid Access")
+        elseif code == 3 then
+            log:print(category.." "..name.." Invalid Arguments")
+        elseif code == 4 then
+            log:print(category.." "..name.." - "..(message or ""))
+        else
+            log:print(category.." "..name.." Returned Unknown Error")
+        end
     end
 
     concommand.Add("JAAS", function(ply, cmd, args, argStr)

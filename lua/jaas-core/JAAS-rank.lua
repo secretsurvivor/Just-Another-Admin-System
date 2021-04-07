@@ -1,5 +1,7 @@
 local MODULE, log, dev, SQL = JAAS:RegisterModule "Rank"
 SQL = SQL"JAAS_rank"
+local RankHook = JAAS.Hook.Run "Rank"
+local RankHookAdd = JAAS.Hook "Rank"
 
 if !SQL.EXIST and SERVER then
     SQL.CREATE.TABLE {
@@ -11,10 +13,10 @@ if !SQL.EXIST and SERVER then
     }
 end
 
-local local_rank = {["getName"] = true, ["setName"] = true, ["getCodePosition"] = true, ["getCode"] = true} -- Used for local functions, for rank data
+local local_rank = {["getName"] = true, ["setName"] = true, ["getCodePosition"] = true, ["getCode"] = true, ["accessCheck"] = true} -- Used for local functions, for rank data
 
 local r_cache = dev.Cache()
-JAAS.Hook "Rank" "GlobalChange" ["Rank_module_cache"] = function ()
+RankHookAdd "GlobalChange" ["Rank_module_cache"] = function ()
     r_cache()
 end
 
@@ -33,9 +35,12 @@ function local_rank:getName()
     end
 end
 
+local HookGlobalChange = RankHook "GlobalChange"
+
 function local_rank:setName(name)
     if SQL.UPDATE {name = name} {rowid = self.id} then
-        JAAS.Hook.Run "Rank" "GlobalChange" ()
+        HookGlobalChange()
+        RankHook "GlobalNameChange" (self.id, name)
         return true
     end
     return false
@@ -50,7 +55,7 @@ function local_rank:getCodePosition()
             if r_cache[self.id] == nil then
                 r_cache[self.id] = {}
             end
-            r_cache[self.id].position = position["position"]
+            r_cache[self.id].position = tonumber(position["position"])
             return position["position"]
         end
     end
@@ -65,8 +70,8 @@ function local_rank:getCode()
             if r_cache[self.id] == nil then
                 r_cache[self.id] = {}
             end
-            r_cache[self.id].code = position["position"]
-            return position["position"]
+            r_cache[self.id].code = tonumber(position["1 << (position - 1)"])
+            return position["1 << (position - 1)"]
         end
     end
 end
@@ -80,7 +85,8 @@ function local_rank:getPower()
             if r_cache[self.id] == nil then
                 r_cache[self.id] = {}
             end
-            r_cache[self.id].power = power["power"]
+
+            r_cache[self.id].power = tonumber(power["power"])
             return power["power"]
         end
     end
@@ -88,12 +94,13 @@ end
 
 function local_rank:setPower(power)
     if SQL.UPDATE {power = power} {rowid = self.id} then
-        JAAS.Hook.Run "Rank" "GlobalChange" ()
-        JAAS.Hook.Run "Rank" "GlobalPowerChange" ()
+        HookGlobalChange()
+        RankHook "GlobalPowerChange" (self.id, power)
         return true
     end
     return false
 end
+
 
 function local_rank:getInvis()
     if r_cache[self.id] ~= nil and r_cache[self.id].invis ~= nil then
@@ -112,7 +119,8 @@ end
 
 function local_rank:setInvis(invis)
     if SQL.UPDATE {invisible = invis} {rowid = self.id} then
-        JAAS.Hook.Run "Rank" "GlobalChange" ()
+        HookGlobalChange()
+        RankHook "GlobalInvisChange" (self.id, invis)
         return true
     end
     return false
@@ -127,18 +135,21 @@ function local_rank:getAccess()
             if r_cache[self.id] == nil then
                 r_cache[self.id] = {}
             end
-            r_cache[self.id].access = access["access_group"]
+
+            r_cache[self.id].access = tonumber(access["access_group"])
             return access["access_group"]
         end
     end
 end
+
 
 function local_rank:setAccess(value)
     if dev.isAccessObject(value) then
         value = value:getValue()
     end
     if SQL.UPDATE {access_group = value} {rowid = self.id} then
-        JAAS.Hook.Run "Rank" "GlobalChange" ()
+        HookGlobalChange()
+        RankHook "GlobalAccessChange" (self.id, value)
         return true
     end
     return false
@@ -159,6 +170,7 @@ MODULE.Handle.Server(function (jaas)
 end)
 
 local AND = bit.band
+
 function local_rank:codeCheck(code)
     if isnumber(code) then
         return AND(self:getCode(), code) > 0
@@ -167,6 +179,7 @@ function local_rank:codeCheck(code)
     elseif dev.isPlayer(code) then
         return AND(self:getCode(), code:getJAASCode()) > 0
     end
+
 end
 
 setmetatable(local_rank, {
@@ -176,52 +189,64 @@ setmetatable(local_rank, {
             if a then
                 return setmetatable({id = a["rowid"]}, {__index = local_rank, __metatable = "jaas_rank_object"})
             end
-        elseif isnumber(rank_name) then
-            if SQL.SELECT "rowid" {rowid = rank_name} then
-                return setmetatable({id = rank_name}, {__index = local_rank, __metatable = "jaas_rank_object"})
-            end
+        elseif isnumber(rank_name) and SQL.SELECT "rowid" {rowid = rank_name} then
+            return setmetatable({id = rank_name}, {__index = local_rank, __metatable = "jaas_rank_object"})
         end
         return false
     end,
-    __newindex = function() end,
+    __newindex = function()
+    end,
 	__metatable = "jaas_rank_object"
 })
 
 local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true, ["codeIterator"] = true} -- Used for global functions, for rank table
-local rank_count = rank_count or SQL.SELECT "COUNT(rowid)" () ["COUNT(rowid)"]
+local rank_count = rank_count or tonumber(SQL.SELECT "COUNT(rowid)" () ["COUNT(rowid)"])
 
 function rank.addRank(name, power, invis)
-    if rank_count < 64 then
+    if rank_count < 64 then -- Needs testing
         local t = SQL.SELECT "MAX(position)"()
         if t then
             local next_position = t["MAX(position)"]
-            if next_position == "NULL" then next_position = 0 end
+            if next_position == "NULL" then
+                next_position = 0
+            end
+            power = power or 0
+            invis = invis or false
             if SQL.INSERT {name = name, position = 1 + next_position, power = power, invisible = invis} then
                 rank_count = 1 + rank_count
-                return local_rank(name)
+                local rank_object = local_rank(name)
+                RankHook "Added" (rank_object.id, name, power, invis, 1 + next_position)
+                return rank_object
             end
         end
     end
+
 end
 
 function rank.rankIterator(key)
-    local a = SQL.SELECT()
+    local a = SQL.SELECT "rowid, name, position, power, invisible, access_group" ()
+    if istable(a) and #a == 0 then
+        a = {a}
+    end
     local i = 0
     if a then
         if key then
             return function ()
                 i = 1 + i
-                if i <= #a then
+                if a[i] then
                     return a[i][key]
                 end
             end
         end
         return function ()
             i = 1 + i
-            if i <= #a then
+            if a[i] then
                 return a[i]
             end
         end
+    end
+    return function ()
+        return nil
     end
 end
 
@@ -237,6 +262,7 @@ function rank.codeIterator(code)
             max_bits = max_bits - 1
         elseif code == max_shift then
             local e = false
+
             return function ()
                 if !e then
                     return SQL.SELECT "*" {position = max_bits}
@@ -245,6 +271,7 @@ function rank.codeIterator(code)
                 end
             end
         end
+
     end
     local where_str
     while max_bits >= 0 do
@@ -271,21 +298,33 @@ end
 function rank.removeRank(name)
     local q, rank_position
     if isstring(name) then
-        rank_position = tonumber(SQL.SELECT "position" {name = name}["position"])
-        q = SQL.DELETE {name = name}
+        local rank_object = local_rank(name)
+        if rank_object then
+            rank_position = tonumber(rank_object:getCodePosition())
+            q = SQL.DELETE {name = name}
+            if q then
+                RankHook "Removed" (rank_object.id)
+            end
+        end
     elseif isnumber(name) then
         rank_position = tonumber(SQL.SELECT "position" {rowid = name}["position"])
         q = SQL.DELETE {rowid = name}
-    elseif dev.isRankObject(var) then
-        rank_position = tonumber(SQL.SELECT "position" {rowid = name.id}["position"])
+        if q then
+            RankHook "Removed" (name)
+        end
+    elseif dev.isRankObject(name) then
+        rank_position = tonumber(name:getCodePosition())
         q = SQL.DELETE {rowid = name.id}
+        if q then
+            RankHook "Removed" (name.id)
+        end
     end
     if q then
         rank_count = rank_count - 1
         local rank_code = bit.lshift(1, rank_position - 1)
-        JAAS.Hook.Run "Rank" "RemovePosition" (function (bit_code)
+        local error, message = RankHook "RemovePosition" (function (bit_code)
             if bit_code > 0 then
-                local bit_length = math.ceil(math.log(bits_to_be_shifted, 2))
+                local bit_length = math.ceil(math.log(bit_code, 2))
                 if bit.band(bit_code, rank_code) > 0 then
                     bit_code = bit.bxor(bit_code, rank_code)
                 end
@@ -302,13 +341,12 @@ function rank.removeRank(name)
             end
             return bit_code or 0
         end)
-        sql.Begin()
-        for t in rank.rankIterator() do
-            if tonumber(t["position"]) > rank_position then
-                SQL.UPDATE {position = t["position"] - 1} {rowid = t["id"]}
-            end
+        if !error then
+            print(message)
         end
+        SQL.UPDATE "position = position - 1" ("position > "..tostring(rank_position))
         sql.Commit()
+        HookGlobalChange()
     end
     return q
 end
@@ -321,25 +359,31 @@ function rank.removeRanks(...)
             for k,v in ipairs(rankPositions) do
                 local q, rank_position
                 if isstring(v) then
-                    rank_position = tonumber(SQL.SELECT "position" {name = v}["position"])
-                    if SQL.DELETE {name = v} then
-                        code_to_remove = code_to_remove + bit.lshift(1, v[2])
-                        rank_code_count = 1 + rank_code_count
-                        rank_count = rank_count - 1
+                    local rank_object = local_rank(v)
+                    if rank_object then
+                        rank_position = rank_object:getCodePosition()
+                        if SQL.DELETE {name = v} then
+                            code_to_remove = code_to_remove + bit.lshift(1, v[2])
+                            rank_code_count = 1 + rank_code_count
+                            rank_count = rank_count - 1
+                            RankHook "Removed" (rank_object.id)
+                        end
                     end
                 elseif isnumber(v) then
                     rank_position = tonumber(SQL.SELECT "position" {rowid = v}["position"])
-                    if SQL.DELETE {id = v} then
+                    if rank_position and SQL.DELETE {id = v} then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
                         rank_count = rank_count - 1
+                        RankHook "Removed" (v)
                     end
                 elseif dev.isRankObject(v) then
-                    rank_position = tonumber(SQL.SELECT "position" {rowid = v.id}["position"])
+                    rank_position = v:getCodePosition()
                     if SQL.DELETE {rowid = v.id} then
                         code_to_remove = code_to_remove + bit.lshift(1, v[2])
                         rank_code_count = 1 + rank_code_count
                         rank_count = rank_count - 1
+                        RankHook "Removed" (v.id)
                     end
                 end
                 rankPositions[1 + rank_code_count] = rank_position
@@ -354,12 +398,14 @@ function rank.removeRanks(...)
                     local shifted_bits = 0
                     rankPositions = table.sort(rankPositions)
                     local bit_length = math.ceil(math.log(bit_code, 2))
+
                     for i=#rankPositions, 1, -1 do
                         if bit_length > rankPositions[i] then
                             local temp_bits = bit.rshift(bit_code, rankPositions[i])
                             shifted_bits = shifted_bits + bit.lshift(temp_bits, rankPositions[i] - (#rankPositions - (i - 1)))
                         end
                     end
+
                     if rankPositions[1] > 1 then
                         bit_code = bit.ror(bit_code, rankPositions[1])
                         bit_code = bit.rshift(bit_code, bit_length - rankPositions[1])
@@ -369,6 +415,7 @@ function rank.removeRanks(...)
                         return shifted_bits
                     end
                 end
+
             end)
             sql.Begin()
             local i = 1
@@ -379,14 +426,17 @@ function rank.removeRanks(...)
                 end
             end
             sql.Commit()
+            HookGlobalChange()
             return true
         end
+    else
+        return rank.removeRank(rankPositions[1])
     end
 end
 
 local p_cache = dev.Cache()
 
-JAAS.Hook "Rank" "GlobalPowerChange" ["MaxPowerCacheClean"] = function()
+RankHookAdd "GlobalPowerChange" ["MaxPowerCacheClean"] = function()
     p_cache()
 end
 
@@ -397,10 +447,12 @@ function rank.getMaxPower(code)
     if p_cache[code] ~= nil then
         return p_cache[code]
     else
-        local q,max = SQL.SELECT "MAX(power)" "code & ".. code .." > 0",0
+        local q,max = SQL.SELECT "MAX(power)" ("code & ".. code .." > 0"),0
+
         if q then
             max = q["MAX(power)"]
         end
+
         p_cache[code] = max
         return max
     end
@@ -414,11 +466,13 @@ function rank.getRank(name)
 end
 
 MODULE.Access(function (rank_name)
-    rank_name = SQL.ESCAPE(rank_name)
+    rank_name = string.Trim(SQL.ESCAPE(rank_name), "'")
     if rank_name then
         local a = SQL.SELECT "rowid" {name = rank_name}
         if a then
-            return local_rank(tonumber(a["id"]))
+            return local_rank(tonumber(a["rowid"]))
+        else
+            return false
         end
     end
     return setmetatable({}, {__index = rank, __newindex = function () end, __metatable = "jaas_rank_library"})
@@ -427,15 +481,59 @@ end)
 dev:isTypeFunc("RankObject","jaas_rank_object")
 dev:isTypeFunc("RankLibrary","jaas_rank_library")
 
+util.AddNetworkString "JAAS_RankUpdate"
+
+RankHookAdd "Removed" ["PlayerUpdateRemove"] = function (id)
+    net.Start "JAAS_RankUpdate"
+    net.WriteUInt(1, 3)
+    net.WriteFloat(id)
+    net.Broadcast()
+end
+
+RankHookAdd "GlobalNameChange" ["PlayerUpdateName"] = function (id, name)
+    net.Start "JAAS_RankUpdate"
+    net.WriteUInt(2, 3)
+    net.WriteFloat(id)
+    net.WriteString(name)
+    net.Broadcast()
+end
+
+RankHookAdd "GlobalPowerChange" ["PlayerUpdatePower"] = function (id, power)
+    net.Start "JAAS_RankUpdate"
+    net.WriteUInt(3, 3)
+    net.WriteFloat(id)
+    net.WriteUInt(power, 8)
+    net.Broadcast()
+end
+
+RankHookAdd "GlobalInvisChange" ["PlayerUpdateInvis"] = function (id, invis)
+    net.Start "JAAS_RankUpdate"
+    net.WriteUInt(4, 3)
+    net.WriteFloat(id)
+    net.WriteBool(invis)
+    net.Broadcast()
+end
+
+RankHookAdd "GlobalAccessChange" ["PlayerUpdateAccess"] = function (id, access)
+    net.Start "JAAS_RankUpdate"
+    net.WriteUInt(5, 3)
+    net.WriteFloat(id)
+    net.WriteUInt(access, 32)
+    net.Broadcast()
+end
+
 log:registerLog {1, 6, "created", 2} -- [1] secret_survivor created Moderator
 log:registerLog {1, 6, "deleted", 2} -- [2] secret_survivor deleted T-Mod
 log:registerLog {1, 6, "set", "power to", 4, "on", 2} -- [3] secret_survivor set power to 3 on Moderator
 log:registerLog {1, 6, "set", "invisible to", 5, "on", 2} -- [4] secret_survivor set invisible to true on Trusted
 log:registerLog {1, 6, "set", "access value to", 4, "on", 2} -- [5] secret_survivor set access value to 2 on Manager
 log:registerLog {1, 6, "attempted", "to modify a rank"} -- [6] Dempsy40 attempted to modify a rank
+
 MODULE.Handle.Server(function (jaas)
+
     local perm = jaas.Permission()
     local modify_rank = perm.registerPermission("Can Modify Rank Table", "Player will be able to modify the rank table - this is required to add, remove, and modify existing ranks")
+    local showInvisibleRanks = perm.registerPermission("Show Invisible Ranks", "This permission will show invisible ranks clientside")
 
     util.AddNetworkString "JAAS_ModifyRank_Channel"
     /*
@@ -444,35 +542,34 @@ MODULE.Handle.Server(function (jaas)
         2 :: Invalid Rank Identifier
         3 :: Unknown modify code
     */
-    local sendFeedback = dev.sendUInt("JAAS_ModifyRankTable_Channel", 2)
+    local sendFeedback = dev.sendUInt("JAAS_ModifyRank_Channel", 2)
+
     net.Receive("JAAS_ModifyRank_Channel", function (len, ply)
         if modify_rank:codeCheck(ply) then
             local sendCode = sendFeedback(ply)
             local modifyCase = dev.SwitchCase()
             modifyCase:case(0, function () -- Add Rank
-                local name = SQL.ESCAPE(net.ReadString())
+                local name = sql.SQLStr(net.ReadString(), true)
                 local power = net.ReadUInt(8)
                 local invis = net.ReadBool()
                 if rank.addRank(name, power, invis) then
-                    log:Log(1, {player = {ply}, rank = {name}})
                     log:superadminChat("%p created %r", ply:Nick(), name)
+                    log:Log(1, {player = {ply}, rank = {name}})
                     return 0
-                else
-                    return 1
                 end
+                return 1
             end)
             modifyCase:case(1, function () -- Remove Rank
-                local name = SQL.ESCAPE(net.ReadString())
+                local name = string.Trim(SQL.ESCAPE(net.ReadString()), "'")
                 if rank.removeRank(name) then
                     log:Log(2, {player = {ply}, rank = {name}})
                     log:superadminChat("%p removed %r", ply:Nick(), name)
                     return 0
-                else
-                    return 1
                 end
+                return 1
             end)
             modifyCase:case(2, function () -- Remove Ranks
-                local len,t = net.ReadUInt(64),{}
+                local len,t = net.ReadUInt(32),{}
                 for i=1,len do
                     t[i] = net.ReadString()
                 end
@@ -482,9 +579,8 @@ MODULE.Handle.Server(function (jaas)
                         log:superadminChat("%p removed %r", ply:Nick(), v)
                     end
                     return 0
-                else
-                    return 1
                 end
+                return 1
             end)
             modifyCase:case(3, function () -- Set Power
                 local rnk = jaas.Rank(net.ReadString())
@@ -494,29 +590,27 @@ MODULE.Handle.Server(function (jaas)
                         log:Log(3, {player = {ply}, rank = {rnk}, data = {power}})
                         log:superadminChat("%p set %r's power to %d", ply:Nick(), rnk:getName(), power)
                         return 0
-                    else
-                        return 1
                     end
-                else
-                    return 2
+                    return 1
                 end
+                return 2
             end)
             modifyCase:case(4, function () -- Set Invisible
-                local rnk = jaas.Rank(net.ReadString())
-                local invis = net.ReadBool()
-                if dev.isRankObject(rnk) then
-                    if rnk:setInvis(invis) then
-                        log:Log(4, {player = {ply}, rank = {rnk}, string = {invis}})
-                        if invis then
-                            log:superadminChat("%p made %r invisible")
-                        else
-                            log:superadminChat("%p made %r not invisible")
+                if showInvisibleRanks:codeCheck(ply) then
+                    local rnk = jaas.Rank(net.ReadString())
+                    local invis = net.ReadBool()
+                    if dev.isRankObject(rnk) then
+                        if rnk:setInvis(invis) then
+                            log:Log(4, {player = {ply}, rank = {rnk}, string = {invis}})
+                            if invis then
+                                log:superadminChat("%p made %r invisible", ply:Nick(), rnk:getName())
+                            else
+                                log:superadminChat("%p made %r not invisible", ply:Nick(), rnk:getName())
+                            end
+                            return 0
                         end
-                        return 0
-                    else
                         return 1
                     end
-                else
                     return 2
                 end
             end)
@@ -528,33 +622,46 @@ MODULE.Handle.Server(function (jaas)
                         log:Log(5, {player = {ply}, rank = {rnk}, data = {value}})
                         log:superadminChat("%p set %r's access value to %d", ply:Nick(), rnk:getName(), value)
                         return 0
-                    else
-                        return 1
                     end
-                else
-                    return 2
+                    return 1
                 end
+                return 2
             end)
             modifyCase:default(3)
-            sendCode(modifyCase:switch(net.ReadUInt(3)))
+            local channel_type = net.ReadUInt(3)
+            sendCode(modifyCase:switch(channel_type))
         else
             log:Log(6, {player = {ply}})
             log:superadminChat("%p attempted to modify a rank", ply:Nick())
         end
     end)
 
-    local showInvisibleRanks = perm.registerPermission("Show Invisible Ranks", "This permission will show invisible ranks clientside")
     util.AddNetworkString "JAAS_RankPullChannel"
 
     net.Receive("JAAS_RankPullChannel", function (len, ply)
-        net.Start "JAAS_RankPullChannel"
+        local r = {}
+        local canSee = showInvisibleRanks:codeCheck(ply)
         for t in rank.rankIterator() do
-            if !t.invisible or showInvisibleRanks:codeCheck(ply:getJAASCode()) then
-                net.WriteTable(t)
+            if !t.invisible or canSee then
+                r[tonumber(t.rowid)] = t
             end
         end
+        net.Start "JAAS_RankPullChannel"
+            net.WriteTable(r)
         net.Send(ply)
     end)
+
+    RankHookAdd "Added" ["PlayerUpdateAdd"] = function (id, name, power, invis, position)
+        for k,ply in ipairs(player.GetAll()) do
+            if showInvisibleRanks:codeCheck(ply) then
+                net.Start "JAAS_RankUpdate"
+                net.WriteUInt(0, 3)
+                net.WriteFloat(id)
+                net.WriteTable({rowid = id, name = name, power = power, invisible = invis, position = position, access_group = 0})
+                net.Send(ply)
+            end
+        end
+    end
 end)
 
 log:print "Module Loaded"

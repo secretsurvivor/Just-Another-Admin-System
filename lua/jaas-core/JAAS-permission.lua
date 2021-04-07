@@ -6,9 +6,10 @@ if !SQL.EXIST and SERVER then
     SQL.CREATE.INDEX "JAAS_permission_name" "name"
 end
 
-local permission_table = permission_table or {} -- [name] = {code, description, access}
+local permission_table = permission_table or {} -- [name] = {code, description, access} // string, integer, string, integer
 local permission_local = {["getCode"] = true, ["setCode"] = true, ["getName"] = true, ["xorCode"] = true}
-local permission = {["registerPermission"] = true}
+local permission = {["registerPermission"] = true, ["CheckPermissions"] = true}
+
 
 function permission_local:getName()
     return self.name
@@ -22,43 +23,8 @@ function permission_local:getDescription()
     return permission_table[self.name][2]
 end
 
-function permission_local:setCode(code)
-    if SQL.UPDATE {code = code} {name = self.name} then
-        local before = permission_table[self.name][1]
-        permission_table[self.name][1] = code
-        JAAS.Hook.Run.Permission(self.name)(before, code)
-        return true
-    end
-    return false
-end
-
-function permission_local:xorCode(code)
-    if dev.isRankObject(code) then
-        code = code:getCode()
-    end
-    local before = permission_table[self.name][1]
-    local c_xor = bit.bxor(before, code)
-    if SQL.UPDATE {code = c_xor} {name = self.name} then
-        permission_table[self.name][1] = c_xor
-        JAAS.Hook.Run.Permission(self.name)(before, c_xor)
-        return true
-    end
-    return false
-end
-
 function permission_local:getAccess()
     return permission_table[self.name][3]
-end
-
-function permission_local:setAccess(value)
-    if dev.isAccessObject(value) then
-        value = value:getValue()
-    end
-    if SQL.UPDATE {access_group = value} {name = self.name} then
-        permission_table[self.name][3] = value
-        return true
-    end
-    return false
 end
 
 local AND = bit.band
@@ -73,6 +39,45 @@ function permission_local:codeCheck(code)
         elseif dev.isPlayer(code) then
             return AND(self:getCode(), code:getJAASCode()) > 0
         end
+    end
+end
+
+if SERVER then
+    function permission_local:setAccess(value)
+        if dev.isAccessObject(value) then
+            value = value:getValue()
+        end
+        if SQL.UPDATE {access_group = value} {name = self.name} then
+            permission_table[self.name][3] = value
+            return true
+        end
+        return false
+    end
+
+    function permission_local:setCode(code)
+        if SQL.UPDATE {code = code} {name = self.name} then
+            local before = permission_table[self.name][1]
+            permission_table[self.name][1] = code
+            JAAS.Hook.Run.Permission(self.name)(before, code)
+            JAAS.Hook.Run "Permission" "GlobalCodeUpdate" (self.name, before, code)
+            return true
+        end
+        return false
+    end
+
+    function permission_local:xorCode(code)
+        if dev.isRankObject(code) then
+            code = code:getCode()
+        end
+        local before = permission_table[self.name][1]
+        local c_xor = bit.bxor(before, code)
+        if SQL.UPDATE {code = c_xor} {name = self.name} then
+            permission_table[self.name][1] = c_xor
+            JAAS.Hook.Run.Permission(self.name)(before, c_xor)
+            JAAS.Hook.Run "Permission" "GlobalCodeUpdate" (self.name, before, c_xor)
+            return true
+        end
+        return false
     end
 end
 
@@ -105,34 +110,91 @@ setmetatable(permission_local, {
     end
 })
 
-function permission.registerPermission(name, description, code, access)
-    if !name or name == "" then
-        error("Permission name cannot be empty", 2)
+if SERVER then
+    function permission.registerPermission(name, description, code, access)
+        if !name or name == "" then
+            error("Permission name cannot be empty", 2)
+        end
+        local q = SQL.SELECT "code, access_group" {name = name}
+        if q then
+            code = tonumber(q["code"])
+            access = tonumber(q["access_group"])
+        end
+        code = code or 0
+        access = access or 0
+        if !q then
+            q = SQL.INSERT {name = name, code = code, access_group = access}
+        end
+        if q then
+            permission_table[name] = {code, description, access}
+            return permission_local(name)
+        end
     end
-    local q = SQL.SELECT "code, access_group" {name = name}
-    if q then
-        code = tonumber(q["code"])
-        access = tonumber(q["access_group"])
+
+    JAAS.Hook "Rank" "RemovePosition" ["Permission_module"] = function (func)
+        sql.Begin()
+        for name, t in pairs(permission_table) do
+            local new_code = func(t[1])
+            permission_table[name][1] = new_code
+            SQL.UPDATE {code = new_code} {name = name}
+        end
+        sql.Commit()
     end
-    code = code or 0
-    access = access or 0
-    if !q then
-        q = SQL.INSERT {name = name, code = code, access_group = access}
+
+    util.AddNetworkString"JAAS_PermissionClientUpdate"
+    JAAS.Hook "Permission" "GlobalCodeUpdate" ["ClientCodeUpdate"] = function (name, old, new)
+        net.Start"JAAS_PermissionClientUpdate"
+        net.WriteString(name)
+        net.WriteFloat(new)
+        net.Broadcast()
     end
-    if q then
+else
+    function permission.registerPermission(name, description)
+        if !name or name == "" then
+            error("Permission name cannot be empty", 2)
+        end
+        code = code or 0
+        access = access or 0
         permission_table[name] = {code, description, access}
         return permission_local(name)
     end
-end
 
-JAAS.Hook "Rank" "RemovePosition" ["Permission_module"] = function (func)
-    sql.Begin()
-    for name, t in pairs(permission_table) do
-        local new_code = func(t[1])
-        permission_table[name][1] = new_code
-        SQL.UPDATE {code = new_code} {name = name}
+    MODULE.Handle.Client(function (jaas)
+        local PLAYER = jaas.Player()
+
+        function permission.CheckPermissions(...)
+            local r = {}
+            for i,name in ipairs({...}) do
+                print(name, permission_table[name])
+                if permission_table[name] then
+                    r[i] = bit.band(PLAYER.GetLocalCode(), permission_table[name][1])
+                else
+                    r[i] = false
+                end
+            end
+            return unpack(r)
+        end
+    end)
+
+    function permission.GetPermissions()
+        return pairs(permission_table)
     end
-    sql.Commit()
+
+    hook.Add("InitPostEntity", "JAAS_PermissionInitialSync", function ()
+        net.Start"JAAS_PermissionView_Channel"
+        net.SendToServer()
+    end)
+
+    net.Receive("JAAS_PermissionView_Channel", function ()
+        permission_table = net.ReadTable()
+    end)
+
+    net.Receive("JAAS_PermissionClientUpdate", function ()
+        local name = net.ReadString()
+        if permission_table[name] then
+            permission_table[name][1] = net.ReadFloat()
+        end
+    end)
 end
 
 MODULE.Access(function (permission_name)
@@ -145,13 +207,12 @@ end)
 dev:isTypeFunc("PermissionObject","jaas_permission_object")
 dev:isTypeFunc("PermissionLibrary","jaas_permission_library")
 
-local modify_permission = permission.registerPermission("Can Modify Permissions", "Player will be able to change what permissions ranks have access to")
-
 log:registerLog {3, "was", 6, "added", "to", 2, "by", 1} -- [1] Noclip was added to Moderator by secret_survivor
 log:registerLog {3, "was", 6, "removed", "from", 2, "by", 1} -- [2] Physgun Player Pickup Allow was removed from Admin by secret_survivor
 log:registerLog {3, "has", 6, "default access", "by", 1} -- [3] Can Player Spray has default access by secret_survivor
 log:registerLog {1, 6, "attempted", "to add/remove", 3} -- [4] Dempsy40 attempted to add/remove a player Can Suicide
 MODULE.Handle.Server(function (jaas)
+    local modify_permission = permission.registerPermission("Can Modify Permissions", "Player will be able to change what permissions ranks have access to")
     util.AddNetworkString "JAAS_PermissionModify_Channel"
     /* Permission feedback codes :: 2 Bits
         0 :: Permission Change was a success
@@ -168,11 +229,15 @@ MODULE.Handle.Server(function (jaas)
             if dev.isPermissionObject(perm) and dev.isRankObject(rank) then
                 if perm:accessCheck(ply) then
                     if perm:xorCode(rank) then
-                        sendCode(0)
+                        net.Start"JAAS_PermissionModify_Channel"
+                        net.WriteUInt(0, 2)
+                        net.WriteString(perm:getName())
+                        net.WriteFloat(perm:getCode())
+                        net.Send(ply)
                         if perm:getCode() == 0 then -- Default access
                             log:Log(3, {player = {ply}, entity = {perm:getName()}})
                             log:superadminChat("%e has default access by %p", perm:getName(), ply:Nick())
-                        elseif bit.band(perm:getCode(), rank:getCode()) then -- Added
+                        elseif bit.band(perm:getCode(), rank:getCode()) > 0 then -- Added
                             log:Log(1, {player = {ply}, rank = {rank}, entity = {perm:getName()}})
                             log:superadminChat("%p added %e to %r", ply:Nick(), perm:getName(), rank:getName())
                         else -- Removed
@@ -196,19 +261,26 @@ MODULE.Handle.Server(function (jaas)
             end
         end
     end)
-end)
 
-MODULE.Handle.Server(function (jaas)
+    util.AddNetworkString "JAAS_PermissionView_Channel"
+    net.Receive("JAAS_PermissionView_Channel", function (len, ply)
+        net.Start("JAAS_PermissionView_Channel")
+        net.WriteTable(permission_table)
+        net.Send(ply)
+    end)
+
     util.AddNetworkString "JAAS_PermissionClientCheck"
     net.Receive("JAAS_PermissionClientCheck", function (perm, ply)
         local name = net.ReadString()
         perm = jaas.Permission(name)
+        net.Start "JAAS_PermissionClientCheck"
+        net.WriteString(name)
         if dev.isPermissionObject(perm) then
-            net.Start "JAAS_PermissionClientCheck"
-            net.WriteString(name)
             net.WriteBool(perm:codeCheck(ply:getJAASCode()))
-            net.Send(ply)
+        else
+            net.WriteBool(false)
         end
+        net.Send(ply)
     end)
 end)
 
