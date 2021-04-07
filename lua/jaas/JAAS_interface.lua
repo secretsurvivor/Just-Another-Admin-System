@@ -1,4 +1,4 @@
-local GUI,PANEL = JAAS.GUI(),JAAS.Panel()
+local GUI,PANEL,DEV = JAAS.GUI(),JAAS.Panel(),JAAS.Dev()
 local ui_toggle,open = true,false
 
 local toggle_convar = CreateConVar("jaas_toggle", "1", FCVAR_LUA_CLIENT, "Decides if the JAAS Menu is toggled open or held", 0, 1)
@@ -195,7 +195,6 @@ for category,command_list in COMMAND.ICommand() do ----------- Build Command Lis
 
                 argument_element.OnSelected = function (self, val)
                     execute_arguments[k] = val
-                    print(k, val)
                 end
 
             elseif v[2] == 0x6 then ------------ Players ------------
@@ -256,22 +255,28 @@ for category,command_list in COMMAND.ICommand() do ----------- Build Command Lis
             :ClearPaint()
             :Text("", "Default", Color(255, 0, 0), TEXT_ALIGN_LEFT)
 
-        JAAS.Hook "Command" "CommandFeedback" ["CommandGUI"] = function(code, category, name, message)
-            if code == 2 then
-                argument_element:TDLib()
-                    :Text("Invalid Access", "DebugFixed", Color(255, 0, 0), TEXT_ALIGN_LEFT)
-            elseif code == 3 then
-                argument_element:TDLib()
-                    :Text("Invalid Arguments", "DebugFixed", Color(255, 0, 0), TEXT_ALIGN_LEFT)
-            elseif code == 4 then
-                argument_element:TDLib()
-                    :Text(message, "DebugFixed", Color(255, 0, 0), TEXT_ALIGN_LEFT)
-            else
-                argument_element:TDLib()
-                    :Text("Unknown Error", "DebugFixed", Color(255, 0, 0), TEXT_ALIGN_LEFT)
+        JAAS.Hook "Command" "CommandFeedback" ["CommandGUI-["..category..","..name.."]-Feedback"] = function(code, c, n, message)
+            if c == category and n == name then
+                if code == 2 then
+                    argument_element:TDLib()
+                        :Text("Invalid Access", "DebugFixed", Color(255, 0, 0), TEXT_ALIGN_LEFT)
+                elseif code == 3 then
+                    argument_element:TDLib()
+                        :Text("Invalid Arguments", "DebugFixed", Color(255, 0, 0), TEXT_ALIGN_LEFT)
+                elseif code == 4 then
+                    argument_element:TDLib()
+                        :Text(message, "DebugFixed", Color(255, 0, 0), TEXT_ALIGN_LEFT)
+                else
+                    argument_element:TDLib()
+                        :Text("Unknown Error", "DebugFixed", Color(255, 0, 0), TEXT_ALIGN_LEFT)
+                end
+                argument_element:InvalidateLayout(true)
+                argument_element:SizeToContents()
+                command_element_container:InvalidateLayout(true)
+                command_element_container:SizeToChildren(false, true)
+                category_container:InvalidateLayout(true)
+                category_container:SizeToChildren(false, true)
             end
-            argument_element:InvalidateLayout(true)
-            argument_element:SizeToContents()
         end
 
         argument_element:Dock(TOP)
@@ -301,8 +306,8 @@ end
 
 GUI.RegisterTab("Commands", command_base_panel, Color(238, 66, 66))
 
-PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermission, canModifyPlayers) ------ Rank Tab -------
-    if canModifyRank or canModifyCommand or canModifyPermission or canModifyPlayers then
+PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermission, canModifyPlayers)
+    if canModifyRank or canModifyCommand or canModifyPermission or canModifyPlayers then ------ Rank Tab Block -------
         local rank_panel = vgui.Create("EditablePanel") ------- Rank Tab --------
         rank_panel:TDLib()
             :ClearPaint()
@@ -375,6 +380,7 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
             :SquareCheckbox(Color(173, 185, 202))
         invisible_control:Dock(TOP)
         invisible_control:SetTall(38)
+        invisible_control:SetChecked(false)
 
         rank_command_panel:SetContents(add_rank_panel)
 
@@ -422,7 +428,7 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
                         net.WriteUInt(0, 3)
                         net.WriteString(name_control:GetValue())
                         net.WriteUInt(power_control:GetValue(), 8)
-                        net.WriteBool(invisible_control:GetValue())
+                        net.WriteBool(invisible_control:GetChecked())
                     net.SendToServer()
                 else
                     add_rank_button:TDLib()
@@ -442,6 +448,108 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
             end
         end
 
+        local selected_rank -- Currently selected rank
+        local rank_buttons = {} -- List of Rank Buttons, found on the left
+        local player_button_list = {} -- List of Player Bool Buttons, found in the main tab section [Player Name]
+        local command_button_list = {} -- List of Command Bool Buttons, found in the main tab section [Category Name + Command Name]
+        local permission_button_list = {} -- List of Permission Bool Buttons, found in the main tab section [Permission Name]
+
+        local function UpdateButtonStyles(list, index)
+            if selected_rank then
+                local rank_code = selected_rank.code
+                local function CorrectStyle(button)
+                    if button.code == 0 then
+                        if button.lastStyle != 2 then
+                            button:TDLib()
+                                :ClearPaint()
+                                :Background(Color(226, 240, 217))
+                                :FadeHover(Color(209, 209, 209))
+                                :Text(button.name, "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                                :Text(DEV.ToHex(button.code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                            button.lastStyle = 2
+                        end
+                    elseif bit.band(rank_code, button.code) > 0 then
+                        if button.lastStyle != 1 then
+                            button:TDLib()
+                                :ClearPaint()
+                                :Background(Color(173, 185, 202))
+                                :FadeHover(Color(209, 209, 209))
+                                :Text(button.name, "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                                :Text(DEV.ToHex(button.code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                            button.lastStyle = 1
+                        end
+                    elseif button.lastStyle != 0 then
+                        button:TDLib()
+                            :ClearPaint()
+                            :Background(Color(255, 255, 255))
+                            :FadeHover(Color(209, 209, 209))
+                            :Text(button.name, "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                            :Text(DEV.ToHex(button.code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                        button.lastStyle = 0
+                    end
+                end
+                if index then
+                    CorrectStyle(list[index])
+                else
+                    for k,v in pairs(list) do
+                        CorrectStyle(v)
+                    end
+                end
+            else
+                if index and list[index].lastStyle != 2 then
+                    if list[index].code == 0 then
+                        list[index]:TDLib()
+                            :ClearPaint()
+                            :Background(Color(226, 240, 217))
+                            :FadeHover(Color(209, 209, 209))
+                            :Text(list[index].name, "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                            :Text(DEV.ToHex(list[index].code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                        list[index].lastStyle = 2
+                    elseif list[index].lastStyle != 0 then
+                        list[index]:TDLib()
+                            :ClearPaint()
+                            :Background(Color(255, 255, 255))
+                            :FadeHover(Color(209, 209, 209))
+                            :Text(list[index].name, "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                            :Text(DEV.ToHex(list[index].code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                        list[index].lastStyle = 0
+                    end
+                else
+                    for k,v in pairs(list) do
+                        if v.code == 0 and v.lastStyle != 2 then
+                            v:TDLib()
+                                :ClearPaint()
+                                :Background(Color(226, 240, 217))
+                                :FadeHover(Color(209, 209, 209))
+                                :Text(v.name, "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                                :Text(DEV.ToHex(v.code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                            v.lastStyle = 2
+                        elseif v.code ~= 0 and v.lastStyle != 0 then
+                            v:TDLib()
+                                :ClearPaint()
+                                :Background(Color(255, 255, 255))
+                                :FadeHover(Color(209, 209, 209))
+                                :Text(v.name, "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                                :Text(DEV.ToHex(v.code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                            v.lastStyle = 0
+                        end
+                    end
+                end
+            end
+        end
+
+        local function UpdateBuiltPlayerButtons(index)
+            UpdateButtonStyles(player_button_list, index)
+        end
+
+        local function UpdateBuiltCommandButtons(index)
+            UpdateButtonStyles(command_button_list, index)
+        end
+
+        local function UpdateBuiltPermissionButtons(index)
+            UpdateButtonStyles(permission_button_list, index)
+        end
+
         function remove_rank_button:DoClick() ------ Remove Rank Button Click Function ------
             if rank_command_panel:GetExpanded() then
                 default_button_props()
@@ -451,15 +559,24 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
                     default_button_props()
                     if #remove_selection_list > 1 then
                         net.Start "JAAS_ModifyRank_Channel"
-                        net.WriteUInt(#remove_selection_list, 64)
-                        for k,v in ipairs(remove_selection_list) do
-                            net.WriteString(v)
+                        net.WriteUInt(2, 3)
+                        net.WriteUInt(#remove_selection_list, 32)
+                        for k,v in pairs(remove_selection_list) do
+                            net.WriteString(k)
                         end
                         net.SendToServer()
                     elseif #remove_selection_list == 1 then
                         net.Start "JAAS_ModifyRank_Channel"
+                        net.WriteUInt(1, 3)
                         net.WriteString(remove_selection_list[1])
                         net.SendToServer()
+                    end
+                    for k,v in pairs(rank_buttons) do
+                        v.Header:TDLib()
+                            :ClearPaint()
+                            :Background(Color(255, 255, 255))
+                            :FadeHover(Color(209, 209, 209))
+                            :Text(DEV.ToHex(code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_RIGHT, -7, 6, true)
                     end
                     remove_selection_list = {}
                 else
@@ -479,27 +596,51 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
 
         rank_panel:InvalidateChildren(true)
 
-        local selected_rank
-        local rank_buttons = {}
-
-        local function RankCategory(name) ---- Rank Element Builder ----
+        local function RankCategory(name, power, invis, code) ---- Rank Element Builder ----
             local rankCategory = vgui.Create("DCollapsibleCategory", rank_list)
             rankCategory:SetLabel(name)
             rankCategory.Header:SetTextColor(Color(191, 191, 191, 255))
             rankCategory:Dock(TOP)
+            rankCategory.Header:SetTall(30)
             rankCategory:SetExpanded(false)
             rankCategory.Header:TDLib()
                 :ClearPaint()
                 :Background(Color(255, 255, 255))
                 :FadeHover(Color(209, 209, 209))
+                :Text(DEV.ToHex(code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_RIGHT, -7, 6, true)
             rankCategory:SetTall(35)
             rankCategory.Header:SetContentAlignment(5)
+            rankCategory.code = code
 
-            rankCategory.Header.UpdateColours = function (self, skin)
+            rankCategory.Header.UpdateColours = function (self)
                 if ( self:GetParent():GetExpanded() ) then
-                    return Color(0, 0, 0, 255)
+                    return self:SetTextColor(Color(0, 0, 0, 255))
+                end
+                return self:SetTextColor(Color(191, 191, 191, 255))
+            end
+
+            rankCategory.Header.DoClick = function (self)
+                if remove_selection_toggle then
+                    if self:GetParent():GetExpanded() then
+                        self:GetParent():Toggle()
+                    end
+                    if table.HasValue(remove_selection_list, name) then
+                        table.RemoveByValue(remove_selection_list, name)
+                        self:TDLib()
+                            :ClearPaint()
+                            :Background(Color(255, 255, 255))
+                            :FadeHover(Color(209, 209, 209))
+                            :Text(DEV.ToHex(code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_RIGHT, -7, 6, true)
+                    else
+                        remove_selection_list[1 + #remove_selection_list] = name
+                        self:TDLib()
+                            :ClearPaint()
+                            :Background(Color(173, 185, 202))
+                            :FadeHover(Color(209, 209, 209))
+                            :Text(DEV.ToHex(code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_RIGHT, -7, 6, true)
+                    end
                 else
-                return Color(191, 191, 191, 255)
+                    self:GetParent():Toggle()
                 end
             end
 
@@ -507,22 +648,22 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
                 if selected_rank == self then
                     selected_rank = nil
                 else
-                    if selected_rank then
+                    if selected_rank ~= nil then
                         selected_rank:Toggle()
                     end
                     selected_rank = self
                 end
+                UpdateBuiltPlayerButtons()
+                UpdateBuiltCommandButtons()
+                UpdateBuiltPermissionButtons()
             end
 
             rankCategory.Think = function (self)
                 self.animSlide:Run()
-
-                --self:GetParent():InvalidateLayout(true)
-                --self:GetParent():SizeToChildren(false, true)
             end
 
-            function rankCategory:SetLabel(val)
-                rankCategory:SetLabel(val)
+            function rankCategory:GetName()
+                return self.Header:GetText()
             end
 
             local rankInfoContents = vgui.Create("DPanel")
@@ -559,9 +700,9 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
                 net.WriteBool(val)
                 net.SendToServer()
             end
-
+            rankCategory.invisCheck:SetChecked(invis)
             function rankCategory:SetInvisValue(val)
-                self.invisCheck:SetValue(tobool(val))
+                self.invisCheck:SetChecked(tobool(val))
             end
 
             rankInfoContents:InvalidateLayout(true)
@@ -572,20 +713,33 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
         end
 
         for id,info in PANEL.GetRankIterator() do -------- Initial Rank List Build ---------
-            rank_buttons[id] = RankCategory(info.name)
+            rank_buttons[id] = RankCategory(info.name, info.power, info.invisible, bit.lshift(1, info.position - 1))
         end
 
         rank_list:InvalidateLayout(true)
         rank_list:SizeToChildren(false, true)
 
         local HookRank = JAAS.Hook "Rank" ------- Rank List Update Hooks -------
-        HookRank "Added" ["InterfaceUpdate"] = function (id, name, power, invis)
-            print(id, name, power, invis)
-            rank_buttons[id] = RankCategory(name)
+        HookRank "Added" ["InterfaceUpdate"] = function (id, name, power, invis, position)
+            rank_buttons[id] = RankCategory(name, power, invis, bit.lshift(1, position - 1))
         end
-        HookRank "Removed" ["InterfaceUpdate"] = function (id)
+        HookRank "Removed" ["InterfaceUpdate"] = function (id, name)
             rank_buttons[id]:Remove()
             rank_buttons[id] = nil
+        end
+        HookRank "RemovedPosition" ["InterfaceUpdatePositionStorage"] = function (func)
+            for k,v in pairs(player_button_list) do
+                player_button_list[k].code = func(player_button_list[k].code)
+                UpdateBuiltPlayerButtons(k)
+            end
+            for k,v in pairs(command_button_list) do
+                command_button_list[k].code = func(command_button_list[k].code)
+                UpdateBuiltCommandButtons(k)
+            end
+            for k,v in pairs(permission_button_list) do
+                permission_button_list[k].code = func(permission_button_list[k].code)
+                UpdateBuiltPermissionButtons(k)
+            end
         end
         HookRank "NameUpdated" ["InterfaceUpdate"] = function (id, old, new)
             rank_buttons[id]:SetLabel(new)
@@ -597,7 +751,23 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
             rank_buttons[id]:SetInvisValue(new)
         end
 
+        net.Receive("JAAS_PermissionModify_Channel", function ()
+            local code = net.ReadUInt(2)
+            if code == 0 then
+                print("Permission Modification was Successful")
+            elseif code == 1 then
+                print("Permission Code could not be Modified")
+            elseif code == 2 then
+                print("Unknown Permission Identifier")
+            elseif code == 3 then
+                print("Not apart of Access Group")
+            else
+                print("Unknown Permission Modification Feedback Code")
+            end
+        end)
+
         if canModifyCommand or canModifyPermission or canModifyPlayers then
+            local PLAYER = JAAS.Player()
             if canModifyPlayers then ------- User Tab Button --------
                 local user_button = vgui.Create("DButton", tab_buttons)
                 user_button:Dock(RIGHT)
@@ -611,6 +781,74 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
                 user_button.DoClick = function ()
                     object_list:OpenTab("Users")
                 end
+
+                local player_panel = vgui.Create("DScrollPanel")
+                player_panel:TDLib()
+                    :ClearPaint()
+                    :HideVBar()
+
+                local function BuildPlayerBoolButton(ply, code)
+                    local button = vgui.Create("DButton", player_panel)
+                    button:DockMargin(0, 0, 0, 1)
+                    button:Dock(TOP)
+                    button:SetTall(30)
+                    button:SetText("")
+                    button.name = ply:Nick()
+                    button.code = code
+                    button.lastStyle = 0
+                    button:TDLib()
+                        :ClearPaint()
+                        :Background(Color(255, 255, 255))
+                        :FadeHover(Color(209, 209, 209))
+                        :Text(ply:Nick(), "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                        :Text(DEV.ToHex(code), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                    function button:DoClick()
+                        if selected_rank then
+                            net.Start"JAAS_PlayerModify_Channel"
+                            net.WriteString(selected_rank:GetName())
+                            net.WriteEntity(ply)
+                            net.SendToServer()
+                        end
+                    end
+                    player_button_list[ply:Nick()] = button
+                end
+
+                net.Receive("JAAS_PlayerModify_Channel", function ()
+                    local f_code = net.ReadUInt(2) -- Feedback code
+                    if f_code == 0 then
+                        local target = net.ReadEntity()
+                        if IsValid(target) and target:IsPlayer() then
+                            player_button_list[target:Nick()].code = net.ReadFloat()
+                            UpdateBuiltPlayerButtons(target:Nick())
+                        end
+                    end
+                end)
+
+                net.Receive("JAAS_PlayerClientUpdate", function ()
+                    local target = net.ReadEntity()
+                    if IsValid(target) then
+                        player_button_list[target:Nick()].code = net.ReadFloat()
+                        UpdateBuiltPlayerButtons(target:Nick())
+                    end
+                end)
+
+                for k,v in ipairs(player.GetAll()) do
+                    PLAYER.GetCode(v, function (code)
+                        BuildPlayerBoolButton(v, code)
+                    end)
+                end
+                object_list:AddTab("Users", player_panel)
+
+                hook.Add("PlayerInitialSpawn", "JAAS_UI_UpdateRankSelectionList", function (ply, transition)
+                    PLAYER.GetCode(ply, function (code)
+                        BuildPlayerBoolButton(ply, code)
+                    end)
+                end)
+
+                hook.Add("PlayerDisconnected", "JAAS_UI_UpdateRankSelectionList", function (ply)
+                    player_button_list[ply:Nick()]:Remove()
+                    player_button_list[ply:Nick()] = nil
+                end)
             end
 
             if canModifyPermission then ------- Permission Tab Button --------
@@ -627,6 +865,66 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
                 permission_button.DoClick = function ()
                     object_list:OpenTab("Permissions")
                 end
+
+                local permission_panel = vgui.Create("DScrollPanel")
+                permission_panel:TDLib()
+                    :ClearPaint()
+                    :HideVBar()
+
+                local function BuildPermissionBoolButton(permission_name, info)
+                    local button = vgui.Create("DButton", permission_panel)
+                    button:DockMargin(0, 0, 0, 1)
+                    button:Dock(TOP)
+                    button:SetTall(30)
+                    button:SetText("")
+                    if info[2] then
+                        button:SetToolTip(info[2])
+                    end
+                    button.name = permission_name
+                    button.code = info[1]
+                    button.lastStyle = 0
+                    button:TDLib()
+                        :ClearPaint()
+                        :Background(Color(255, 255, 255))
+                        :FadeHover(Color(209, 209, 209))
+                        :Text(permission_name, "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                        :Text(DEV.ToHex(info[1]), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                    function button:DoClick()
+                        if selected_rank then
+                            net.Start"JAAS_PermissionModify_Channel"
+                            net.WriteString(permission_name)
+                            net.WriteString(selected_rank:GetName())
+                            net.SendToServer()
+                        end
+                    end
+                    permission_button_list[permission_name] = button
+                end
+
+                net.Receive("JAAS_PermissionModify_Channel", function ()
+                    local f_code = net.ReadUInt(2)
+                    if f_code == 0 then
+                        local name = net.ReadString()
+                        if permission_button_list[name] then
+                            permission_button_list[name].code = net.ReadFloat()
+                            UpdateBuiltPermissionButtons(name)
+                        end
+                    end
+                end)
+
+                net.Receive("JAAS_PermissionClientUpdate", function ()
+                    local name = net.ReadString()
+                    if permission_button_list[name] then
+                        permission_button_list[name].code = net.ReadFloat()
+                        UpdateBuiltPermissionButtons(name)
+                    end
+                end)
+
+                local PERMISSION = JAAS.Permission()
+                for name,info in PERMISSION.GetPermissions() do
+                    BuildPermissionBoolButton(name, info)
+                end
+
+                object_list:AddTab("Permissions", permission_panel)
             end
 
             if canModifyCommand then ------- Command Tab Button --------
@@ -643,6 +941,87 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
                 command_button.DoClick = function ()
                     object_list:OpenTab("Commands")
                 end
+
+                local command_panel = vgui.Create("DScrollPanel")
+                command_panel:TDLib()
+                    :ClearPaint()
+                    :HideVBar()
+
+                local function BuildCommandBoolButton(category, name, info, category_panel)
+                    local button = vgui.Create("DButton", category_panel)
+                    button:DockMargin(0, 0, 0, 1)
+                    button:Dock(TOP)
+                    button:SetTall(30)
+                    button:SetText("")
+                    if #info[3] > 0 then
+                        button:SetToolTip(info[3])
+                    end
+                    button.category = category
+                    button.name = string.gsub(name, "_", " ")
+                    button.code = info[1]
+                    button.lastStyle = 0
+                    button:TDLib()
+                        :ClearPaint()
+                        :Background(Color(255, 255, 255))
+                        :FadeHover(Color(209, 209, 209))
+                        :Text(string.gsub(name, "_", " "), "Trebuchet18", Color(0, 0, 0), TEXT_ALIGN_LEFT, 10, -3, true)
+                        :Text(DEV.ToHex(info[1]), "Trebuchet9", Color(127, 127, 127), TEXT_ALIGN_LEFT, 10, 6, true)
+                    function button:DoClick()
+                        if selected_rank then
+                            net.Start"JAAS_CommandModify_Channel"
+                            net.WriteString(category)
+                            net.WriteString(name)
+                            net.WriteString(selected_rank:GetName())
+                            net.SendToServer()
+                        end
+                    end
+                    command_button_list[category..name] = button
+                end
+
+                net.Receive("JAAS_CommandModify_Channel", function ()
+                    local f_code = net.ReadUInt(2)
+                    if f_code == 0 then
+                        local category = net.ReadString()
+                        local name = net.ReadString()
+                        if command_button_list[category..name] then
+                            command_button_list[category..name].code = net.ReadFloat()
+                            UpdateBuiltCommandButtons(category..name)
+                        end
+                    end
+                end)
+
+                net.Receive("JAAS_CommandClientUpdate", function ()
+                    local category, name = net.ReadString(), net.ReadString()
+                    if command_button_list[category..name] then
+                        command_button_list[category..name].code = net.ReadFloat()
+                        UpdateBuiltCommandButtons(category..name)
+                    end
+                end)
+
+                local function BuildCategoryCategory(category, command_list)
+                    local category_element = vgui.Create("DCollapsibleCategory", command_panel)
+                    category_element:SetLabel("")
+                    category_element:Dock(TOP)
+                    category_element.Header:TDLib()
+                        :ClearPaint()
+                        :Background(Color(255, 255, 255))
+                        :Text(category, "Trebuchet18", Color(0, 0, 0))
+                        :FadeHover(Color(209, 209, 209))
+
+                    local contents_panel = vgui.Create("DPanel")
+                    for name,info in pairs(command_list) do
+                        BuildCommandBoolButton(category, name, info, category_element)
+                    end
+
+                    category_element:SetContents(contents_panel)
+                end
+
+                local COMMAND = JAAS.Command()
+                for category,command_list in COMMAND.ICommand() do
+                    BuildCategoryCategory(category,command_list)
+                end
+
+                object_list:AddTab("Commands", command_panel)
             end
         end
 
@@ -650,7 +1029,7 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
     end
 end, "Can Modify Rank Table", "Can Modify Commands", "Can Modify Permissions", "Can Modify Player")
 
-PANEL.PermissionCheck(function (canModifyAccess) ---------- Access Tab -----------
+PANEL.PermissionCheck(function (canModifyAccess)
     if canModifyAccess then
         local access_panel = vgui.Create("EditablePanel") ------ Access Base Panel -------
         access_panel:TDLib()
@@ -665,7 +1044,7 @@ PANEL.PermissionCheck(function (canModifyAccess) ---------- Access Tab ---------
     end
 end, "Can Modify Access Group")
 
-PANEL.PermissionCheck(function (canAccessLog) --------- Log Tab ----------
+PANEL.PermissionCheck(function (canAccessLog)
     if canAccessLog then
         local log_panel = vgui.Create("EditablePanel") --------- Log Base Panel ----------
         log_panel:TDLib()
