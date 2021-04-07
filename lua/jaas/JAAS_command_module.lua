@@ -28,7 +28,7 @@ command:registerCommand("Toggle_Flight", function (ply, target)
     else
         return "Invalid target"
     end
-end, arg:add("Target", "PLAYER", true))
+end, arg:add("Target", "PLAYER", true), "Allows a player to activate flight on themselves or others")
 
 command:registerCommand("Toggle_Gravity_Flight", function (ply, target)
     if dev.isPlayer(target) then
@@ -52,7 +52,7 @@ command:registerCommand("Toggle_Gravity_Flight", function (ply, target)
     else
         return "Invalid target"
     end
-end, arg:add("Target", "PLAYER", true))
+end, arg:add("Target", "PLAYER", true), "Allows a player to activate gravity flight on themselves or others")
 
 command:registerCommand("Toggle_Noclip", function (ply, target)
     if dev.isPlayer(target) then
@@ -76,7 +76,7 @@ command:registerCommand("Toggle_Noclip", function (ply, target)
     else
         return "Invalid target"
     end
-end, arg:add("Target", "PLAYER", true))
+end, arg:add("Target", "PLAYER", true), "Allows a player to activate noclip on themselves or others")
 
 log:registerLog {1, 6, "kicked", 1, "for", 5} -- [2] secret_survivor kicked Dempsy40 for "RDM"
 command:registerCommand("Kick", function (ply, target, reason)
@@ -97,7 +97,7 @@ command:registerCommand("Kick", function (ply, target, reason)
     else
         return "Invalid target"
     end
-end, arg:add("Target", "PLAYER", true):add("Reason", "STRING", false))
+end, arg:add("Target", "PLAYER", true):add("Reason", "STRING", false), "Allows a player to kick players that they can target")
 
 log:registerLog {1, 6, "activated", "Godmode"} -- [3] secret_survivor activated Godmode
 log:registerLog {1, 6, "deactivated", "Godmode"} -- [4] secret_survivor deactivated Godmode
@@ -113,7 +113,7 @@ command:registerCommand("God", function(ply)
             log:Log(3, {player = {ply}})
 		end
 	end
-end)
+end,nil, "Allows a player to activate Godmode on themselves or others")
 
 log:registerLog {1, 6, "killed", 1} -- [5] secret_survivor killed Dempsy40
 log:registerLog {1, 6, "killed", "themself"} -- [6] secret_survivor killed themself
@@ -132,15 +132,22 @@ command:registerCommand("Kill", function (ply, target)
         log:Log(6, {player = {ply}})
         log:adminChat("%p killed themself", ply:Nick())
 	end
-end, arg:add("Target", "PLAYER"))
+end, arg:add("Target", "PLAYER"), "Allows a player to activate death on themselves or others")
 
 log:registerLog {1, 6, "changed level", "to", 3, "with gamemode", 3} -- [7] secret_survivor changed level to gm_construct with gamemode darkrp
 command:registerCommand("Map", function (ply, map_name, gamemode)
-    log:Log(7, {player = {ply}, entity = {map_name, gamemode}})
-    log:adminChat("%p changed level to %e with gamemode %e", ply:Nick(), map_name, gamemode)
-    game.ConsoleCommand("gamemode "..gamemode.."\n")
-    game.ConsoleCommand("changelevel "..map_name.."\n")
-end, arg:add("Map", "STRING", false, "gm_construct"):add("Gamemode", "STRING", false, "sandbox"))
+    print(map_name, gamemode)
+    if map_name and gamemode then
+        log:Log(7, {player = {ply}, entity = {map_name, gamemode}})
+        log:adminChat("%p changed level to %e with gamemode %e", ply:Nick(), map_name, gamemode)
+        game.ConsoleCommand("gamemode "..gamemode.."\n")
+        game.ConsoleCommand("changelevel "..map_name.."\n")
+    elseif !map_name then
+        return "Map Name is required"
+    else
+        return "Gamemode is required"
+    end
+end, arg:add("Map", "STRING", false, "gm_construct"):add("Gamemode", "STRING", false, "sandbox"), "Allows a player to change the current level and gamemode")
 
 log:registerLog {1, 6, "created", "bot"} -- [8] secret_survivor created bot
 command:registerCommand("Create_Bot", function (ply)
@@ -150,11 +157,11 @@ command:registerCommand("Create_Bot", function (ply)
     else
 	    return "Cannot create bot"
     end
-end)
+end,nil, "Allows a player to create a bot and connect them to the server")
 
 log:registerLog {1, 6, "set", 1, "speed to", 4} -- [9] secret_survivor set Dempsy40 speed to 1700
 log:registerLog {1, 6, "set", "their speed to", 4} -- [10] secret_survivor set their speed to 1700
-command:registerCommand("SetRunSpeed", function (ply, speed, target)
+command:registerCommand("Set_Run_Speed", function (ply, speed, target)
 	if IsValid(target) then
 		target:SetRunSpeed(speed)
 	else
@@ -164,14 +171,14 @@ command:registerCommand("SetRunSpeed", function (ply, speed, target)
 			return "Target must be specified"
 		end
 	end
-end, arg:add("Speed", "INT"):add("Target", "PLAYER"))
+end, arg:add("Speed", "INT"):add("Target", "PLAYER"), "Allows a player to change the run speed of themselves or others")
 
 command:setCategory "Test"
 
 command:registerCommand("Add", function (ply, a, b)
 	print(a + b)
 	return a + b
-end, arg:add("Num_1", "INT", true, 0):add("Num_2", "INT", true, 0))
+end, arg:add("Num_1", "INT", true, 0):add("Num_2", "INT", true, 0), "Allows a player to accomplish complicated mathematics without leaving their game")
 
 command:registerCommand("Bacon", function (ply)
 	if IsValid(ply) then
@@ -179,4 +186,4 @@ command:registerCommand("Bacon", function (ply)
 	end
 	print "Bacon"
     log:superadminChat("%a", "Bacon")
-end)
+end,nil, "Considered to be one of the most dangerous commands on planet Earth, no one truly understands the full extend of this command")
