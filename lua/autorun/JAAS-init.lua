@@ -115,11 +115,11 @@ JAAS.Hook = setmetatable({
     Run = setmetatable({
         Permission = function (name) -- JAAS.Hook.Run.Permission name (...)
             return function (...)
-                local varArgs = ...
+                local varArgs = {...}
                 if hook_func.permission != nil and hook_func.permission[name] != nil then
-                    coroutine.resume(coroutine.create(function ()
+                    return coroutine.resume(coroutine.create(function ()
                         for _,v in pairs(hook_func.permission[name]) do
-                            v(varArgs)
+                            v(unpack(varArgs))
                         end
                     end))
                 end
@@ -128,11 +128,11 @@ JAAS.Hook = setmetatable({
         Command = function (category) -- JAAS.Hook.Run.Command category name (...)
             return function (name)
                 return function (...)
-                    local varArgs = ...
+                    local varArgs = {...}
                     if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil then
-                        coroutine.resume(coroutine.create(function ()
+                        return coroutine.resume(coroutine.create(function ()
                             for _,v in pairs(hook_func.command[category][name]) do
-                                v(varArgs)
+                                v(unpack(varArgs))
                             end
                         end))
                     end
@@ -142,11 +142,11 @@ JAAS.Hook = setmetatable({
         GlobalVar = function (category) -- JAAS.Hook.Run.GlobalVar category name (...)
             return function (name)
                 return function (...)
-                    local varArgs = ...
+                    local varArgs = {...}
                     if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil then
-                        coroutine.resume(coroutine.create(function ()
+                        return coroutine.resume(coroutine.create(function ()
                             for _,v in pairs(hook_func.other[category][name]) do
-                                v(varArgs)
+                                v(unpack(varArgs))
                             end
                         end))
                     end
@@ -156,11 +156,11 @@ JAAS.Hook = setmetatable({
     }, {__call = function (self, category) -- JAAS.Hook.Run category name (...)
         return function (name)
             return function (...)
-                local varArgs = ...
+                local varArgs = {...}
                 if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil then
-                    coroutine.resume(coroutine.create(function ()
+                    return coroutine.resume(coroutine.create(function ()
                         for _,v in pairs(hook_func.other[category][name]) do
-                            v(varArgs)
+                            v(unpack(varArgs))
                         end
                     end))
                 end
@@ -346,13 +346,13 @@ print "-------- JAAS Modules --------"
 include.Shared {
     "JAAS_variables.lua",
     "jaas-core/JAAS-module.lua",
-    "jaas-core/JAAS-command.lua"
+    "jaas-core/JAAS-command.lua",
+    "jaas-core/JAAS-player.lua",
+    "jaas-core/JAAS-permission.lua"
 }
 
 include.Server {
-    "jaas-core/JAAS-player.lua",
     "jaas-core/JAAS-rank.lua",
-    "jaas-core/JAAS-permission.lua",
     "jaas-core/JAAS-access.lua"
 }
 

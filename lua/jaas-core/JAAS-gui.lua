@@ -1,19 +1,13 @@
 local MODULE, log, dev = JAAS:RegisterModule "GUI"
 
-local interface_tab, settings = {}, {} -- interface_tab = {name, panel, order}*,  settings[name] = {{name, data_type, client_func, default value, description}*}
+local interface_tab, settings = {}, {} -- interface_tab[name] = {panel, color},  settings[name] = {{name, data_type, client_func, default value, description}*}
 local current_interface = nil
 local open_func, close_func = function() end, function () end
+local post_build_tab = function () end
 
 local jaas_interface = {
     BuildTabs = function (func)
-        for k,v in pairs(interface_tab) do
-            func(k, v[1], v[2])
-        end
-    end,
-    BuildSettings = function (func)
-        for k,v in pairs(settings) do
-            func(k, v)
-        end
+        post_build_tab = func
     end,
     SetAccess = function (self, func_open, func_close)
         if self.panel == current_interface then
@@ -29,12 +23,12 @@ local gui = {
         panel:Hide()
         return setmetatable({panel = panel}, {__index = jaas_interface}), panel
     end,
-    RegisterTab = function (name, panel, order)
+    RegisterTab = function (name, panel, color)
         panel:Hide()
-        interface_tab[name] = {panel, order}
-    end,
-    RegisterSettings = function (name, settings_info)
-        settings[name] = settings_info
+        if !interface_tab[name] then
+            post_build_tab(name, panel, color)
+        end
+        interface_tab[name] = {panel, color}
     end
 }
 
