@@ -1003,7 +1003,7 @@ do -- Log Module Initialisation
                             record.timestamp = v
                         elseif t == 0x3 then -- Label
                             if string.Left(v, 2) == "__" then
-                                filtered = false
+                                --filtered = false
                             end
                             if !filtered then
                                 filtered = self:GetFilter().module == v

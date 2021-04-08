@@ -31,6 +31,7 @@ net.Receive("JAAS_PermissionClientCheck" , function (name, check)
 end)
 
 local rankList = {} -- rankList[id] = {name=, power=, invisible=, rowid=, access_group=, position=}
+local before_initial_pull = true
 local HookRankRun = JAAS.Hook.Run"Rank"
 
 hook.Add("InitPostEntity", "JAAS_InitialRankPull", function ()
@@ -40,6 +41,8 @@ end)
 
 net.Receive("JAAS_RankPullChannel", function (len)
     rankList = net.ReadTable()
+    HookRankRun "InitialPull" (rankList)
+    before_initial_pull = false
 end)
 
 net.Receive("JAAS_RankUpdate", function (len)
@@ -260,92 +263,6 @@ function CONTROL:Paint(w, h)
     draw.Rect(0, 0, w, h, (self:GetColor() or Color(0,0,0)):Unpack())
 end
 
-CONTROL:Define("JBoolButton", "Button that acts as a Checkbox")
-CONTROL:Derma_Hook "Paint"
-CONTROL:AccessorFunc "BackgroundColor"
-CONTROL:AccessorFunc "SelectedColor"
-CONTROL:AccessorFunc "AltSelectionColor"
-CONTROL:AccessorFunc "AltColor"
-CONTROL:AccessorFunc ("Checked", FORCE_BOOL)
-CONTROL:AccessorFunc "LabelType"
-CONTROL:AccessorFunc "TextColor"
-CONTROL:AccessorFunc "AltTextColor"
-CONTROL:AccessorFunc "TextAlignment"
-CONTROL:AccessorFunc "AltTextAlignment"
-CONTROL:AccessorFunc "Padding"
-
-function CONTROL:Init()
-    self:SetAltColour(false)
-    self:SetPadding(0)
-    self:SetTextAlignment(2)
-    self:SetAltTextAlignment(1)
-    self:SetTextColour(Color(0,0,0))
-    self:SetAltTextColour(Color(127,127,127))
-    self:SetLabelType(1)
-end
-
-function CONTROL:SetLabelType(num)
-    self.___LabelType = math.Clamp(num, 1, 3)
-end
-
-function CONTROL:SetTextAlignment(num)
-    self.___TextAlignment = math.Clamp(num, 1, 3)
-end
-
-function CONTROL:SetAltTextAlignment(num)
-    self.___AltTextAlignment = math.Clamp(num, 1, 3)
-end
-
-function CONTROL:Setup(text, alt_text_1, alt_text_2)
-    self.main_text = vgui.Create("DLabel", self)
-    self.main_text:SetText(text)
-    self.main_text:SetSize(self:GetWide() - self:GetPadding() * 2, self.main_text:GetTall())
-    self.main_text:SetPos(self:GetPadding(), self:GetTall() * 0.21)
-    self.main_text:SetContentAlignment(3 + self:GetTextAlignment())
-    self.main_text:SetColor(self:GetTextColor())
-    if self:GetLabelType() == 2 then
-        self.alt_text = vgui.Create("DLabel", self)
-        self.alt_text:SetText(alt_text_1)
-        self.alt_text:SetSize(self:GetWide() - self:GetPadding() * 2, self.alt_text:GetTall())
-        self.alt_text:SetPos(self:GetPadding(), self:GetTall() * 0.65)
-        self.alt_text:SetContentAlignment(3 + self:GetTextAlignment())
-        self.alt_text:SetColor(self:AltTextColor())
-    else
-        self.alt_text_1 = vgui.Create("DLabel", self)
-        self.alt_text_1:SetText(alt_text_1)
-        self.alt_text_1:SetSize(self:GetWide() - self:GetPadding() * 2, self.alt_text_1:GetTall())
-        self.alt_text_1:SetPos(self:GetPadding(), self:GetTall() * 0.65)
-        self.alt_text_1:SetContentAlignment(4)
-        self.alt_text_1:SetColor(self:AltTextColor())
-        self.alt_text_2 = vgui.Create("DLabel", self)
-        self.alt_text_2:SetText(alt_text_2)
-        self.alt_text_2:SetSize(self:GetWide() - self:GetPadding() * 2, self.alt_text_2:GetTall())
-        self.alt_text_2:SetPos(self:GetPadding(), self:GetTall() * 0.65)
-        self.alt_text_2:SetContentAlignment(6)
-        self.alt_text_2:SetColor(self:AltTextColor())
-    end
-end
-
-function CONTROL:OnChange(bool)
-end
-
-function CONTROL:DoClick()
-    self:SetChecked(!self:GetChecked())
-    self:OnChange(self:GetChecked())
-end
-
-function CONTROL:Paint(w, h)
-    if self:GetAltColour() then
-        draw.Rect(0, 0, w, h, self:GetAltSelectionColor():Unpack())
-    elseif self:GetChecked() then
-        draw.Rect(0, 0, w, h, self:GetSelectedColor():Unpack())
-    else
-        draw.Rect(0, 0, w, h, self:GetBackgroundColor():Unpack())
-    end
-    surface.SetDrawColor(self:GetTextColor():Unpack())
-    surface.DrawLine(0, h, w, h)
-end
-
 CONTROL:Define()
 
 CONTROL = panel.ControlBuilder "DPanel" ("JTabPanel", "Used in JAAS Menu, external tab panel")
@@ -437,7 +354,7 @@ end
 
 function CONTROL:SetName(name)
     self.Title:TDLib()
-        :Text(name, "Default", Color(59, 56, 56, 255), TEXT_ALIGN_LEFT, 5)
+        :Text("  "..name, "Default", Color(59, 56, 56, 255), TEXT_ALIGN_LEFT, 5)
 end
 
 function CONTROL:AddItem(val)
@@ -504,12 +421,12 @@ CONTROL = panel.ControlBuilder "JList" ("JPlayerList", "List of Players updated"
 local registeredPlayerLists = {}
 hook.Add("PlayerConnect", "JPlayerListUpdater", function (name, ip)
     for k,v in ipairs(registeredPlayerLists) do
-        v[1](name, ip)
+        registeredPlayerLists[k]:AddItem(name)
     end
 end)
 hook.Add("PlayerDisconnected", "JPlayerListUpdater", function (ply)
     for k,v in ipairs(registeredPlayerLists) do
-        v[2](ply:Nick())
+        registeredPlayerLists[k]:RemoveItem(ply:Nick())
     end
 end)
 
@@ -518,12 +435,11 @@ function CONTROL:Init()
     for k,v in ipairs(player.GetAll()) do
         self:AddItem(v:Nick())
     end
-    hook.Add("PlayerConnect", "JPlayerListUpdater", function (name, ip)
-        self:AddItem(name)
-    end)
-    hook.Add("PlayerDisconnected", "JPlayerListUpdater", function (ply)
-        self:RemoveItem(name)
-    end)
+    registeredPlayerLists[1 + #registeredPlayerLists] = self
+end
+
+function CONTROL:OnRemove()
+    table.RemoveByValue(registeredPlayerLists, self)
 end
 
 function CONTROL:GetSelected(returnPly)
@@ -557,11 +473,40 @@ end
 
 CONTROL:Define("JRankList", "List of Options")
 
+local registeredRankLists = {}
+JAAS.Hook "Rank" "Added" ["JAAS_RankListUpdate"] = function (id, name)
+    for k,v in ipairs(registeredRankLists) do
+        registeredRankLists[k]:AddItem(name)
+    end
+end
+JAAS.Hook "Rank" "Removed" ["JAAS_RankListUpdate"] = function (id, name)
+    for k,v in ipairs(registeredRankLists) do
+        registeredRankLists[k]:RemoveItem(name)
+    end
+end
+local initial_registeredRankLists = {}
+JAAS.Hook "Rank" "InitialPull" ["JAAS_RankListIntitalBuild"] = function (rankList)
+    for k,v in ipairs(initial_registeredRankLists) do
+        for id,info in pairs(rankList) do
+            initial_registeredRankLists[k]:AddItem(info.name)
+        end
+    end
+end
+
 function CONTROL:Init()
     self:SetName("Ranks")
-    for k,v in pairs(rankList) do
-
+    if before_initial_pull then
+        initial_registeredRankLists[1 + #initial_registeredRankLists] = self
+    else
+        for id,info in panel.GetRankIterator() do
+            self:AddItem(info.name)
+        end
     end
+    registeredRankLists[1 + #registeredRankLists] = self
+end
+
+function CONTROL:OnRemove()
+    table.RemoveByValue(registeredPlayerLists, self)
 end
 
 CONTROL:Define()

@@ -340,7 +340,7 @@ MODULE.Handle.Server(function (jaas)
 	end
 end)
 
-MODULE.Handle.Shared(function (jaas)
+MODULE.Handle.Server(function (jaas)
 	local command = jaas.Command()
 	local arg = command.argumentTableBuilder()
 

@@ -570,25 +570,34 @@ if SERVER then
     end)
 
     local function argumentTypeToTypeFunction(num)
-        if num == 1 then return isbool , tobool
-        elseif num == 2 or num == 3 then return isnumber , tonumber
-        elseif num == 4 or num == 5 then return isstring , tostring
-        elseif num == 5 then return isentity, function (str)
+        if num == 1 then
+            return isbool , tobool
+        elseif num == 2 or num == 3 then
+            return isnumber , tonumber
+        elseif num == 4 then
+            return isstring , tostring
+        elseif num == 5 then
+            return function (var)
+                return isentity(var) and IsValid(var) and var:IsPlayer()
+            end, function (str)
                 for _,ply in ipairs(player.GetAll()) do
+                    print(str, ply:Nick(), string.find(ply:Nick(),str))
                     if string.find(ply:Nick(),str) then
                         return ply
                     end
                 end
             end
-        elseif num == 6 then return istable , string.ToTable
-        elseif num == 7 then return isstring, function (var)
+        elseif num == 6 then
+            return istable , string.ToTable
+        elseif num == 7 then
+            return isstring, function (var)
                 return JAAS.Rank(var)
             end
         end
     end
 
     local function typeFix(type_, var)
-        local from,to = argumentTypeToTypeFunction(type_)
+        local from,to = argumentTypeToTypeFunction(tonumber(type_))
         if !from(var) then
             var = to(var)
         end

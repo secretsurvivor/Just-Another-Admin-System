@@ -209,10 +209,16 @@ for category,command_list in COMMAND.ICommand() do ----------- Build Command Lis
                 argument_element = vgui.Create("JRankList", command_element_container)
                 argument_element:SetMultiSelect(false)
 
+                argument_element.OnSelected = function (self, val)
+                    execute_arguments[k] = val
+                end
             elseif v[2] == 0x8 then ------------ Ranks ------------
                 argument_element = vgui.Create("JRankList", command_element_container)
                 argument_element:SetMultiSelect(true)
 
+                argument_element.OnSelected = function (self, val)
+                    execute_arguments[k] = val
+                end
             elseif v[2] == 0x9 then ------------ Option--------------
                 argument_element = vgui.Create("JOptionList", command_element_container)
                 argument_element:SetMultiSelect(false)
