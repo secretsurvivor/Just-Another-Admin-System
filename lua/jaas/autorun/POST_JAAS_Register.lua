@@ -5,3 +5,4 @@ JAAS.include.Server.Init {
 }
 JAAS.include.Client.Post "JAAS/tdlib.lua" -- Three's Derma Library - created by Threebow
 JAAS.include.Client.Post "JAAS/JAAS_interface.lua"
+JAAS.include.Server.Pre "JAAS/JAAS_ban.lua"
