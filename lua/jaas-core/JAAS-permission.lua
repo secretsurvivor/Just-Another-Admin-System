@@ -49,6 +49,7 @@ if SERVER then
         end
         if SQL.UPDATE {access_group = value} {name = self.name} then
             permission_table[self.name][3] = value
+            JAAS.Hook.Run "Permission" "UpdatedAccessValue" (self.name, value)
             return true
         end
         return false
@@ -148,6 +149,14 @@ if SERVER then
         net.WriteFloat(new)
         net.Broadcast()
     end
+
+    util.AddNetworkString"JAAS_PermissionAccessClientUpdate"
+    JAAS.Hook "Permission" "UpdatedAccessValue" ["ClientAccessUpdate"] = function (name, value)
+        net.Start"JAAS_PermissionAccessClientUpdate"
+        net.WriteString(name)
+        net.WriteFloat(value)
+        net.Broadcast()
+    end
 else
     function permission.registerPermission(name, description)
         if !name or name == "" then
@@ -192,9 +201,26 @@ else
     net.Receive("JAAS_PermissionClientUpdate", function ()
         local name = net.ReadString()
         if permission_table[name] then
-            permission_table[name][1] = net.ReadFloat()
+            local code = net.ReadFloat()
+            permission_table[name][1] = code
+            JAAS.Hook.Run "Permission" "CodeUpdate" (name, code)
         end
     end)
+
+    net.Receive("JAAS_PermissionAccessClientUpdate", function ()
+        local name = net.ReadString()
+        if permission_table[name] then
+            local group = net.ReadFloat()
+            permission_table[name][4] = group
+            JAAS.Hook.Run "Permission" "AccessUpdate" (name, group)
+        end
+    end)
+
+    JAAS.Hook "Rank" "RemovedPosition" ["PermissionModuleUpdate"] = function (func)
+        for name,v in pairs(permission_table) do
+            permission_table[name][1] = func(permission_table[name][1])
+        end
+    end
 end
 
 MODULE.Access(function (permission_name)
@@ -229,11 +255,7 @@ MODULE.Handle.Server(function (jaas)
             if dev.isPermissionObject(perm) and dev.isRankObject(rank) then
                 if perm:accessCheck(ply) then
                     if perm:xorCode(rank) then
-                        net.Start"JAAS_PermissionModify_Channel"
-                        net.WriteUInt(0, 2)
-                        net.WriteString(perm:getName())
-                        net.WriteFloat(perm:getCode())
-                        net.Send(ply)
+                        sendCode(0)
                         if perm:getCode() == 0 then -- Default access
                             log:Log(3, {player = {ply}, entity = {perm:getName()}})
                             log:superadminChat("%e has default access by %p", perm:getName(), ply:Nick())

@@ -348,13 +348,11 @@ include.Shared {
     "jaas-core/JAAS-module.lua",
     "jaas-core/JAAS-command.lua",
     "jaas-core/JAAS-player.lua",
-    "jaas-core/JAAS-permission.lua"
-}
-
-include.Server {
-    "jaas-core/JAAS-rank.lua",
+    "jaas-core/JAAS-permission.lua",
     "jaas-core/JAAS-access.lua"
 }
+
+include.Server "jaas-core/JAAS-rank.lua"
 
 include.Client {
     "jaas-core/JAAS-panel.lua",

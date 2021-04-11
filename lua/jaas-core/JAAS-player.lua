@@ -264,11 +264,7 @@ MODULE.Handle.Server(function (jaas)
 			if dev.isRankObject(rank) then
 				if rank:accessCheck(ply) then
 					if target:xorCode(rank) then
-						net.Start"JAAS_PlayerModify_Channel"
-						net.WriteUInt(0, 2)
-						net.WriteEntity(entity)
-						net.WriteFloat(target:getCode())
-						net.Send(ply)
+						sendCode(0)
 						if target:getCode() == 0 then -- Default Access
 							log:Log(3, {player = {entity, ply}})
 							log:adminChat("%p made %p a default user", ply:Nick(), entity:Nick())

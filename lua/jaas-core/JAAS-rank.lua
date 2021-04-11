@@ -135,9 +135,8 @@ function local_rank:getAccess()
             if r_cache[self.id] == nil then
                 r_cache[self.id] = {}
             end
-
             r_cache[self.id].access = tonumber(access["access_group"])
-            return access["access_group"]
+            return r_cache[self.id].access
         end
     end
 end
@@ -518,7 +517,7 @@ RankHookAdd "GlobalAccessChange" ["PlayerUpdateAccess"] = function (id, access)
     net.Start "JAAS_RankUpdate"
     net.WriteUInt(5, 3)
     net.WriteFloat(id)
-    net.WriteUInt(access, 32)
+    net.WriteFloat(access)
     net.Broadcast()
 end
 

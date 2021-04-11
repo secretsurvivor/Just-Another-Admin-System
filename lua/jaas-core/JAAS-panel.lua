@@ -50,7 +50,7 @@ net.Receive("JAAS_RankUpdate", function (len)
     local id = net.ReadFloat()
     if update_type == 0 then -- Add
         rankList[id] = net.ReadTable()
-        HookRankRun "Added" (id, rankList[id].name, rankList[id].power, rankList[id].invisible, rankList[id].position)
+        HookRankRun "Added" (id, rankList[id])
     elseif update_type == 1 then -- Remove
         if rankList[id] then
             HookRankRun "Removed" (id, rankList[id].name, rankList[id].power, rankList[id].invisible, rankList[id].position)
@@ -83,20 +83,26 @@ net.Receive("JAAS_RankUpdate", function (len)
     elseif update_type == 2 then -- Name Changed
         if rankList[id] then
             local name = net.ReadString()
-            HookRankRun "NameUpdated" (id, rankList[id][1], name)
-            rankList[id][1] = name
+            HookRankRun "NameUpdated" (id, rankList[id].name, name)
+            rankList[id].name = name
         end
     elseif update_type == 3 then -- Power Changed
         if rankList[id] then
             local power = net.ReadUInt(8)
-            HookRankRun "PowerUpdated" (id, rankList[id][2], power)
-            rankList[id][2] = power
+            HookRankRun "PowerUpdated" (id, rankList[id].power, power)
+            rankList[id].power = power
         end
     elseif update_type == 4 then -- Invis Changed
         if rankList[id] then
             local invis = net.ReadBool()
-            HookRankRun "InvisUpdated" (id, rankList[id][3], invis)
-            rankList[id][3] = invis
+            HookRankRun "InvisUpdated" (id, rankList[id].invisible, invis)
+            rankList[id].invisible = invis
+        end
+    elseif update_type == 5 then
+        if rankList[id] then
+            local value = net.ReadFloat()
+            HookRankRun "AccessUpdated" (id, rankList[id].access_group, value)
+            rankList[id].access_group = value
         end
     end
 end)
@@ -279,11 +285,11 @@ function CONTROL:AddTab(name, panel)
     panel:SetParent(self)
     panel:Dock(FILL)
     if self.currentPanel then
-        panel:Hide()
-    else
-        self.currentPanel = panel
-        self.currentPanel:Show()
+        self.currentPanel:Hide()
     end
+    self.currentPanel = panel
+    self.currentTab = name
+    self.currentPanel:Show()
     self.tabs[name] = panel
 end
 
@@ -507,6 +513,250 @@ end
 
 function CONTROL:OnRemove()
     table.RemoveByValue(registeredPlayerLists, self)
+end
+
+CONTROL:Define()
+CONTROL = panel.ControlBuilder "DPanel" ("JSlider", "Slider designed for the JNumSlider") ----- Code Modified from https://github.com/Facepunch/garrysmod/blob/master/garrysmod/lua/vgui/dslider.lua -----
+CONTROL:AccessorFunc "Dragging"
+CONTROL:AccessorFunc "SlideX"
+CONTROL:AccessorFunc "Value"
+
+function CONTROL:Init()
+    self:SetMouseInputEnabled(true)
+    self.knob = vgui.Create("DButton", self)
+    self.knob:SetText("")
+    self.knob:SetSize(15, 15)
+    self.knob:NoClipping(true)
+    self.knob:TDLib()
+        :ClearPaint()
+        :Circle(Color(255, 255, 255))
+        :CircleFadeHover()
+    self.knob.OnCursorMoved = function(panel, cursorX, cursorY)
+        local x,y = panel:LocalToScreen(cursorX, cursorY)
+        x,y = self:ScreenToLocal(x, y)
+        self:OnCursorMoved(x, y)
+    end
+    self.knob.OnMousePressed = function ()
+        self:OnMousePressed()
+    end
+    self.knob.OnMouseReleased = function ()
+        self:OnMouseReleased()
+    end
+    self:SetValue(0)
+end
+
+function CONTROL:TranslateValue(x)
+    return x
+end
+
+function CONTROL:SetSlideX(x, w)
+    self.___SlideX = x
+    self:SetValue(math.Round(self:GetValue() + (x * 5 - 2.5)))
+    self:OnChange(self:GetValue())
+end
+
+function CONTROL:OnCursorMoved(x, y)
+    if self:GetDragging() then
+        local w,h = self:GetSize()
+        if x <= w then
+            x = math.Clamp(x, 0, w)
+
+            x = self:TranslateValue(x)
+
+            self:SetSlideX(x / w)
+            self:InvalidateLayout()
+        end
+    end
+end
+
+function CONTROL:OnMousePressed(keyCode)
+    if self:IsEnabled() then
+        self.knob.Hovered = true
+        self:SetDragging(true)
+        self:MouseCapture(true)
+        local x,y = self:CursorPos()
+        self:OnCursorMoved(x, y)
+    end
+end
+
+function CONTROL:OnChange()
+end
+
+function CONTROL:OnChangeRelease(value)
+end
+
+function CONTROL:OnMouseReleased(keyCode)
+    self.knob.Hovered = vgui.GetHoveredPanel() == self.knob
+    self:SetDragging(false)
+    self:MouseCapture(false)
+    self:OnChange(self:GetValue())
+    self:InvalidateLayout()
+end
+
+function CONTROL:PerformLayout(w, h)
+    local iw, ih = self.knob:GetSize()
+    if self:GetDragging() then
+        self.knob:SetPos((w * self:GetSlideX()) - iw * 0.2, h * 0.5 - ih * 0.5)
+    else
+        self.knob:SetPos(w * 0.5 - iw * 0.2, h * 0.5 - ih * 0.5)
+    end
+end
+
+CONTROL:Define("JNumSlider", "A JAAS Number Slider designed for unknown Min and Max values")
+
+function CONTROL:Init()
+    self.Label = vgui.Create("DLabel", self)
+    self.Label:DockMargin(0, 0, 5, 0) -- Left: 0, Top: 0, Right: 5, Bottom: 0
+    self.Label:Dock(LEFT)
+    self.Label:TDLib()
+        :ClearPaint()
+    self.Label:SetTextColor(Color(0, 0, 0))
+
+    self.Slider = vgui.Create("JSlider", self)
+    self.Slider:Dock(FILL)
+
+    self.Entry = vgui.Create("DLabel", self)
+    self.Entry:Dock(RIGHT)
+    --self.Entry:SetSize(25, 25)
+    self.Entry:TDLib()
+        :ClearPaint()
+    self.Entry:SetText(0)
+    self.Entry:InvalidateLayout(true)
+    self.Entry:SizeToContents()
+
+    self.Slider.OnChange = function (panel, value)
+        self.Entry:SetText(value)
+        self.Entry:InvalidateLayout(true)
+        self.Entry:SizeToContents()
+        return value
+    end
+
+    self.Slider.OnChangeRelease = function (panel, value)
+        self:OnChange(value)
+    end
+end
+
+function CONTROL:SetLabel(text)
+    self.Label:SetText(text)
+    self.Label:InvalidateLayout(true)
+    self.Label:SizeToContents()
+end
+
+function CONTROL:OnChange()
+end
+
+function CONTROL:GetValue()
+    return self.Slider:GetValue()
+end
+
+CONTROL:Define("VerticalSlider", "A Number Slider for vertical panels")
+CONTROL:AccessorFunc "Dragging"
+CONTROL:AccessorFunc "SlideY"
+CONTROL:AccessorFunc "Value"
+
+function CONTROL:Init()
+    self:SetMouseInputEnabled(true)
+    self.knob = vgui.Create("DButton", self)
+    self.knob:SetText("")
+    self.knob:SetSize(12, 14)
+    self.knob:NoClipping(true)
+    self.knob.Paint = function (panel, w, h)
+        surface.SetDrawColor(255, 255, 255)
+        draw.NoTexture()
+        surface.DrawPoly({{x = 0, y = 0}, {x = w, y = h / 2}, {x = 0, y = h}})
+    end
+    self.knob.OnCursorMoved = function(panel, cursorX, cursorY)
+        local x,y = panel:LocalToScreen(cursorX, cursorY)
+        x,y = self:ScreenToLocal(x, y)
+        self:OnCursorMoved(x, y)
+    end
+    self.knob.OnMousePressed = function (panel)
+        self:OnMousePressed()
+    end
+    self.knob.OnMouseReleased = function (panel)
+        self:OnMouseReleased()
+    end
+    self:TDLib()
+        :ClearPaint()
+end
+
+function CONTROL:TranslateValue(y)
+    return y
+end
+
+function CONTROL:SetSlideY(y)
+    self.___SlideY = y
+    self:SetValue(y)
+end
+
+function CONTROL:OnCursorMoved(x, y)
+    if self:GetDragging() then
+        local w,h = self:GetSize()
+        y = math.Clamp(y, 0, h)
+
+        y = self:TranslateValue(y)
+
+        self:SetSlideY(y)
+        self:InvalidateLayout(true)
+    end
+end
+
+function CONTROL:OnMousePressed(keyCode)
+    if self:IsEnabled() then
+        self:SetDragging(true)
+        self:MouseCapture(true)
+        local x,y = self:CursorPos()
+        self:OnCursorMoved(x, y)
+    end
+end
+
+function CONTROL:OnChange(value)
+end
+
+function CONTROL:TranslateFinishValue(value)
+    return value
+end
+
+function CONTROL:OnMouseReleased(keyCode)
+    self:SetDragging(false)
+    self:MouseCapture(false)
+    self:SetValue(self:TranslateFinishValue(self:GetValue()))
+    self:OnChange(self:GetValue())
+end
+
+function CONTROL:PerformLayout(w, h)
+    if self:GetDragging() then
+        self.knob:SetPos(0, self:GetSlideY())
+    else
+        self.knob:SetPos(0, self:GetValue())
+    end
+end
+
+CONTROL:Define()
+CONTROL = panel.ControlBuilder "DScrollPanel" ("JSliderPanel", "A Panel with a vertical slider")
+
+function CONTROL:Init()
+    self.pnlCanvas:Dock(FILL)
+    self.slider = vgui.Create("VerticalSlider", self.pnlCanvas)
+    self.slider:Dock(LEFT)
+    self.slider:SetWide(14)
+
+    self.panel = vgui.Create("JTabPanel", self.pnlCanvas)
+    self.panel:Dock(FILL)
+    self.panel:TDLib()
+        :ClearPaint()
+        :Background(Color(255, 255, 255))
+
+    self.pnlCanvas:TDLib()
+        :ClearPaint()
+
+    self:TDLib()
+        :ClearPaint()
+        :HideVBar()
+end
+
+function CONTROL:Add(panel)
+    panel:SetParent(self.panel)
 end
 
 CONTROL:Define()

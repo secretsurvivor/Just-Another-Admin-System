@@ -76,7 +76,7 @@ setmetatable(argTable, {
 
 dev:isTypeFunc("ArgumentBuilder", "jaas_argumentbuilder")
 
-local command_table = command_table or {} -- SERVER -- [category][name] = {code, funcArgs, function, access} -- CLIENT -- [category][name] = {code, funcArgs, description}
+local command_table = command_table or {} -- SERVER -- [category][name] = {code, funcArgs, function, access} -- CLIENT -- [category][name] = {code, funcArgs, description, access}
 
 local local_command = {["getName"] = true, ["getCategory"] = true, ["getCode"] = true, ["setCode"] = true, ["accessCheck"] = true} -- Used for local functions, for command data
 local command = {["registerCommand"] = true, ["setCategory"] = true, ["clearCategory"] = true, ["argumentTableBuilder"] = true} -- Used for global functions, for command table
@@ -145,6 +145,7 @@ if SERVER then
         end
         if SQL.UPDATE {access_group = value} {name = self.name, category = self.category} then
             command_table[self.category][self.name][4] = value
+            JAAS.Hook.Run "Command" "UpdatedAccessValue" (self.category, self.name, value)
             return true
         end
         return false
@@ -217,11 +218,12 @@ elseif CLIENT then
         end
         funcArgs = funcArgs or {}
         description = description or ""
+        access = access or 0
         if isstring(name) and istable(funcArgs) then
             if command_table[self.category] ~= nil then
-                command_table[self.category][name] = {code, funcArgs, description}
+                command_table[self.category][name] = {code, funcArgs, description, access}
             else
-                command_table[self.category] = {[name]={code, funcArgs, description}}
+                command_table[self.category] = {[name]={code, funcArgs, description, access}}
             end
         end
     end
@@ -320,15 +322,16 @@ local RefreshClientCodes = dev.SharedSync("JAAS_CommandCodeSync", function (_, p
             c[category] = {}
         end
         for name,t in pairs(v) do
-            c[category][name] = t[1]
+            c[category][name] = {t[1], t[4]}
         end
     end
     return c
 end, "JAAS_ClientCommand", function (_, ply, code_table)
     for category, c_table in pairs(code_table) do
-        for name, code in pairs(c_table) do
+        for name, info in pairs(c_table) do
             if command_table[category] and command_table[category][name] then
-                command_table[category][name][1] = code
+                command_table[category][name][1] = info[1]
+                command_table[category][name][4] = info[2]
             end
         end
     end
@@ -373,12 +376,7 @@ MODULE.Handle.Server(function (jaas)
                 if cmd:accessCheck(ply) then -- If the Player is in the correct Access Group
                     local before = cmd:getCode()
                     if cmd:xorCode(rank) then -- Add/Remove Rank from Rank Code
-                        net.Start"JAAS_CommandModify_Channel"
-                        net.WriteUInt(0, 2)
-                        net.WriteString(category)
-                        net.WriteString(name)
-                        net.WriteFloat(cmd:getCode())
-                        net.Send(ply)
+                        sendCode(0)
                         if cmd:getCode() == 0 then -- Default access
                             log:Log(3, {player = {ply}, entity = {category.."."..name}})
                             log:superadminChat("%e has default access by %p", category.."."..name, ply:Nick())
@@ -581,7 +579,6 @@ if SERVER then
                 return isentity(var) and IsValid(var) and var:IsPlayer()
             end, function (str)
                 for _,ply in ipairs(player.GetAll()) do
-                    print(str, ply:Nick(), string.find(ply:Nick(),str))
                     if string.find(ply:Nick(),str) then
                         return ply
                     end
@@ -661,6 +658,15 @@ if SERVER then
         net.WriteFloat(code)
         net.Broadcast()
     end
+
+    util.AddNetworkString"JAAS_CommandAccessClientUpdate"
+    JAAS.Hook "Command" "UpdatedAccessValue" ["ClientUpdate"] = function (category, name, value)
+        net.Start("JAAS_CommandAccessClientUpdate")
+        net.WriteString(category)
+        net.WriteString(name)
+        net.WriteFloat(value)
+        net.Broadcast()
+    end
 elseif CLIENT then
     net.Receive("JAAS_ClientCommand", function()
         local code = net.ReadInt(4)
@@ -676,7 +682,21 @@ elseif CLIENT then
         if command_table[category] then
             local name = net.ReadString()
             if command_table[category][name] then
-                command_table[category][name][1] = net.ReadFloat()
+                local code = net.ReadFloat()
+                command_table[category][name][1] =
+                JAAS.Hook.Run "Command" "CodeUpdate" (category, name, code)
+            end
+        end
+    end)
+
+    net.Receive("JAAS_CommandAccessClientUpdate", function ()
+        local category = net.ReadString()
+        if command_table[category] then
+            local name = net.ReadString()
+            if command_table[category][name] then
+                local value = net.ReadFloat()
+                command_table[category][name][4] = value
+                JAAS.Hook.Run "Command" "AccessUpdate" (category, name, value)
             end
         end
     end)

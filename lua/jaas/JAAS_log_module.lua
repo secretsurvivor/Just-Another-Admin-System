@@ -39,7 +39,6 @@ log:registerLog {"Bot", 3, 6, "joined"} -- [7] Bot Bot_1 joined
 hook.Add("PlayerInitialSpawn", "JAAS-Log_PlayerInitialSpawn", function (ply, transition)
     if !transition then
         if ply:IsBot() then
-            print(ply:GetName())
             log:Log(7, {entity = {ply:Name()}})
             for k,v in ipairs(player.GetHumans()) do
                 log:chatText(v, "%p has joined", {ply:Name()})
