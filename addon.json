@@ -1,0 +1,13 @@
+{
+    "title": "Just Another Admin System",
+    "description": "",
+    "type": "servercontent",
+    "tags": [
+        "fun"
+    ],
+    "ignore": [
+        ".git/*",
+        ".vscode/*",
+        "README.md"
+    ]
+}
