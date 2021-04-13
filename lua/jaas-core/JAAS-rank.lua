@@ -199,10 +199,10 @@ setmetatable(local_rank, {
 })
 
 local rank = {["addRank"] = true, ["rankIterator"] = true, ["getMaxPower"] = true, ["codeIterator"] = true} -- Used for global functions, for rank table
-local rank_count = tonumber(SQL.SELECT "COUNT(rowid)" () ["COUNT(rowid)"])
+local rank_count = rank_count or tonumber(SQL.SELECT "COUNT(rowid)" () ["COUNT(rowid)"])
 
 function rank.addRank(name, power, invis)
-    if rank_count < 32 then
+    if rank_count < 64 then -- Needs testing
         local t = SQL.SELECT "MAX(position)"()
         if t then
             local next_position = t["MAX(position)"]
