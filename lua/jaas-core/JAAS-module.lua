@@ -449,7 +449,7 @@ do -- Log Module Initialisation
         util.AddNetworkString "JAAS_RequestLogClient"
         util.AddNetworkString "JAAS_RequestLogDates"
         local function echoToClient()
-            print "Before Handle"
+            ErrorNoHalt"Has been called before Handle"
         end
 
         delayedHandles.log.server = {function (jaas)

@@ -144,8 +144,17 @@ if SERVER then
         end,
         codeCheck = function (type, value, code)
             if access_count > 0 and value > 0 then
-                local info = SQL.SELECT "MAX(access_value),code" ("access_value <= "..value.." AND access_type = "..type)
-                return bit.band(code, tonumber(info.code)) > 0
+                local info = SQL.SELECT "code" ("access_value <= "..value.." AND access_type = "..type)
+                if istable(info) and #info == 0 then
+                    return bit.band(code, tonumber(info.code)) > 0
+                elseif istable(info) then
+                    for k,v in ipairs(info) do
+                        if bit.band(code, tonumber(v.code)) > 0 then
+                            return true
+                        end
+                    end
+                end
+                return false
             end
             return true
         end,

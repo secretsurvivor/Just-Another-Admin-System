@@ -264,9 +264,8 @@ function rank.codeIterator(code)
 
             return function ()
                 if !e then
-                    return SQL.SELECT "*" {position = max_bits}
-                else
                     e = !e
+                    return SQL.SELECT "*" {position = max_bits}
                 end
             end
         end
