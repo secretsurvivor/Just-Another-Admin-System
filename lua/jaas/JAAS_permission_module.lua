@@ -62,7 +62,7 @@ local canSeeAllChatMessages = permission.registerPermission("Listen to Other Pla
 hook.Add("PlayerCanSeePlayersChat", "JAAS_canSeeAllChatMessages", function (text, teamOnly, listener, speaker)
     for k,ply in ipairs(player.GetAll()) do
         if canSeeAllChatMessages:codeCheck(ply:getJAASCode()) and listener != ply and speaker:IsValid() and ply:canTarget(listener:getJAASCode()) and ply:canTarget(speaker:getJAASCode()) then
-            log:chatText(v, "%p to %p: %e", speaker:Nick(), listener:Nick(), text) -- secret_survivor to Dempsy40: Can you stop killing me!
+            log:chatText(ply, "%p to %p: %e", speaker:Nick(), listener:Nick(), text) -- secret_survivor to Dempsy40: Can you stop killing me!
         end
     end
 end)
@@ -126,5 +126,5 @@ end
 
 local isAdmin = permission.registerPermission("Is Admin", "Player will be apart of the admin usergroup")
 function meta:IsAdmin()
-    return isAdmin:codeCheck(self:getJAASCode()) or isSuperadmin:codeCheck(self:getJAASCode())
+    return isAdmin:codeCheck(self:getJAASCode())
 end
