@@ -117,11 +117,14 @@ JAAS.Hook = setmetatable({
             return function (...)
                 local varArgs = {...}
                 if hook_func.permission != nil and hook_func.permission[name] != nil then
-                    return coroutine.resume(coroutine.create(function ()
+                    local err,message = coroutine.resume(coroutine.create(function ()
                         for _,v in pairs(hook_func.permission[name]) do
                             v(unpack(varArgs))
                         end
                     end))
+                    if !err then
+                        ErrorNoHalt(message)
+                    end
                 end
             end
         end,
@@ -130,11 +133,14 @@ JAAS.Hook = setmetatable({
                 return function (...)
                     local varArgs = {...}
                     if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil then
-                        return coroutine.resume(coroutine.create(function ()
+                        local err,message = coroutine.resume(coroutine.create(function ()
                             for _,v in pairs(hook_func.command[category][name]) do
                                 v(unpack(varArgs))
                             end
                         end))
+                        if !err then
+                            ErrorNoHalt(message)
+                        end
                     end
                 end
             end
@@ -144,11 +150,14 @@ JAAS.Hook = setmetatable({
                 return function (...)
                     local varArgs = {...}
                     if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil then
-                        return coroutine.resume(coroutine.create(function ()
+                        local err,message = coroutine.resume(coroutine.create(function ()
                             for _,v in pairs(hook_func.other[category][name]) do
                                 v(unpack(varArgs))
                             end
                         end))
+                        if !err then
+                            ErrorNoHalt(message)
+                        end
                     end
                 end
             end
@@ -158,11 +167,14 @@ JAAS.Hook = setmetatable({
             return function (...)
                 local varArgs = {...}
                 if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil then
-                    return coroutine.resume(coroutine.create(function ()
+                    local err,message = coroutine.resume(coroutine.create(function ()
                         for _,v in pairs(hook_func.other[category][name]) do
                             v(unpack(varArgs))
                         end
                     end))
+                    if !err then
+                        ErrorNoHalt(message)
+                    end
                 end
             end
         end

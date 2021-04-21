@@ -719,16 +719,16 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
         rank_list:SizeToChildren(false, true)
 
         local HookRank = JAAS.Hook "Rank" ------- Rank List Update Hooks -------
-        HookRank "Added" ["InterfaceUpdate"] = function (id, info)
-            rank_buttons[id] = RankCategory(name, info.power, info.invisible, bit.lshift(1, info.position - 1))
+        HookRank "Added" ["JAAS_Rank_InterfaceUpdate"] = function (id, info)
+            rank_buttons[id] = RankCategory(info.name, info.power, info.invisible, bit.lshift(1, info.position - 1))
         end
 
-        HookRank "Removed" ["InterfaceUpdate"] = function (id, name)
+        HookRank "Removed" ["JAAS_Rank_InterfaceUpdate"] = function (id, name)
             rank_buttons[id]:Remove()
             rank_buttons[id] = nil
         end
 
-        HookRank "RemovedPosition" ["InterfaceUpdatePositionStorage"] = function (func)
+        HookRank "RemovedPosition" ["JAAS_Rank_InterfaceUpdatePositionStorage"] = function (func)
             for k,v in pairs(player_button_list) do
                 player_button_list[k].code = func(player_button_list[k].code)
                 UpdateBuiltPlayerButtons(k)
@@ -743,15 +743,15 @@ PANEL.PermissionCheck(function (canModifyRank, canModifyCommand, canModifyPermis
             end
         end
 
-        HookRank "NameUpdated" ["InterfaceUpdate"] = function (id, old, new)
+        HookRank "NameUpdated" ["JAAS_Rank_InterfaceUpdate"] = function (id, old, new)
             rank_buttons[id]:SetLabel(new)
         end
 
-        HookRank "PowerUpdated" ["InterfaceUpdate"] = function (id, old, new)
+        HookRank "PowerUpdated" ["JAAS_Rank_InterfaceUpdate"] = function (id, old, new)
             rank_buttons[id]:SetPowerValue(val)
         end
 
-        HookRank "InvisUpdated" ["InterfaceUpdate"] = function (id, old, new)
+        HookRank "InvisUpdated" ["JAAS_Rank_InterfaceUpdate"] = function (id, old, new)
             rank_buttons[id]:SetInvisValue(new)
         end
 
@@ -1548,19 +1548,19 @@ PANEL.PermissionCheck(function (canModifyAccess)
         end
 
         local HookRank = JAAS.Hook "Rank" ------- Rank List Update Hooks -------
-        HookRank "Added" ["InterfaceUpdate"] = function (id, info) --- Update Styles
+        HookRank "Added" ["JAAS_Access_InterfaceUpdate"] = function (id, info) --- Update Styles
             BuildRankButton(id, info)
             UpdateButtonStyle(rank_button_list[id][1])
             UpdateButtonCodeStyle(rank_button_list[id][2])
         end
 
-        HookRank "Removed" ["InterfaceUpdate"] = function (id, name)
-            rank_buttons[id][1]:Remove()
-            rank_buttons[id][2]:Remove()
-            rank_buttons[id] = nil
+        HookRank "Removed" ["JAAS_Access_InterfaceUpdate"] = function (id, name)
+            rank_button_list[id][1]:Remove()
+            rank_button_list[id][2]:Remove()
+            rank_button_list[id] = nil
         end
 
-        HookRank "RemovedPosition" ["InterfaceUpdatePositionStorage"] = function (func) --- Update Styles
+        HookRank "RemovedPosition" ["JAAS_Access_InterfaceUpdatePositionStorage"] = function (func) --- Update Styles
             for id,v in pairs(rank_button_list) do
                 rank_button_list[id][2].code = func(rank_button_list[id][2].code)
             end
@@ -1569,13 +1569,13 @@ PANEL.PermissionCheck(function (canModifyAccess)
             end
         end
 
-        HookRank "NameUpdated" ["InterfaceUpdate"] = function (id, old, new)
+        HookRank "NameUpdated" ["JAAS_Access_InterfaceUpdate"] = function (id, old, new)
             rank_button_list[id][1].name = new
             UpdateButtonStyle(rank_button_list[id][1])
             rank_button_list[id][2].name = new
         end
 
-        HookRank "AccessUpdated" ["InterfaceUpdate"] = function (id, old, new) --- Update Styles
+        HookRank "AccessUpdated" ["JAAS_Access_InterfaceUpdate"] = function (id, old, new) --- Update Styles
             rank_button_list[id][1].value = new
             UpdateButtonStyle(rank_button_list[id][1])
         end

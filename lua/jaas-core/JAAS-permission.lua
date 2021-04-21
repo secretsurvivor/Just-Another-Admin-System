@@ -97,9 +97,7 @@ MODULE.Handle.Server(function (jaas)
 end)
 
 function permission_local:defaultAccess()
-    if self:getCode() == 0 then
-        return true
-    end
+    return self:getCode() == 0
 end
 
 setmetatable(permission_local, {
