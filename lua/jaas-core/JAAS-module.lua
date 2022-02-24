@@ -437,7 +437,6 @@ do -- Log Module Initialisation
         end
 
         concommand.Add("JAAS_PrintLogTokens", function ()
-            print(os.time())
             for byte,value in logFunctions.IGetLogToken(os.date("%d-%m-%Y")) do
                 print(byte, value)
                 if istable(value) then
