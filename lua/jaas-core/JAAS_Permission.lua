@@ -12,11 +12,11 @@ do -- SQL Permission Table Code
 	}
 
 	function PermissionTable:Select(name)
-		return self:Query("select Code,AccessGroup from JAAS_Permission where Name='%s'", name)
+		return self:SelectResults(self:Query("select Code,AccessGroup from JAAS_Permission where Name='%s'", name))
 	end
 
 	function PermissionTable:Insert(name)
-		return self:Query("insert into JAAS_Permission (Name) values (%s)", name) == nil
+		return self:Query("insert into JAAS_Permission (Name) values ('%s')", name) == nil
 	end
 
 	function PermissionTable:UpdateCode(name, code)
@@ -28,11 +28,13 @@ do -- SQL Permission Table Code
 	end
 end
 
+local Permission_Hook = JAAS.Hook("Permission")
+local Permission_Hook_Run = JAAS.Hook.Run("Permission")
+
+local PermissionDataManipulation_NetType = MODULE:RegisterNetworkType("Modify")
+local Modify_PushChange = PermissionDataManipulation_NetType("ClientPush")
+
 local permission_table = permission_table or {} -- [Name] = {1 = Code, 2 = AccessGroup}
-
-local PermissionDataManipulation_NetType = MODULE:RegisterNetworkType "Modify"
-
-local Modify_PushChange = PermissionDataManipulation_NetType "ClientPush"
 
 local PermissionObject = {Name = ""}
 
@@ -49,7 +51,7 @@ do -- Permission Object Code
 		if PermissionTable:UpdateCode(self:GetName(), code) then
 			local old_value = permission_table[self:GetName()][1]
 			permission_table[self:GetName()][1] = code
-			OnCodeUpdated(self:GetName(), code, old_value) -- TODO : Swap this with a Hook
+			Permission_Hook_Run("OnCodeChange")(self, code, old_value)
 			return true
 		end
 		return false
@@ -67,7 +69,7 @@ do -- Permission Object Code
 		if PermissionTable:UpdateAccessGroup(self:GetName(), access_group) then
 			local old_value = permission_table[self:GetName()][2]
 			permission_table[self:GetName()][2] = access_group
-			OnAccessUpdated(self:GetName(), access_group, old_value) -- TODO : Swap this with a Hook
+			Permission_Hook_Run("OnAccessChange")(self, access_group, old_value)
 			return true
 		end
 		return true
@@ -80,8 +82,20 @@ do -- Permission Object Code
 	function MODULE.Shared:Post()
 		local AccessModule = JAAS:GetModule("AccessGroup")
 
-		function PermissionObject:AccessCheck()
-			-- TODO : Support Permission Access Check
+		function PermissionObject:AccessCheck(code)
+			return AccessModule:Check("Permission", self:GetAccessCode(), code)
+		end
+
+		function PermissionObject:GetPlayers() -- Get All Players that have this permission
+			local playersWithPermission = {}
+
+			for k,v in ipairs(player.GetAll()) do
+				if self:Check(v:GetCode()) then
+					playersWithPermission[1 + #playersWithPermission] = v
+				end
+			end
+
+			return playersWithPermission
 		end
 	end
 
@@ -147,21 +161,10 @@ local CanModifyPermission = MODULE:RegisterPermission("CanModifyPermission")
 
 do -- Permission Net Code
 	if SERVER then
-		function OnCodeUpdated(permissionName, new_value, old_value) -- TODO : A version of this
+		function Permission_Hook.OnCodeChange["PermissionModule::UpdateClients"](permission, new_value, old_value)
 			J_NET:Start(PermissionDataSync_NetType)
-			Object(PermissionObject, {Name = permissionName}):NetWrite()
+			permission:NetWrite()
 			net.Broadcast()
-		end
-	elseif CLIENT then
-		function OnCodeUpdated(permissionName, new_value)
-		end
-	end
-
-	if SERVER then
-		function OnAccessUpdated(permissionName, new_value, old_value)
-		end
-	elseif CLIENT then
-		function OnAccessUpdated(permissionName, new_value)
 		end
 	end
 
@@ -197,8 +200,8 @@ do -- Permission Net Code
 		J_NET:Receive(Sync_BroadcastUpdate, function ()
 			local updated_object = Object(PermissionObject)
 			updated_object:NetRead()
-			OnCodeUpdated(updated_object:GetName(), updated_object:GetCode())
-			OnAccessUpdated(updated_object:GetName(), updated_object:GetAccessCode())
+			Permission_Hook_Run("OnCodeChange")(updated_object, updated_object:GetCode())
+			Permission_Hook_Run("OnAccessChange")(updated_object, updated_object:GetAccessCode())
 		end)
 
 		J_NET:Receive(Sync_OnConnect, function ()
