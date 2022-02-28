@@ -28,12 +28,23 @@ function SQLTableObject:CreateTable(tableData, createOnClient)
 
 	if !SQLTableObject:Exists() and (SERVER or (createOnClient or false)) then
 		local create_table_statement = "CREATE TABLE " + self.tableName + " ("
+		local first = true
 
-		for k,v in pairs(tableData) do
-			create_table_statement = create_table_statement + ", " + k + " " + v
+		local function AddString(str)
+			create_table_statement = create_table_statement + str
 		end
 
-		create_table_statement = create_table_statement + ");"
+		for k,v in pairs(tableData) do
+			if isstring(k) then
+				AddString((first and "") or ", " + k + " " + v)
+			else
+				AddString((first and "") or ", " + v)
+			end
+			if first then
+				first = false
+			end
+		end
+		AddString(");")
 
 		sql.Commit(create_table_statement)
 	end
