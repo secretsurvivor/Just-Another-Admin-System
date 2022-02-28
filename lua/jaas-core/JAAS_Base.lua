@@ -9,78 +9,85 @@ end
 
 local SQLTableObject = {tableName = ""}
 
-function SQLTableObject:SetSQLTable(tableName)
-	self.tableName = tableName
-end
-
-function SQLTableObject:Exists()
-	if self.exists == nil then
-		self.exists = sql.TableExists(self.tableName)
+do -- SQL Table Object Code
+	function SQLTableObject:SetSQLTable(tableName)
+		self.tableName = tableName
 	end
 
-	return self.exists
-end
-
-function SQLTableObject:CreateTable(tableData, createOnClient)
-	if self.tableName = "" then
-		error("SQL Table Name not set; 'SetSQLTable' function must be called first", 2)
-	end
-
-	if !SQLTableObject:Exists() and (SERVER or (createOnClient or false)) then
-		local create_table_statement = "CREATE TABLE " + self.tableName + " ("
-		local first = true
-
-		local function AddString(str)
-			create_table_statement = create_table_statement + str
+	function SQLTableObject:Exists()
+		if self.exists == nil then
+			self.exists = sql.TableExists(self.tableName)
 		end
 
-		for k,v in pairs(tableData) do
-			if isstring(k) then
-				AddString((first and "") or ", " + k + " " + v)
-			else
-				AddString((first and "") or ", " + v)
-			end
-			if first then
-				first = false
-			end
-		end
-		AddString(");")
-
-		sql.Commit(create_table_statement)
+		return self.exists
 	end
-end
 
-function SQLTableObject:DeleteAll() -- Assumes its executed after CreateTable
-	sql.Commit("DELETE FROM " + self.tableName)
-end
+	function SQLTableObject:CreateTable(tableData, createOnClient)
+		if self.tableName = "" then
+			error("SQL Table Name not set; 'SetSQLTable' function must be called first", 2)
+		end
 
-function SQLTableObject:GetTableName()
-	return self.tableName
-end
+		if !SQLTableObject:Exists() and (SERVER or (createOnClient or false)) then
+			local create_table_statement = "CREATE TABLE " + self.tableName + " ("
+			local first = true
 
-local query,format = sql.Query(string query),string.format
+			local function AddString(str)
+				create_table_statement = create_table_statement + str
+			end
 
-function SQLTableObject:Query(str, ...)
-	return query(format(str, ...))
-end
+			for k,v in pairs(tableData) do
+				if isstring(k) then
+					AddString((first and "") or ", " + k + " " + v)
+				else
+					AddString((first and "") or ", " + v)
+				end
+				if first then
+					first = false
+				end
+			end
+			AddString(");")
 
-function SQLTableObject:Insert(table_values, inserted_values)
-	return self:Query("insert into %s (%s) values (%s)", self:GetTableName(), table_values, inserted_values) == nil
-end
+			sql.Commit(create_table_statement)
+		end
+	end
 
-function SQLTableObject:Update(column_set)
-	return self:Query("update %s set %s", self:GetTableName(), column_set) == nil
-end
+	function SQLTableObject:DeleteAll() -- Assumes its executed after CreateTable
+		sql.Commit("DELETE FROM " + self.tableName)
+	end
 
-function SQLTableObject:Select(selected_columns, where_string)
-	return self:Query("select %s from %s where %s", selected_columns, self:GetTableName(), where_string)
-end
+	function SQLTableObject:GetTableName()
+		return self.tableName
+	end
 
-function JAAS.SQLTableObject(tableName)
-	return Object(SQLTableObject, {tableName = tableName})
+	function SQLTableObject:SelectResults(tab)
+		return tab != {} and tab
+	end
+
+	local query,format = sql.Query(string query),string.format
+
+	function SQLTableObject:Query(str, ...)
+		return query(format(str, ...))
+	end
+
+	function SQLTableObject:Insert(table_values, inserted_values)
+		return self:Query("insert into %s (%s) values (%s)", self:GetTableName(), table_values, inserted_values) == nil
+	end
+
+	function SQLTableObject:Update(column_set)
+		return self:Query("update %s set %s", self:GetTableName(), column_set) == nil
+	end
+
+	function SQLTableObject:Select(selected_columns, where_string)
+		return self:Query("select %s from %s where %s", selected_columns, self:GetTableName(), where_string)
+	end
+
+	function JAAS.SQLTableObject(tableName)
+		return Object(SQLTableObject, {tableName = tableName})
+	end
 end
 
 local jaas_net = {}
+local jaas_net_network_strings = {}
 
 do -- JAAS Net Module
 	local function internalRegisterNetworkStr(name)
@@ -131,45 +138,7 @@ do -- JAAS Net Module
 		end
 	end
 
-	function jaas_net:SendDataLoad(index, tab, net_write_func, ply)
-	end
-
-	function jaas_net:ReceiveDataLoad(index, net_read_func, func)
-		net.Receive(jaas_net:GetNetworkString(index), function (len, ply)
-			local data_load = {}
-			local data_amount = net.ReadInt(JAAS_RECORD_LIMIT)
-
-			for i=0,data_amount do
-				data_load[1 + #data_load] = net_read_func()
-			end
-
-			func(data_load, ply, len)
-		end)
-	end
-
-	function jaas_net:BroadcastCustomDataType(net_write_func)
-	end
-
-	if SERVER then
-		function jaas_net:SendDataLoad(index, tab, net_write_func, ply)
-			jaas_net:Start(index)
-			net.WriteUInt(#tab, JAAS_RECORD_LIMIT)
-			for k,v in ipairs(tab) do
-				net_write_func(v)
-			end
-			net.Send(ply)
-		end
-
-		function jaas_net:BroadcastCustomDataType(net_write_func)
-			return function (index, data)
-				jaas_net:Start(index)
-				net_write_func(data)
-				net.Broadcast()
-			end
-		end
-	end
-
-	local function internalSend()
+	local function internalSend(ply)
 		if SERVER then
 			net.Send(ply)
 		elseif CLIENT then
@@ -177,26 +146,10 @@ do -- JAAS Net Module
 		end
 	end
 
-	function jaas_net:SendCustomDataType(net_write_func)
-		return function (index, data, ply)
-			jaas_net:Start(index)
-			net_write_func(data)
-			internalSend()
-		end
-	end
-
-	function jaas_net:ReceiveCustomDataType(net_read_func)
-		return function (index, func)
-			net.Receive(jaas_net:GetNetworkString(index), function (len, ply)
-				func(net_read_func(), ply)
-			end)
-		end
-	end
-
 	function jaas_net:SendString(index, str, ply)
 		jaas_net:Start(index)
 		net.WriteString(str)
-		internalSend()
+		internalSend(ply)
 	end
 
 	function jaas_net:ReceiveString(index, func)
