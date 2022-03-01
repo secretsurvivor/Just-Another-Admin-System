@@ -78,6 +78,20 @@ do -- Table Manager Functions
 		end
 	elseif CLIENT then
 		function access_group_manager:Get(name, accessType)
+			if access_group_table[accessType] == nil then
+				access_group_table[accessType] = {[name] = {}}
+			end
+
+			if access_group_table[accessType][name] == nil then
+				local data = AccessGroupTable:Select(name, accessType)
+				if data then
+					access_group_table[accessType][name] = {data.Code, data.AccessGroupValue}
+				else
+					error("Access Group not found")
+				end
+			end
+
+			return access_group_table[accessType][name]
 		end
 	end
 
@@ -87,22 +101,22 @@ do -- Table Manager Functions
 	end
 end
 
-local access_group_object = {}
+local AccessGroupObject = {}
 
 do -- Access Group Object Code
-	function access_group_object:GetName()
+	function AccessGroupObject:GetName()
 		return self.name
 	end
 
-	function access_group_object:GetAccessType()
+	function AccessGroupObject:GetAccessType()
 		return self.type
 	end
 
-	function access_group_object:GetCode()
+	function AccessGroupObject:GetCode()
 		return access_group_manager:Get(self.name, self.type)[1]
 	end
 
-	function access_group_object:SetCode(code)
+	function AccessGroupObject:SetCode(code)
 		if AccessGroupTable:UpdateCode(self.name, self.type, code) then
 			local old_value = self:GetCode()
 			access_group_manager:MakeDirty()
@@ -110,15 +124,15 @@ do -- Access Group Object Code
 		end
 	end
 
-	function access_group_object:XorCode(code)
+	function AccessGroupObject:XorCode(code)
 		return self:SetCode(bit.bxor(self:GetCode(), code))
 	end
 
-	function access_group_object:GetValue()
+	function AccessGroupObject:GetValue()
 		return access_group_manager:Get(self.name, self.type)[2]
 	end
 
-	function access_group_object:SetValue(value)
+	function AccessGroupObject:SetValue(value)
 		if AccessGroupTable:UpdateGroupValue(self.name, self.type, value) then
 			local old_value = self:GetValue()
 			access_group_manager:MakeDirty()
@@ -126,22 +140,22 @@ do -- Access Group Object Code
 		end
 	end
 
-	function access_group_object:NetWrite()
+	function AccessGroupObject:NetWrite()
 		net.WriteString(self:GetName())
 		net.WriteUInt(self:GetAccessType(), 8)
 		net.WriteUInt(self:GetCode(), 32)
 		net.WriteString(self:GetValue())
 	end
 
-	function access_group_object:NetRead()
+	function AccessGroupObject:NetRead()
 		self.name = net.ReadString()
 		self.type = net.ReadUInt(8)
-		self:SetCode(net.ReadUInt(32))
-		self:setValue(net.ReadString())
+		self.code = net.ReadUInt(32)
+		self.value = net.ReadString()
 	end
 
 	if CLIENT then
-		function access_group_object:SetCode(code)
+		function AccessGroupObject:SetCode(code)
 			if access_group_table[self.type] == nil then
 				access_group_table[self.type] = {[self.name] = {code}}
 			else
@@ -153,7 +167,7 @@ do -- Access Group Object Code
 			end
 		end
 
-		function access_group_object:SetValue(value)
+		function AccessGroupObject:SetValue(value)
 			if access_group_table[self.type] == nil then
 				access_group_table[self.type] = {[self.name] = {value}}
 			else
@@ -164,11 +178,22 @@ do -- Access Group Object Code
 				end
 			end
 		end
+
+		function AccessGroupObject:NetRead()
+			self.name = net.ReadString()
+			self.type = net.ReadUInt(8)
+			self:SetCode(net.ReadUInt(32))
+			self:SetValue(net.ReadString())
+		end
+	end
+
+	function JAAS.AccessGroundObject(tab)
+		return Object(AccessGroupObject, tab)
 	end
 end
 
 local function AccessGroundObject(tab)
-	return Object(access_group_object, tab)
+	return Object(AccessGroupObject, tab)
 end
 
 function MODULE:AddAccessGroup(name, accessType)
@@ -243,51 +268,160 @@ function MODULE:Check(type, value, code)
 	return check_value_cache[type][value]
 end
 
+local net_modification_message = {}
+
+do -- Modification Net Message
+	function net_modification_message:AddAccessGroup(name, accessType)
+		self.opcode = 1
+		self.name = name
+		self.accessType = accessType
+	end
+
+	function net_modification_message:ModifyAccessGroupCode(access_group, rank_object)
+		self.opcode = 2
+		self.access_group = access_group
+		self.rank_object = rank_object
+	end
+
+	function net_modification_message:ModifyAccessGroupValue(access_group, value)
+		self.opcode = 3
+		self.access_group = access_group
+		self.value = value
+	end
+
+	function net_modification_message:RemoveAccessGroup(access_group)
+		self.opcode = 4
+		self.access_group = access_group
+	end
+
+	function net_modification_message:IsAdd()
+		return self.opcode == 1
+	end
+
+	function net_modification_message:IsModifyCode()
+		return self.opcode == 2
+	end
+
+	function net_modification_message:IsModifyValue()
+		return self.opcode == 3
+	end
+
+	function net_modification_message:IsRemove()
+		return self.opcode == 4
+	end
+
+	function net_modification_message:GetAddParameters()
+		return self.name,self.accessType
+	end
+
+	function net_modification_message:GetAccessGroup()
+		return self.access_group
+	end
+
+	function net_modification_message:GetRankObject()
+		return self.rank_object
+	end
+
+	function net_modification_message:GetValue()
+		return self.value
+	end
+
+	function net_modification_message:NetWrite()
+		net.WriteUInt(self.opcode, 3)
+		if self.opcode == 1 then
+			net.WriteString(self.name)
+			net.WriteString(self.accessType)
+		else
+			self.access_group:NetWrite()
+
+			if self.opcode == 2 then
+				self.rank_object:NetWrite()
+			elseif self.opcode == 3 then
+				net.WriteUInt(self.value, 8)
+			end
+		end
+	end
+
+	function net_modification_message:NetRead()
+		self.opcode = net.ReadUInt(3)
+		if self.opcode == 1 then
+			self.name = net.ReadString()
+			self.accessType = net.ReadString()
+		else
+			self.access_group = JAAS.AccessGroundObject():NetRead()
+
+			if self.opcode == 2 then
+				self.rank_object = JAAS.RankObject():NetWrite()
+			elseif self.opcode == 3 then
+				self.value = net.ReadUInt(8)
+			end
+		end
+	end
+end
+
+local function ModificationMessage(tab)
+	return Object(net_modification_message, tab)
+end
+
+MODULE.ModificationMessage = ModificationMessage
+
 do -- Access Group Net Code
 	local AccessGroup_Net_Update = MODULE:RegisterNetworkType("ClientUpdate")
 	local Update_Added = AccessGroup_Net_Update("Added")
 	local Update_Removed = AccessGroup_Net_Update("Removed")
 
 	local AccessGroup_Net_Client = MODULE:RegisterNetworkType("Client")
-	local Client_Added = AccessGroup_Net_Client("Add")
-	local Client_Removed = AccessGroup_Net_Client("Remove")
+	local Client_Modify = AccessGroup_Net_Client("Modify")
 	local Client_GetType = AccessGroup_Net_Client("GetType")
 	local Client_Get = AccessGroup_Net_Client("Get")
 
 	function MODULE.Server:Post()
 		local PermissionModule = JAAS:GetModule("Permission")
 
-		local CanAddAccessGroup = PermissionModule:RegisterPermission("CanAddAccessGroup")
+		local CanAddAccessGroup = PermissionModule:RegisterPermission("Can Add Access Group")
+		local CanModifyAccessGroupCode = PermissionModule:RegisterPermission("Can Modify Access Group Code")
+		local CanModifyAccessGroupValue = PermissionModule:RegisterPermission("Can Modify Access Group Value")
+		local CanRemoveAccessGroup = PermissionModule:RegisterPermission("Can Remove Access Group")
 
-		J_NET:Receive(Client_Added, function (len, ply)
-			if CanAddAccessGroup:Check(ply:GetCode()) then
-				local name = net.ReadString()
-				local accessType = net.ReadString()
+		J_NET:Receive(Client_Modify, function (len, ply)
+			local msg = ModificationMessage():NetRead()
 
-				if MODULE:AddAccessGroup(name, accessType) then
-					MODULE:ClientPrint(ply, "Access Group successfully added")
+			if msg:IsAdd() then
+				if CanAddAccessGroup:Check(ply:GetCode()) then
+					if MODULE:AddAccessGroup(msg:GetAddParameters()) then
+					else
+					end
 				else
-					MODULE:ClientPrint(ply, "Access Group failed to be added")
+				end
+			elseif msg:IsModifyCode() then
+				if CanModifyAccessGroupCode:Check(ply:GetCode()) then
+					local access_group = msg:GetAccessGroup()
+					local rank_object = msg:GetRankObject()
+
+					if access_group:XorCode(rank_object:GetCode()) then
+					else
+					end
+				else
+				end
+			elseif msg:IsModifyValue() then
+				if CanModifyAccessGroupValue:Check(ply:GetCode()) then
+					local access_group = msg:GetAccessGroup()
+					local value = msg:GetValue()
+
+					if access_group:SetValue(value) then
+					else
+					end
+				else
+				end
+			elseif msg:IsRemove() then
+				if CanRemoveAccessGroup:Check(ply:GetCode()) then
+					local access_group = msg:GetAccessGroup()
+				else
 				end
 			end
 		end)
 
-		local CanRemoveAccessGroup = PermissionModule:RegisterPermission("CanRemoveAccessGroup")
-
-		J_NET:Receive(Client_Removed, function (len, ply)
-			if CanRemoveAccessGroup:Check(ply:GetCode()) then
-				local name = net.ReadString()
-				local accessType = net.ReadString()
-
-				if MODULE:RemoveAccessGroup(name, accessType) then
-					MODULE:ClientPrint(ply, "Access Group successfully removed")
-				else
-					MODULE:ClientPrint(ply, "Access Group failed to be removed")
-				end
-			end
-		end)
-
-		local CanViewAccessGroups = PermissionModule:RegisterPermission("CanViewAccessGroups")
+		local CanViewAccessGroups = PermissionModule:RegisterPermission("Can View Access Groups")
 
 		function AccessGroup_Hook.OnAdd["AccessGroup::UpdateClientAdd"](obj)
 			J_NET:Start(Update_Added)
@@ -335,20 +469,6 @@ do -- Access Group Net Code
 
 	if CLIENT then
 		---- Overridden Module Functions for Client ----
-		function MODULE:AddAccessGroup(name, accessType)
-			J_NET:Start(Client_Added)
-			net.WriteString(name)
-			net.WriteString(accessType)
-			net.SendToServer()
-		end
-
-		function MODULE:RemoveAccessGroup(name, accessType)
-			J_NET:Start(Client_Removed)
-			net.WriteString(name)
-			net.WriteString(accessType)
-			net.SendToServer()
-		end
-
 		function MODULE:GetAllGroupTypes()
 			J_NET:Request(Client_GetType)
 		end
@@ -359,7 +479,7 @@ do -- Access Group Net Code
 		---- ----
 
 		J_NET:Receive(Update_Added, function ()
-			AccessGroundObject():NetRead()
+			local obj = AccessGroundObject():NetRead()
 			AccessGroup_Hook_Run("OnAdd")(obj)
 		end)
 

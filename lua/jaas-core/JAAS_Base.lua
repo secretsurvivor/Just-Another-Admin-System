@@ -566,7 +566,7 @@ do --JAAS Log Module
 		function jaas_net.Server:Post()
 			local PermissionModule = JAAS:GetModule("Permission")
 
-			local CanReadLog = PermissionModule:RegisterPermission("CanReadLog")
+			local CanReadLog = PermissionModule:RegisterPermission("Can Read Log")
 
 			jaas_net:Receive(CLIENTLOGFILEALLPULL, function (len, ply)
 				if CanReadLog:Check(ply:GetCode()) then
