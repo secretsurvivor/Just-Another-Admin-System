@@ -49,9 +49,9 @@ do -- Permission Object Code
 
 	function PermissionObject:SetCode(code)
 		if PermissionTable:UpdateCode(self:GetName(), code) then
-			local old_value = permission_table[self:GetName()][1]
+			local old_value = self:GetCode()
 			permission_table[self:GetName()][1] = code
-			Permission_Hook_Run("OnCodeChange")(self, code, old_value)
+			Permission_Hook_Run("OnCodeUpdate")(self, code, old_value)
 			return true
 		end
 		return false
@@ -67,9 +67,9 @@ do -- Permission Object Code
 
 	function PermissionObject:SetAccessCode(access_group)
 		if PermissionTable:UpdateAccessGroup(self:GetName(), access_group) then
-			local old_value = permission_table[self:GetName()][2]
+			local old_value = self:GetAccessCode()
 			permission_table[self:GetName()][2] = access_group
-			Permission_Hook_Run("OnAccessChange")(self, access_group, old_value)
+			Permission_Hook_Run("OnAccessUpdate")(self, access_group, old_value)
 			return true
 		end
 		return true
@@ -233,7 +233,7 @@ local CanModifyPermissionValue = MODULE:RegisterPermission("Can Modify Permissio
 
 do -- Permission Net Code
 	if SERVER then
-		function Permission_Hook.OnCodeChange["PermissionModule::UpdateClients"](permission, new_value, old_value)
+		function Permission_Hook.OnCodeUpdate["PermissionModule::UpdateClients"](permission, new_value, old_value)
 			J_NET:Start(PermissionDataSync_NetType)
 			permission:NetWrite()
 			net.Broadcast()
@@ -290,8 +290,8 @@ do -- Permission Net Code
 		J_NET:Receive(Sync_BroadcastUpdate, function ()
 			local updated_object = Object(PermissionObject)
 			updated_object:NetRead()
-			Permission_Hook_Run("OnCodeChange")(updated_object, updated_object:GetCode())
-			Permission_Hook_Run("OnAccessChange")(updated_object, updated_object:GetAccessCode())
+			Permission_Hook_Run("OnCodeUpdate")(updated_object, updated_object:GetCode())
+			Permission_Hook_Run("OnAccessUpdate")(updated_object, updated_object:GetAccessCode())
 		end)
 
 		J_NET:Receive(Sync_OnConnect, function ()

@@ -10,7 +10,7 @@ do -- Access Group SQL Table
 		Code = "UNSIGNED BIG INT DEFAULT 0",
 		AccessGroupValue = "UNSIGNED INT DEFAULT 0",
 		AccessType = "TEXT NOT NULL", -- Required
-		"Primary Key(Name, AccessType)"
+		"PRIMARY KEY(Name, AccessType)"
 	}
 
 	function AccessGroupTable:Select(name, accessType)
@@ -233,35 +233,37 @@ function MODULE:GetAllAccessGroupsByType(accessType)
 	return found_groups
 end
 
-local function checkValue(type, value, code)
-	local found_groups = AccessGroupTable:Query("select Code from JAAS_AccessGroup where AccessGroupValue >= %s and AccessType = '%s'", value, type)
+if SERVER then
+	local function checkValue(type, value, code)
+		local found_groups = AccessGroupTable:Query("select Code from JAAS_AccessGroup where AccessGroupValue >= %s and AccessType = '%s'", value, type)
 
-	if found_groups then
-		for k,v in ipairs(found_groups) do
-			if bit.band(v.Code, code) > 0 then
-				return true
+		if found_groups then
+			for k,v in ipairs(found_groups) do
+				if bit.band(v.Code, code) > 0 then
+					return true
+				end
 			end
 		end
+
+		return false or (AccessGroupTable:Query("select count(Name) from JAAS_AccessGroup where AccessType='%s'", type) == 0)
 	end
 
-	return false or (AccessGroupTable:Query("select count(Name) from JAAS_AccessGroup where AccessType='%s'", type) == 0)
-end
+	function MODULE:Check(type, value, code)
+		if check_dirty then
+			check_dirty = false
+			check_value_cache = {[type] = {[value] = checkValue(type, value, code)}}
+		end
 
-function MODULE:Check(type, value, code)
-	if check_dirty then
-		check_dirty = false
-		check_value_cache = {[type] = {[value] = checkValue(type, value, code)}}
+		if check_value_cache[type] == nil then
+			check_value_cache[type] = {[value] = checkValue(type, value, code)}
+		end
+
+		if check_value_cache[type][value] != nil then
+			check_value_cache[type][value] = checkValue(type, value, code)
+		end
+
+		return check_value_cache[type][value]
 	end
-
-	if check_value_cache[type] == nil then
-		check_value_cache[type] = {[value] = checkValue(type, value, code)}
-	end
-
-	if check_value_cache[type][value] != nil then
-		check_value_cache[type][value] = checkValue(type, value, code)
-	end
-
-	return check_value_cache[type][value]
 end
 
 local net_modification_message = {}
