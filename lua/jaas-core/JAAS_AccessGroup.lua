@@ -138,16 +138,16 @@ do -- Access Group Object Code
 
 	function AccessGroupObject:NetWrite()
 		net.WriteString(self:GetName())
-		net.WriteUInt(self:GetAccessType(), 8)
+		net.WriteString(self:GetAccessType())
 		net.WriteUInt(self:GetCode(), 32)
-		net.WriteString(self:GetValue())
+		net.WriteUInt(self:GetValue(), 8)
 	end
 
 	function AccessGroupObject:NetRead()
 		self.name = net.ReadString()
-		self.type = net.ReadUInt(8)
+		self.type = net.ReadString()
 		self.code = net.ReadUInt(32)
-		self.value = net.ReadString()
+		self.value = net.ReadUInt(8)
 	end
 
 	if CLIENT then
@@ -177,9 +177,9 @@ do -- Access Group Object Code
 
 		function AccessGroupObject:NetRead()
 			self.name = net.ReadString()
-			self.type = net.ReadUInt(8)
+			self.type = net.ReadString()
 			self:SetCode(net.ReadUInt(32))
-			self:SetValue(net.ReadString())
+			self:SetValue(net.ReadUInt(8))
 		end
 	end
 
