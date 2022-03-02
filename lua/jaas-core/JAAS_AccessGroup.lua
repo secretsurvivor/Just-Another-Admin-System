@@ -80,15 +80,11 @@ do -- Table Manager Functions
 		function access_group_manager:Get(name, accessType)
 			if access_group_table[accessType] == nil then
 				access_group_table[accessType] = {[name] = {}}
+				error("Access Group not found")
 			end
 
 			if access_group_table[accessType][name] == nil then
-				local data = AccessGroupTable:Select(name, accessType)
-				if data then
-					access_group_table[accessType][name] = {data.Code, data.AccessGroupValue}
-				else
-					error("Access Group not found")
-				end
+				error("Access Group not found")
 			end
 
 			return access_group_table[accessType][name]
