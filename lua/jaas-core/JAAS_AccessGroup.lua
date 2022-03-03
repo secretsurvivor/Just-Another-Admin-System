@@ -70,7 +70,7 @@ do -- Table Manager Functions
 				if data then
 					access_group_table[accessType][name] = {data.Code, data.AccessGroupValue}
 				else
-					error("Access Group not found")
+					error("Access Group not found", 3)
 				end
 			end
 
@@ -80,11 +80,11 @@ do -- Table Manager Functions
 		function access_group_manager:Get(name, accessType)
 			if access_group_table[accessType] == nil then
 				access_group_table[accessType] = {[name] = {}}
-				error("Access Group not found")
+				error("Access Group not found", 3)
 			end
 
 			if access_group_table[accessType][name] == nil then
-				error("Access Group not found")
+				error("Access Group not found", 3)
 			end
 
 			return access_group_table[accessType][name]
@@ -150,7 +150,11 @@ do -- Access Group Object Code
 		self.value = net.ReadUInt(8)
 	end
 
-	if CLIENT then
+	if SERVER then
+		function AccessGroupObject:Remove()
+			MODULE:RemoveAccessGroup(self)
+		end
+	elseif CLIENT then
 		function AccessGroupObject:SetCode(code)
 			if access_group_table[self.type] == nil then
 				access_group_table[self.type] = {[self.name] = {code}}
@@ -178,24 +182,25 @@ do -- Access Group Object Code
 		function AccessGroupObject:NetRead()
 			self.name = net.ReadString()
 			self.type = net.ReadString()
+			access_group_table[self.type][self.name] = {}
 			self:SetCode(net.ReadUInt(32))
 			self:SetValue(net.ReadUInt(8))
 		end
 	end
 
-	function JAAS.AccessGroundObject(tab)
+	function JAAS.AccessGroupObject(tab)
 		return Object(AccessGroupObject, tab)
 	end
 end
 
-local function AccessGroundObject(tab)
+local function AccessGroupObject(tab)
 	return Object(AccessGroupObject, tab)
 end
 
 function MODULE:AddAccessGroup(name, accessType)
 	if AccessGroupTable:Insert(name, accessType) then
 		check_dirty = true
-		local obj = AccessGroundObject({name = name, type = accessType})
+		local obj = AccessGroupObject({name = name, type = accessType})
 		AccessGroup_Hook_Run("OnAdd")(obj)
 
 		return obj
@@ -203,10 +208,9 @@ function MODULE:AddAccessGroup(name, accessType)
 	return false
 end
 
-function MODULE:RemoveAccessGroup(name, accessType)
-	if AccessGroupTable:Delete(name, accessType) then
-		check_dirty = true
-		AccessGroup_Hook_Run("OnRemove")(name, accessType)
+function MODULE:RemoveAccessGroup(obj)
+	if AccessGroupTable:Delete(obj:GetName(), obj:GetAccessType()) then
+		AccessGroup_Hook_Run("OnRemove", function () rank_manager:MakeDirty() end)(obj)
 
 		return true
 	end
@@ -217,7 +221,7 @@ function MODULE:GetAllGroupTypes()
 	local found_types = {}
 
 	for k,v in ipairs(AccessGroupTable:SelectAllGroupTypes()) do
-		found_types[1 + #found_types] = AccessGroundObject({name = v.Name})
+		found_types[1 + #found_types] = AccessGroupObject({name = v.Name})
 	end
 
 	return found_types
@@ -227,7 +231,7 @@ function MODULE:GetAllAccessGroupsByType(accessType)
 	local found_groups = {}
 
 	for k,v in ipairs(AccessGroupTable:SelectAllByGroupType(accessType)) do
-		found_groups[1 + #found_groups] = AccessGroundObject({name = v.Name})
+		found_groups[1 + #found_groups] = AccessGroupObject({name = v.Name})
 	end
 
 	return found_groups
@@ -273,23 +277,27 @@ do -- Modification Net Message
 		self.opcode = 1
 		self.name = name
 		self.accessType = accessType
+		return self
 	end
 
 	function net_modification_message:ModifyAccessGroupCode(access_group, rank_object)
 		self.opcode = 2
 		self.access_group = access_group
 		self.rank_object = rank_object
+		return self
 	end
 
 	function net_modification_message:ModifyAccessGroupValue(access_group, value)
 		self.opcode = 3
 		self.access_group = access_group
 		self.value = value
+		return self
 	end
 
 	function net_modification_message:RemoveAccessGroup(access_group)
 		self.opcode = 4
 		self.access_group = access_group
+		return self
 	end
 
 	function net_modification_message:IsAdd()
@@ -346,7 +354,7 @@ do -- Modification Net Message
 			self.name = net.ReadString()
 			self.accessType = net.ReadString()
 		else
-			self.access_group = JAAS.AccessGroundObject():NetRead()
+			self.access_group = JAAS.AccessGroupObject():NetRead()
 
 			if self.opcode == 2 then
 				self.rank_object = JAAS.RankObject():NetWrite()
@@ -354,6 +362,12 @@ do -- Modification Net Message
 				self.value = net.ReadUInt(8)
 			end
 		end
+	end
+
+	function net_modification_message:SendToServer(index)
+		J_NET:Start(index)
+		self:NetWrite()
+		net.SendToServer()
 	end
 end
 
@@ -364,7 +378,7 @@ end
 MODULE.ModificationMessage = ModificationMessage
 
 do -- Access Group Net Code
-	local AccessGroup_Net_Update = MODULE:RegisterNetworkType("ClientUpdate")
+	local AccessGroup_Net_Update = MODULE:RegisterNetworkType("Update")
 	local Update_Added = AccessGroup_Net_Update("Added")
 	local Update_Removed = AccessGroup_Net_Update("Removed")
 
@@ -386,34 +400,50 @@ do -- Access Group Net Code
 
 			if msg:IsAdd() then
 				if CanAddAccessGroup:Check(ply:GetCode()) then
-					if MODULE:AddAccessGroup(msg:GetAddParameters()) then
+					if CanAddAccessGroup:AccessCheck(ply:GetCode()) then
+						if MODULE:AddAccessGroup(msg:GetAddParameters()) then
+						else
+						end
 					else
 					end
 				else
 				end
 			elseif msg:IsModifyCode() then
 				if CanModifyAccessGroupCode:Check(ply:GetCode()) then
-					local access_group = msg:GetAccessGroup()
-					local rank_object = msg:GetRankObject()
+					if CanModifyAccessGroupCode:AccessCheck(ply:GetCode()) then
+						local access_group = msg:GetAccessGroup()
+						local rank_object = msg:GetRankObject()
 
-					if access_group:XorCode(rank_object:GetCode()) then
+						if access_group:XorCode(rank_object:GetCode()) then
+						else
+						end
 					else
 					end
 				else
 				end
 			elseif msg:IsModifyValue() then
 				if CanModifyAccessGroupValue:Check(ply:GetCode()) then
-					local access_group = msg:GetAccessGroup()
-					local value = msg:GetValue()
+					if CanModifyAccessGroupValue:AccessCheck(ply:GetCode()) then
+						local access_group = msg:GetAccessGroup()
+						local value = msg:GetValue()
 
-					if access_group:SetValue(value) then
+						if access_group:SetValue(value) then
+						else
+						end
 					else
 					end
 				else
 				end
 			elseif msg:IsRemove() then
 				if CanRemoveAccessGroup:Check(ply:GetCode()) then
-					local access_group = msg:GetAccessGroup()
+					if CanRemoveAccessGroup:AccessCheck(ply:GetCode()) then
+						local access_group = msg:GetAccessGroup()
+
+						if access_group:Remove() then
+						else
+						end
+					else
+					end
 				else
 				end
 			end
@@ -467,6 +497,22 @@ do -- Access Group Net Code
 
 	if CLIENT then
 		---- Overridden Module Functions for Client ----
+		function MODULE:AddAccessGroup(name, accessType)
+			ModificationMessage():AddAccessGroup(name, accessType):SendToServer()
+		end
+
+		function MODULE:RemoveAccessGroup(obj)
+			ModificationMessage():RemoveAccessGroup(obj):SendToServer()
+		end
+
+		function MODULE:ModifyAccessGroupCode(obj, rank_object)
+			ModificationMessage():ModifyAccessGroupCode(obj, rank_object):SendToServer()
+		end
+
+		function MODULE:ModifyAccessGroupValue(obj, value)
+			ModificationMessage():ModifyAccessGroupValue(obj, value):SendToServer()
+		end
+
 		function MODULE:GetAllGroupTypes()
 			J_NET:Request(Client_GetType)
 		end
@@ -477,7 +523,7 @@ do -- Access Group Net Code
 		---- ----
 
 		J_NET:Receive(Update_Added, function ()
-			local obj = AccessGroundObject():NetRead()
+			local obj = AccessGroupObject():NetRead()
 			AccessGroup_Hook_Run("OnAdd")(obj)
 		end)
 
@@ -494,7 +540,7 @@ do -- Access Group Net Code
 
 			local index = 1
 			repeat
-				retrieved_types[index] = AccessGroundObject():NetRead()
+				retrieved_types[index] = AccessGroupObject():NetRead()
 				index = 1 + index
 			until (index <= type_amount)
 
@@ -507,7 +553,7 @@ do -- Access Group Net Code
 
 			local index = 1
 			repeat
-				retrieved_groups[index] = AccessGroundObject():NetRead()
+				retrieved_groups[index] = AccessGroupObject():NetRead()
 				index = 1 + index
 			until (index <= type_amount)
 
