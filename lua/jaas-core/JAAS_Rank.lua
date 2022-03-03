@@ -163,6 +163,7 @@ do -- Rank Object Code
 		net.WriteUInt(self:GetPower(), 7)
 		net.WriteBool(self:GetInvisible())
 		net.WriteUInt(self:GetAccessCode(), 8)
+		return self
 	end
 
 	function RankObject:NetRead()
@@ -171,6 +172,7 @@ do -- Rank Object Code
 		self.power = net.ReadUInt(7)
 		self.invisible = net.ReadBool()
 		self.value = net.ReadUInt(8)
+		return self
 	end
 
 	if SERVER then
@@ -196,6 +198,7 @@ do -- Rank Object Code
 			self:SetPower(net.ReadUInt(7))
 			self:SetInvisible(net.ReadBool())
 			self:SetAccessCode(net.ReadUInt(8))
+			return self
 		end
 
 		function RankObject:Remove()
@@ -546,7 +549,7 @@ local function ModificationMessage(tab)
 end
 
 do -- Net Code
-	/* Net Code Checklist
+	/*	Net Code Checklist
 		(X = Not Present, O = Present)
 		Server:
 			On Rank Addition (Send) : O

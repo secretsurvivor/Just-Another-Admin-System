@@ -103,12 +103,14 @@ do -- Permission Object Code
 		net.WriteString(self:GetName())
 		net.WriteUInt(self:GetCode(), 32)
 		net.WriteUInt(self:GetAccessCode(), 16)
+		return self
 	end
 
 	function PermissionObject:NetRead()
 		self.Name = net.ReadString()
 		self.Code = net.ReadUInt(32)
-		self.AccessGroup =  net.ReadUInt(16)
+		self.AccessGroup = net.ReadUInt(16)
+		return self
 	end
 
 	if CLIENT then
@@ -125,12 +127,17 @@ do -- Permission Object Code
 			permission_table[self.Name] = {}
 			self:SetCode(net.ReadUInt(32))
 			self:SetAccessCode(net.ReadUInt(16))
+			return self
 		end
 	end
 
 	function JAAS.PermissionObject(tab)
 		return Object(PermissionObject, tab)
 	end
+end
+
+local function PermissionObject(tab)
+	return Object(PermissionObject, tab)
 end
 
 function MODULE:RegisterPermission(name)
@@ -227,103 +234,157 @@ end
 
 MODULE.ModificationMessage = ModificationMessage
 
-local PermissionDataSync_NetType = MODULE:RegisterNetworkType("Sync")
+local Permission_Net_Sync = MODULE:RegisterNetworkType("Sync")
+local Sync_OnConnect = Permission_Net_Sync("OnConnect")
 
-local Sync_BroadcastUpdate = PermissionDataSync_NetType("BroadcastUpdate")
-local Sync_OnConnect = PermissionDataSync_NetType("OnConnect")
+local Permission_Net_Client = MODULE:RegisterNetworkType("Client")
+local Client_Modify = Permission_Net_Client("Modify")
 
-local PermissionClient_NetType MODULE:RegisterNetworkType("Client")
-local Client_Modify = PermissionClient_NetType("Modify")
+local Permission_Net_Update = MODULE:RegisterNetworkType("Update")
+local Update_Code = Permission_Net_Update("Code")
+local Update_AccessGroup = Permission_Net_Update("AccessGroup")
 
 local CanModifyPermission = MODULE:RegisterPermission("Can Modify Permission")
 local CanModifyPermissionValue = MODULE:RegisterPermission("Can Modify Permission Access Group")
 
 do -- Permission Net Code
+	/*	Net Code Checklist
+		(X = Not Present, O = Present)
+		Server:
+			On Connect Client Sync (Send) : O
+
+			::Update on {1 = Code, 2 = AccessGroup}::
+			On Code Update (Send) : O
+			On Access Group Update (Send) : O
+
+			::Support Client Modification::
+			Modify Code (Receive) : O
+			Modify Access Group (Receive) : O
+		Client:
+			On Connect Client Sync (Receive) :
+
+			::Update on {1 = Code, 2 = AccessGroup}::
+			On Code Update (Receive) : O
+				Hook : O
+			On Access Group Update (Receive) : O
+				Hook : O
+
+			::Support Client Modification::
+			Modify Code (Send) : O
+			Modify Access Group (Send) : O
+	*/
 	if SERVER then
-		function Permission_Hook.OnCodeUpdate["PermissionModule::UpdateClients"](permission, new_value, old_value)
-			J_NET:Start(PermissionDataSync_NetType)
-			permission:NetWrite()
-			net.Broadcast()
+		do -- On Code Update (Send)
+			function Permission_Hook.OnCodeUpdate["PermissionModule::UpdateClients"](permission, new_value, old_value)
+				J_NET:Start(Update_Code)
+				permission:NetWrite()
+				net.Broadcast()
+			end
 		end
 
-		hook.Add("PlayerAuthed", J_NET:GetNetworkString(Sync_OnConnect), function (ply)
-			J_NET:Start(Sync_OnConnect)
+		do -- On Access Group Update (Send)
+			function Permission_Hook.OnAccessUpdate["PermissionModule::UpdateClients"](permission, new_value, old_value)
+				J_NET:Start(Update_AccessGroup)
+				permission:NetWrite()
+				net.Broadcast()
+			end
+		end
 
-			local NotDefaultPermissions = {}
-			local permission_amount = 0
-			for k,v in pairs(permission_table) do
-				if v[1] > 0 then
-					permission_amount = 1 + permission_amount
-					NotDefaultPermissions[1 + #NotDefaultPermissions] = k
+		do -- On Connect Client Sync (Send)
+			hook.Add("PlayerAuthed", J_NET:GetNetworkString(Sync_OnConnect), function (ply)
+				J_NET:Start(Sync_OnConnect)
+
+				local NotDefaultPermissions = {}
+				local permission_amount = 0
+				for k,v in pairs(permission_table) do
+					if v[1] > 0 then
+						permission_amount = 1 + permission_amount
+						NotDefaultPermissions[1 + #NotDefaultPermissions] = k
+					end
 				end
-			end
 
-			net.WriteUInt(permission_amount, 16)
-			for k,v in ipairs(NotDefaultPermissions) do
-				Object(PermissionObject, {Name = v}):NetWrite()
-			end
+				net.WriteUInt(permission_amount, 16)
+				for k,v in ipairs(NotDefaultPermissions) do
+					PermissionObject{Name = v}:NetWrite()
+				end
 
-			net.Send(ply)
-		end)
+				net.Send(ply)
+			end)
+		end
 
-		J_NET:Receive(Client_Modify, function (len, ply)
-			local msg = ModificationMessage():NetRead()
+		do -- Modify Code (Receive) | Modify Access Group (Receive)
+			J_NET:Receive(Client_Modify, function (len, ply)
+				local msg = ModificationMessage():NetRead()
 
-			if msg:IsModifyCode() then
-				if CanModifyPermission:Check(ply:GetCode()) then
-					if CanModifyPermission:AccessCheck(ply:GetCode()) then
-						local permission_object = msg:GetPermissionObject()
-						local rank_object = msg:GetRankObject()
+				if msg:IsModifyCode() then
+					if CanModifyPermission:Check(ply:GetCode()) then
+						if CanModifyPermission:AccessCheck(ply:GetCode()) then
+							local permission_object = msg:GetPermissionObject()
+							local rank_object = msg:GetRankObject()
 
-						if permission_object:XorCode(rank_object:GetCode()) then
+							if permission_object:XorCode(rank_object:GetCode()) then
+							else
+							end
 						else
 						end
 					else
 					end
-				else
-				end
-			elseif msg:IsModifyValue() then
-				if CanModifyPermissionValue:Check(ply:GetCode()) then
-					if CanModifyPermissionValue:AccessCheck(ply:GetCode()) then
-						local permission_object = msg:GetPermissionObject()
-						local access_group = msg:GetAccessGroup()
+				elseif msg:IsModifyValue() then
+					if CanModifyPermissionValue:Check(ply:GetCode()) then
+						if CanModifyPermissionValue:AccessCheck(ply:GetCode()) then
+							local permission_object = msg:GetPermissionObject()
+							local access_group = msg:GetAccessGroup()
 
-						if permission_object:SetAccessCode(access_group:GetValue()) then
+							if permission_object:SetAccessCode(access_group:GetValue()) then
+							else
+							end
 						else
 						end
 					else
 					end
-				else
 				end
-			end
-		end)
+			end)
+		end
 	end
 
 	if CLIENT then
-		function MODULE:ModifyCode(permission_object, rank_object)
-			ModificationMessage():ModifyCode(permission_object, rank_object):SendToServer()
+		do -- Modify Code (Send)
+			function MODULE:ModifyCode(permission_object, rank_object)
+				ModificationMessage():ModifyCode(permission_object, rank_object):SendToServer()
+			end
 		end
 
-		function MODULE:ModifyAccessValue(permission_object, access_group_object)
-			ModificationMessage():ModifyAccessValue(permission_object, access_group_object):SendToServer()
+		do -- Modify Access Group (Send)
+			function MODULE:ModifyAccessValue(permission_object, access_group_object)
+				ModificationMessage():ModifyAccessValue(permission_object, access_group_object):SendToServer()
+			end
 		end
 
-		J_NET:Receive(Sync_BroadcastUpdate, function ()
-			local updated_object = Object(PermissionObject)
-			updated_object:NetRead()
-			Permission_Hook_Run("OnCodeUpdate")(updated_object, updated_object:GetCode())
-			Permission_Hook_Run("OnAccessUpdate")(updated_object, updated_object:GetAccessCode())
-		end)
+		do -- On Code Update (Receive) + Hook
+			J_NET:Receive(Update_Code, function ()
+				local updated_object = PermissionObject():NetRead()
+				Permission_Hook_Run("OnCodeUpdate")(updated_object, updated_object:GetCode())
+			end)
+		end
 
-		J_NET:Receive(Sync_OnConnect, function ()
-			local permission_amount = net.ReadUInt(16)
+		do -- On Access Group Update (Receive) + Hook
+			J_NET:Receive(Update_AccessGroup, function ()
+				local updated_object = PermissionObject():NetRead()
+				Permission_Hook_Run("OnAccessUpdate")(updated_object, updated_object:GetCode())
+			end)
+		end
 
-			local index = 1
-			repeat
-				Object(PermissionObject):NetRead()
+		do -- On Connect Client Sync (Receive)
+			J_NET:Receive(Sync_OnConnect, function ()
+				local permission_amount = net.ReadUInt(16)
 
-				index = 1 + index
-			until (index <= permission_amount)
-		end)
+				local index = 1
+				repeat
+					PermissionObject():NetRead()
+
+					index = 1 + index
+				until (index <= permission_amount)
+			end)
+		end
 	end
 end
