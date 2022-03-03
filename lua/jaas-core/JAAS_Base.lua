@@ -63,6 +63,15 @@ do -- SQL Table Object Code
 		return tab != {} and tab
 	end
 
+	function SQLTableObject:TopValue(tab, key, default)
+		tab = self:SelectResults(tab)
+		return (tab and tab[key]) or default
+	end
+
+	function SQLTableObject:SelectAll()
+		return self:SelectResults(self:Query("select * from %s", self:GetTableName()))
+	end
+
 	local query,format = sql.Query(string query),string.format
 
 	function SQLTableObject:Query(str, ...)
@@ -126,15 +135,59 @@ do -- JAAS Net Module
 		net.Remove(jaas_net:GetNetworkString(index))
 	end
 
-	if SERVER then
-		function jaas_net:Request(index, ply)
-			jaas_net:Start(index)
-			net.Send(ply)
-		end
-	elseif CLIENT then
+	function jaas_net:ReceiveCode(index, func)
+		jaas_net:Receive(index, function (len, ply)
+			func(net.ReadUInt(32), ply, len)
+		end)
+	end
+
+	function jaas_net:SendUInt(index, int, numOfBits, ply)
+		jaas_net:Start(index)
+		net.WriteUInt(int, numOfBits)
+		net.Send(ply)
+	end
+
+	function jaas_net:SendCode(index, code, ply)
+		jaas_net:SendUInt(index, code, 32, ply)
+	end
+
+	function jaas_net:ReceiveUInt(index, numOfBits, func)
+		jaas_net:Receive(index, function (len, ply)
+			func(net.ReadUInt(numOfBits), ply, len)
+		end)
+	end
+
+	function jaas_net:Request(index, ply)
+		jaas_net:Start(index)
+		net.Send(ply)
+	end
+
+	if CLIENT then
 		function jaas_net:Request(index)
 			jaas_net:Start(index)
 			net.SendToServer()
+		end
+
+		function jaas_net:ReceiveCode(index, func)
+			jaas_net:Receive(index, function (len, ply)
+				func(net.ReadUInt(32), ply, len)
+			end)
+		end
+
+		function jaas_net:SendUInt(index, int, numOfBits)
+			jaas_net:Start(index)
+			net.WriteUInt(int, numOfBits)
+			net.SendToServer()
+		end
+
+		function jaas_net:SendCode(index, code)
+			jaas_net:SendUInt(index, code, 32)
+		end
+
+		function jaas_net:ReceiveUInt(index, numOfBits, func)
+			jaas_net:Receive(index, function (len, ply)
+				func(net.ReadUInt(numOfBits), ply, len)
+			end)
 		end
 	end
 
