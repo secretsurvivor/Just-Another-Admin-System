@@ -205,7 +205,7 @@ do -- Net Code
 			end
 		end
 
-		do -- On Disconnect Remove from Table (Send) && On Last Connected Update (Send)
+		do -- On Disconnect Remove from Table (Send) | On Last Connected Update (Send)
 			function Player_Hook.OnDisconnect["PlayerModule::Update::OnDisconnect"](ply, info)
 				J_NET:Start(Update_OnDisconnect)
 				writePlayerInfo(ply, info[1], info[2])
@@ -279,7 +279,7 @@ do -- Net Code
 			end)
 		end
 
-		do -- On Disconnect Remove from Table (Receive) + Hook && On Last Connected Update (Receive)
+		do -- On Disconnect Remove from Table (Receive) + Hook | On Last Connected Update (Receive)
 			J_NET:Receive(Update_OnDisconnect, function ()
 				local ply = readPlayerInfo()
 				Player_Hook_Run("OnDisconnect", function () player_table[ply:SteamID64()] = nil end)(ply, player_table[ply:SteamID64()])
