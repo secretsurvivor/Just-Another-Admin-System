@@ -151,13 +151,16 @@ do -- Hook Function
 				end
 			end
 		}, {__call = function (self, category) -- JAAS.Hook.Run category name (...)
-			return function (name)
+			return function (name, final)
 				return function (...)
 					local varArgs = {...}
 					if hook_func.other != nil and hook_func.other[category] != nil and hook_func.other[category][name] != nil then
 						local err,message = coroutine.resume(coroutine.create(function ()
 							for _,v in pairs(hook_func.other[category][name]) do
 								v(unpack(varArgs))
+							end
+							if final != nil then
+								final()
 							end
 						end))
 						if !err then
