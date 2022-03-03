@@ -122,6 +122,7 @@ do -- Permission Object Code
 
 		function PermissionObject:NetRead()
 			self.Name = net.ReadString()
+			permission_table[self.Name] = {}
 			self:SetCode(net.ReadUInt(32))
 			self:SetAccessCode(net.ReadUInt(16))
 		end
@@ -212,6 +213,12 @@ do -- Modification Net Message
 			self.access_group_object = JAAS.AccessGroundObject():NetRead()
 		end
 	end
+
+	function net_modification_message:SendToServer(index)
+		J_NET:Start(index)
+		self:NetWrite()
+		net.SendToServer()
+	end
 end
 
 local function ModificationMessage(tab)
@@ -264,20 +271,26 @@ do -- Permission Net Code
 
 			if msg:IsModifyCode() then
 				if CanModifyPermission:Check(ply:GetCode()) then
-					local permission_object = msg:GetPermissionObject()
-					local rank_object = msg:GetRankObject()
+					if CanModifyPermission:AccessCheck(ply:GetCode()) then
+						local permission_object = msg:GetPermissionObject()
+						local rank_object = msg:GetRankObject()
 
-					if permission_object:XorCode(rank_object:GetCode()) then
+						if permission_object:XorCode(rank_object:GetCode()) then
+						else
+						end
 					else
 					end
 				else
 				end
 			elseif msg:IsModifyValue() then
 				if CanModifyPermissionValue:Check(ply:GetCode()) then
-					local permission_object = msg:GetPermissionObject()
-					local access_group = msg:GetAccessGroup()
+					if CanModifyPermissionValue:AccessCheck(ply:GetCode()) then
+						local permission_object = msg:GetPermissionObject()
+						local access_group = msg:GetAccessGroup()
 
-					if permission_object:SetAccessCode(access_group:GetValue()) then
+						if permission_object:SetAccessCode(access_group:GetValue()) then
+						else
+						end
 					else
 					end
 				else
@@ -287,6 +300,14 @@ do -- Permission Net Code
 	end
 
 	if CLIENT then
+		function MODULE:ModifyCode(permission_object, rank_object)
+			ModificationMessage():ModifyCode(permission_object, rank_object):SendToServer()
+		end
+
+		function MODULE:ModifyAccessValue(permission_object, access_group_object)
+			ModificationMessage():ModifyAccessValue(permission_object, access_group_object):SendToServer()
+		end
+
 		J_NET:Receive(Sync_BroadcastUpdate, function ()
 			local updated_object = Object(PermissionObject)
 			updated_object:NetRead()
