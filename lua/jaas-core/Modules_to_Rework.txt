@@ -1,0 +1,10 @@
+Done:
+	Module - Renamed to Base
+	Permission
+	Access Groups
+	Rank
+	Player
+
+Todo
+	Command
+	GUI
