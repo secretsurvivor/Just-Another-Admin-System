@@ -33,6 +33,13 @@ local Player_Hook_Run = JAAS.Hook.Run("Player")
 
 local player_table = {} -- [SteamID] = {1 = Code, 2 = LastConnected}
 
+function JAAS.Hook("Rank")("OnRemove")["PlayerModule::RankCodeUpdate"](isMulti, rank_name, remove_func)
+	for k,v in pairs(player_table) do
+		player_table[k][1] = remove_func(player_table[k][1])
+		PlayerTable:UpdateCode(k, player_table[k][1])
+	end
+end
+
 local PlayerMetaTable = FindMetaTable("Player")
 
 function PlayerMetaTable:GetCode()
@@ -177,7 +184,7 @@ do -- Net Code
 		end
 
 		do -- On Connect Sync (Send)
-			function Player_Hook.OnConnect["PlayerModule::Sync::OnConnect"](ply, info)
+			function Player_Hook("OnConnect")["PlayerModule::Sync::OnConnect"](ply, info)
 				local steamid64_to_ply = {}
 				local player_amount = 0
 
@@ -196,7 +203,7 @@ do -- Net Code
 		end
 
 		do -- On Connect Update Clients (Send)
-			function Player_Hook.OnConnect["PlayerModule::Update::OnConnect"](ply, info)
+			function Player_Hook("OnConnect")["PlayerModule::Update::OnConnect"](ply, info)
 				J_NET:Start(Update_OnConnect)
 				net.WriteString(ply:UserID())
 				net.WriteUInt(info[1], 32)
@@ -206,7 +213,7 @@ do -- Net Code
 		end
 
 		do -- On Disconnect Remove from Table (Send) | On Last Connected Update (Send)
-			function Player_Hook.OnDisconnect["PlayerModule::Update::OnDisconnect"](ply, info)
+			function Player_Hook("OnDisconnect")["PlayerModule::Update::OnDisconnect"](ply, info)
 				J_NET:Start(Update_OnDisconnect)
 				writePlayerInfo(ply, info[1], info[2])
 				net.Broadcast()
@@ -214,7 +221,7 @@ do -- Net Code
 		end
 
 		do -- On Code Update (Send)
-			function Player_Hook.OnModifiedCode["PlayerModule::CodeModified"](ply, new_value, old_value)
+			function Player_Hook("OnModifiedCode")["PlayerModule::CodeModified"](ply, new_value, old_value)
 				J_NET:Start(Update_PlayerCode)
 				net.WriteString(ply:UserID())
 				net.WriteUInt(new_value, 32)
@@ -293,7 +300,45 @@ do -- Net Code
 
 				player_table[ply:SteamID64()][1] = code
 				Player_Hook_Run("OnModifiedCode")(ply, code)
+				if ply:SteamID64() == LocalPlayer():SteamID64() then
+					Player_Hook_Run("LocalPlayerModifiedCode")(code)
+				end
 			end)
+		end
+
+		local permission_access_change_table = {} -- [Permission:Name] = {1 = Permission:Code, 2 = lastAccess, 3 = func}
+
+		function MODULE:OnLocalPermissionAccessChange(permission_object, func)
+			permission_access_change_table[permission_object:GetName()] = {permission_object:Check(LocalPlayer():GetCode()), func}
+		end
+
+		function Player_Hook("LocalPlayerModifiedCode")["PlayerModule::CheckPlayerAccess"](code)
+			for k,v in pairs(permission_access_change_table) do
+				local access = bit.band(LocalPlayer():GetCode(), v[1]) > 0
+
+				if access != v[2] then
+					permission_access_change_table[k][2] = access
+					func(access)
+				end
+			end
+		end
+
+		function JAAS.Hook("Permission")("OnCodeUpdate")["PlayerModule::CheckPlayerAccess"](permission_object, new_value)
+			if permission_access_change_table[permission_object] then
+				permission_access_change_table[permission_object][1] = new_value
+
+				local access = permission_object:Check(LocalPlayer():GetCode())
+				if access != permission_access_change_table[permission_object][2] then
+					permission_access_change_table[permission_object][2] = access
+					permission_access_change_table[permission_object][3](access)
+				end
+			end
+		end
+
+		function JAAS.Hook("Rank")("OnRemove")["PlayerModule::CheckPlayerAccess"](isMulti, rank_name, remove_func)
+			for k,v in pairs(permission_access_change_table) do
+				permission_access_change_table[k][1] = remove_func(permission_access_change_table[k][1])
+			end
 		end
 	end
 end
