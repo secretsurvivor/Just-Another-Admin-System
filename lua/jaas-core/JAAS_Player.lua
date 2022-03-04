@@ -241,7 +241,11 @@ do -- Net Code
 					if CanModifyCode:Check(ply:GetCode()) then
 						local target = msg:GetPlayer()
 						if ply:CanTarget(target) then
-							if MODULE:XorPlayerCode(target, msg:GetRank():GetCode()) then
+							local rank_object = msg:GetRank()
+							if rank_object:AccessCheck(ply:GetCode()) then
+								if MODULE:XorPlayerCode(target, rank_object:GetCode()) then
+								else
+								end
 							else
 							end
 						else
