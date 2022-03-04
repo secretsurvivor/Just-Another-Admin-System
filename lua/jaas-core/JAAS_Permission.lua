@@ -36,6 +36,13 @@ local Modify_PushChange = PermissionDataManipulation_NetType("ClientPush")
 
 local permission_table = permission_table or {} -- [Name] = {1 = Code, 2 = AccessGroup}
 
+function JAAS.Hook("Rank")("OnRemove")["RankModule::RankCodeUpdate"](isMulti, rank_name, remove_func)
+	for k,v in pairs(permission_table) do
+		permission_table[k][1] = remove_func(permission_table[k][1])
+		PermissionTable:UpdateCode(k, permission_table[k][1])
+	end
+end
+
 local PermissionObject = {Name = ""}
 
 do -- Permission Object Code
@@ -275,7 +282,7 @@ do -- Permission Net Code
 	*/
 	if SERVER then
 		do -- On Code Update (Send)
-			function Permission_Hook.OnCodeUpdate["PermissionModule::UpdateClients"](permission, new_value, old_value)
+			function Permission_Hook("OnCodeUpdate")["PermissionModule::UpdateClients"](permission, new_value, old_value)
 				J_NET:Start(Update_Code)
 				permission:NetWrite()
 				net.Broadcast()
@@ -283,7 +290,7 @@ do -- Permission Net Code
 		end
 
 		do -- On Access Group Update (Send)
-			function Permission_Hook.OnAccessUpdate["PermissionModule::UpdateClients"](permission, new_value, old_value)
+			function Permission_Hook("OnAccessUpdate")["PermissionModule::UpdateClients"](permission, new_value, old_value)
 				J_NET:Start(Update_AccessGroup)
 				permission:NetWrite()
 				net.Broadcast()

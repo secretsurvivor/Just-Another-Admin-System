@@ -708,7 +708,7 @@ do -- Net Code
 		end
 
 		do -- On Power Update (Send)
-			function Rank_Hook.OnPowerUpdate["RankModule::UpdateClients"](rank, new_value, old_value)
+			function Rank_Hook("OnPowerUpdate")["RankModule::UpdateClients"](rank, new_value, old_value)
 				J_NET:Start(Update_ModifiedPower)
 				rank:NetWrite()
 				net.Broadcast()
@@ -718,7 +718,7 @@ do -- Net Code
 		local CanViewInvisibleRank = PermissionModule:RegisterPermission("Can View Invisible Rank")
 
 		do -- On Invisible Update (Send)
-			function Rank_Hook.OnInvisibleUpdate["RankModule::UpdateClients"](rank, new_value, old_value)
+			function Rank_Hook("OnInvisibleUpdate")["RankModule::UpdateClients"](rank, new_value, old_value)
 				local plys = CanViewInvisibleRank:GetPlayers()
 
 				J_NET:Start(Update_ModifiedInvisible)
@@ -736,7 +736,7 @@ do -- Net Code
 		end
 
 		do -- On Access Group Update (Send)
-			function Rank_Hook.OnAccessCodeUpdate["RankModule::UpdateClients"](rank, new_value, old_value)
+			function Rank_Hook("OnAccessCodeUpdate")["RankModule::UpdateClients"](rank, new_value, old_value)
 				J_NET:Start(Update_ModifiedAccessGroup)
 				rank:NetWrite()
 				net.Broadcast()
@@ -744,7 +744,7 @@ do -- Net Code
 		end
 
 		do -- On Rank Addition (Send)
-			function Rank_Hook.OnAdd["RankModule::UpdateClients"](obj)
+			function Rank_Hook("OnAdd")["RankModule::UpdateClients"](obj)
 				J_NET:Start(Update_Added)
 				obj:NetWrite()
 				net.Broadcast()
@@ -752,7 +752,7 @@ do -- Net Code
 		end
 
 		do -- On Rank Removal (Send)
-			function Rank_Hook.OnRemove["RankModule::UpdateClients"](multi_remove, name)
+			function Rank_Hook("OnRemove")["RankModule::UpdateClients"](multi_remove, name)
 				if multi_remove then -- Update_MultiRemoved
 					J_NET:Start(Update_MultiRemoved)
 					net.WriteUInt(#name, 6)
