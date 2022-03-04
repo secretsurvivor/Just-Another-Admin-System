@@ -157,6 +157,14 @@ do -- Rank Object Code
 		return false
 	end
 
+	function MODULE.Shared:Post()
+		local AccessModule = JAAS:GetModule("AccessGroup")
+
+		function RankObject:AccessCheck(code)
+			return AccessModule:Check("Rank", self:GetAccessCode(), code)
+		end
+	end
+
 	function RankObject:NetWrite()
 		net.WriteString(self:GetName())
 		net.WriteUInt(self:GetPosition(), 6)
@@ -626,18 +634,16 @@ do -- Net Code
 
 				if msg:IsAdd() then
 					if CanAddRank:Check(ply:GetCode()) then
-						if CanAddRank:AccessCheck(ply:GetCode()) then
-							if MODULE:AddRank(msg:GetAddParameters()) then
-							else
-							end
+						if MODULE:AddRank(msg:GetAddParameters()) then
 						else
 						end
 					else
 					end
 				elseif msg:IsRemove() then
 					if CanRemoveRank:Check(ply:GetCode()) then
-						if CanRemoveRank:AccessCheck(ply:GetCode()) then
-							if MODULE:RemoveRank(msg:GetRankObject()) then
+						local rank_object = msg:GetRankObject()
+						if rank_object:AccessCheck(ply:GetCode()) then
+							if MODULE:RemoveRank(rank_object) then
 							else
 							end
 						else
@@ -646,8 +652,23 @@ do -- Net Code
 					end
 				elseif msg:IsMultiRemove() then
 					if CanRemoveRank:Check(ply:GetCode()) then
-						if CanRemoveRank:AccessCheck(ply:GetCode()) then
-							if MODULE:RemoveRanks(msg:GetRankObject()) then
+						local rank_object = msg:GetRankObject()
+						local amount = 0
+						local ranks_that_can_modify = {}
+
+						for k,v in ipairs(rank_object) do
+							if v:AccessCheck(ply:GetCode()) then
+								amount = 1 + amount
+								ranks_that_can_modify[amount] = v
+							end
+						end
+
+						if amount == 1 then
+							if MODULE:RemoveRank(v[1]) then
+							else
+							end
+						elseif amount > 1 then
+							if MODULE:RemoveRanks(v) then
 							else
 							end
 						else
@@ -656,8 +677,9 @@ do -- Net Code
 					end
 				elseif msg:IsModifyPower() then
 					if CanModifyRankPower:Check(ply:GetCode()) then
-						if CanModifyRankPower:AccessCheck(ply:GetCode()) then
-							if msg:GetRankObject():SetPower(msg:GetPower()) then
+						local rank_object = msg:GetRankObject()
+						if rank_object:AccessCheck(ply:GetCode()) then
+							if rank_object:SetPower(msg:GetPower()) then
 							else
 							end
 						else
@@ -666,8 +688,9 @@ do -- Net Code
 					end
 				elseif msg:IsModifyInvisibility() then
 					if CanModifyRankInvisibility:Check(ply:GetCode()) then
-						if CanModifyRankInvisibility:AccessCheck(ply:GetCode()) then
-							if msg:GetRankObject():SetInvisible(msg:GetInvisible()) then
+						local rank_object = msg:GetRankObject()
+						if rank_object:AccessCheck(ply:GetCode()) then
+							if rank_object:SetInvisible(msg:GetInvisible()) then
 							else
 							end
 						else
@@ -676,8 +699,9 @@ do -- Net Code
 					end
 				elseif msg:IsModifyAccessGroup() then
 					if CanModifyRankAccessValue:Check(ply:GetCode()) then
-						if CanModifyRankAccessValue:AccessCheck(ply:GetCode()) then
-							if msg:GetRankObject():SetAccessCode(msg:GetAccessGroup()) then
+						local rank_object = msg:GetRankObject()
+						if rank_object:AccessCheck(ply:GetCode()) then
+							if rank_object:SetAccessCode(msg:GetAccessGroup()) then
 							else
 							end
 						else
