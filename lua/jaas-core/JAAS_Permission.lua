@@ -36,7 +36,7 @@ local Modify_PushChange = PermissionDataManipulation_NetType("ClientPush")
 
 local permission_table = permission_table or {} -- [Name] = {1 = Code, 2 = AccessGroup}
 
-function JAAS.Hook("Rank")("OnRemove")["RankModule::RankCodeUpdate"](isMulti, rank_name, remove_func)
+function JAAS.Hook("Rank")("OnRemove")["PermissionModule::RankCodeUpdate"](isMulti, rank_name, remove_func)
 	for k,v in pairs(permission_table) do
 		permission_table[k][1] = remove_func(permission_table[k][1])
 		PermissionTable:UpdateCode(k, permission_table[k][1])
