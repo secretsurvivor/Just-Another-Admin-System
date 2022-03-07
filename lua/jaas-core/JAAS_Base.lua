@@ -213,7 +213,8 @@ do -- JAAS Net Module
 end
 
 local jaas_log_list = {}
-local jaas_log = JAAS:Module("Log")
+module_list["Log"] = Object(jaas_module)
+local jaas_log = jaas_module["Log"]
 
 local CLIENTLOGFILEALLPULL = jaas_net:RegisterNetworkString("Base::ModuleClientLogFileDateFullPull")
 local CLIENTLOGFILEPULL = jaas_net:RegisterNetworkString("Base::ModuleClientLogFileDatePull")
@@ -684,7 +685,9 @@ do --JAAS Log Module
 end
 
 local module_list = {}
+local module_state = {}
 local jaas_module = {}
+local configs = {}
 
 function jaas_module:RegisterNetworkString(name)
 	name = "JAAS::" + self.name + "::" + name
@@ -723,22 +726,33 @@ local jaas_module.Server = {}
 local jaas_module.Shared = {}
 
 --- Overridable Functions ---
-function jaas_module:ClientPull(ply)
-end
-
 function jaas_module.Client:Post() end
 function jaas_module.Server:Post() end
 function jaas_module.Shared:Post() end
 --- ---
 
-function JAAS:Module(module_name)
-	self.name = module_name
-	module_list[module_name] = Object(jaas_module)
-
-	return module_list[#module_list],self:GetModule("Log"),jaas_net
+local function configKeyPull()
+	return setmetatable({}, {__index = configs})
 end
 
-function JAAS:ExecuteModules()
+function JAAS:Module(module_name, state)
+	state = state or "Shared"
+	self.name = module_name
+
+	module_list[module_name] = Object(jaas_module)
+
+	if state == "Shared" then
+		module_state[module_name] = SERVER or CLIENT
+	elseif state == "Server" then
+		module_state[module_name] = SERVER
+	elseif state == "Client" then
+		module_state[module_name] = CLIENT
+	end
+
+	return module_list[#module_list],self:GetModule("Log"),jaas_net,configKeyPull()
+end
+
+function JAAS:ExecuteModulesPost()
 	for k,module_data in pairs(module_list) do -- k = index, v = module data
 		module_data.Shared:Post()
 
@@ -754,6 +768,24 @@ end
 
 function JAAS:GetModule(module_name)
 	if module_list[module_name] then
-		return Object(module_list[module_name])
+		if module_state[module_name] then
+			return Object(module_list[module_name])
+		else
+			error("This module cannot be accessed from [" + ((SERVER and "Server") or (CLIENT and "Client")) + "], must be accessed from [" + ((SERVER and "Server") or (CLIENT and "Client")), 2)
+		end
+	else
+		error("Module does not exist; if this module does exist, make sure that this function gets called after the module is registered", 2)
 	end
+end
+
+function JAAS:Configs(tab)
+	for k,v in pairs(tab) do
+		if configs[k] == nil then
+			configs[k] = v
+		end
+	end
+end
+
+function JAAS:GetConfigs()
+	return configKeyPull()
 end
