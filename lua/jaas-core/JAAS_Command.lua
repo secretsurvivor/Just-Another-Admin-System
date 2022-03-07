@@ -33,13 +33,14 @@ end
 local Command_Hook = JAAS.Hook("Command")
 local Command_Hook_Run = JAAS.Hook.Run("Command")
 
-local command_table = {} -- [Category:Name] = {1 = Code, 2 = AccessGroup, 3 = function, 4 = Parameters}
+local command_table = {} -- [Category][Name] = {1 = Code, 2 = AccessGroup, 3 = function, 4 = Parameters, 5 = Flags}
 
 function JAAS.Hook("Rank")("OnRemove")["CommandModule::RankCodeUpdate"](isMulti, rank_name, remove_func)
-	for k,v in pairs(command_table) do
-		command_table[k][1] = remove_func(command_table[k][1])
-		local split = string.Explode(":", k)
-		CommandTable:UpdateCode(split[2], split[1], command_table[k][1])
+	for category,name_table in pairs(command_table) do
+		for name,v in pairs(name_table) do
+			command_table[category][name][1] = remove_func(command_table[category][name][1])
+			CommandTable:UpdateCode(name, category, command_table[category][name][1])
+		end
 	end
 end
 
@@ -54,22 +55,22 @@ do -- Command Object Code
 		return self.category
 	end
 
-	function CommandObject:BuildKey()
-		return self.category + ":" + self.name
+	function CommandObject:GetParameters()
+		return command_table[self.category][self.name][4]
 	end
 
 	function CommandObject:IsPresent()
-		return command_table[self:BuildKey()] != nil
+		return command_table[self.category][self.name] != nil
 	end
 
 	function CommandObject:GetCode()
-		return command_table[self:BuildKey()][1]
+		return command_table[self.category][self.name][1]
 	end
 
 	function CommandObject:Setcode(code)
 		if CommandTable:UpdateCode(self.name, self.category, code) then
 			local old_value = self:GetCode()
-			command_table[self:BuildKey()][1] = code
+			command_table[self.category][self.name][1] = code
 			Command_Hook_Run("OnCodeUpdate")(self, code, old_value)
 			return true
 		end
@@ -77,13 +78,13 @@ do -- Command Object Code
 	end
 
 	function CommandObject:GetAccessCode()
-		return command_table[self:BuildKey()][2]
+		return command_table[self.category][self.name][2]
 	end
 
 	function CommandObject:SetAccessCode(value)
 		if CommandTable:UpdateAccessGroup(self.name, self.category, value) then
 			local old_value = self:GetAccessCode()
-			command_table[self:BuildKey()][2] = value
+			command_table[self.category][self.name][2] = value
 			Command_Hook_Run("OnAccessUpdate")(self, value, old_value)
 			return true
 		end
@@ -100,6 +101,10 @@ do -- Command Object Code
 		function CommandObject:AccessCheck(code)
 			return AccessModule:Check("Command", self:GetAccessCode(), code)
 		end
+	end
+
+	function CommandObject:CheckFlags(flag)
+		return bit.band(command_table[self.category][self.name][5], flag) > 0
 	end
 
 	function CommandObject:NetWrite()
@@ -122,12 +127,12 @@ do -- Command Object Code
 	end
 
 	function CommandObject:Execute(...)
-		return command_table[self:BuildKey()][3](...)
+		return command_table[self.category][self.name][3](...)
 	end
 
 	if SERVER then
 		function CommandObject:NetExecute()
-			local parameters = command_table[self:BuildKey()][4]
+			local parameters = command_table[self.category][self.name][4]
 			local read_parameter_values = {}
 
 			for index,info in ipairs(parameters) do
@@ -143,6 +148,8 @@ local function CommandObject(name, category)
 	return Object(CommandObject, {name = name, category = category})
 end
 
+JAAS.CommandObject = CommandObject
+
 local ParameterTable = {}
 local ParameterObject = {
 	BoolObject = {},
@@ -152,7 +159,11 @@ local ParameterObject = {
 	PlayerObject = {},
 	PlayersObject = {},
 	OptionObject = {},
-	OptionsObject = {}
+	OptionsObject = {},
+	RankObject = {},
+	PermissionObject = {},
+	AccessGroup = {},
+	CommandObject = {}
 }
 
 do -- Parameter Object Code
@@ -161,6 +172,10 @@ do -- Parameter Object Code
 			self.name = name
 			self.default = default
 			return self
+		end
+
+		function ParameterObject.BoolObject:GetType()
+			return 1
 		end
 
 		function ParameterObject.BoolObject:SetValue(value)
@@ -194,6 +209,10 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.IntObject:GetType()
+			return 2
+		end
+
 		function ParameterObject.IntObject:SetValue(value)
 			self.value = value
 		end
@@ -225,6 +244,10 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.FloatObject:GetType()
+			return 3
+		end
+
 		function ParameterObject.FloatObject:SetValue(value)
 			self.value = value
 		end
@@ -252,6 +275,10 @@ do -- Parameter Object Code
 			self.name = name
 			self.default = default
 			return self
+		end
+
+		function ParameterObject.StringObject:GetType()
+			return 4
 		end
 
 		function ParameterObject.StringObject:SetValue(value)
@@ -283,6 +310,10 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.PlayerObject:GetType()
+			return 5
+		end
+
 		function ParameterObject.PlayerObject:SetValue(value)
 			self.value = value
 		end
@@ -310,6 +341,10 @@ do -- Parameter Object Code
 			self.name = name
 			self.filter_func = filter_func
 			return self
+		end
+
+		function ParameterObject.PlayersObject:GetType()
+			return 6
 		end
 
 		function ParameterObject.PlayersObject:SetValue(value)
@@ -353,6 +388,10 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.OptionObject:GetType()
+			return 7
+		end
+
 		function ParameterObject.OptionObject:SetValue(value)
 			self.value = value
 		end
@@ -382,6 +421,10 @@ do -- Parameter Object Code
 			self.default = default
 			self.filter_func = filter_func
 			return self
+		end
+
+		function ParameterObject.OptionsObject:GetType()
+			return 8
 		end
 
 		function ParameterObject.OptionsObject:SetValue(value)
@@ -420,6 +463,134 @@ do -- Parameter Object Code
 		return Object(ParameterObject.OptionsObject, tab)
 	end
 
+	do -- Rank Object Code
+		function ParameterObject.RankObject:Set(name)
+			self.name = name
+			return self
+		end
+
+		function ParameterObject.RankObject:GetType()
+			return 9
+		end
+
+		function ParameterObject.RankObject:SetValue(value)
+			self.value = value
+		end
+
+		function ParameterObject.RankObject:GetValue()
+			return self.value
+		end
+
+		function ParameterObject.RankObject:NetWrite()
+			self.value:NetWrite()
+		end
+
+		function ParameterObject.RankObject:NetRead()
+			self.value = JAAS.RankObject():NetRead()
+			return self:GetValue()
+		end
+	end
+
+	local function RankObject(tab)
+		return Object(ParameterObject.RankObject, tab)
+	end
+
+	do -- Permission Object Code
+		function ParameterObject.PermissionObject:Set(name)
+			self.name = name
+			return self
+		end
+
+		function ParameterObject.PermissionObject:GetType()
+			return 10
+		end
+
+		function ParameterObject.PermissionObject:SetValue(value)
+			self.value = value
+		end
+
+		function ParameterObject.PermissionObject:GetValue()
+			return self.value
+		end
+
+		function ParameterObject.PermissionObject:NetWrite()
+			self.value:NetWrite()
+		end
+
+		function ParameterObject.PermissionObject:NetRead()
+			self.value = JAAS.PermissionObject():NetRead()
+			return self:GetValue()
+		end
+	end
+
+	local function PermissionObject(tab)
+		return Object(ParameterObject.PermissionObject, tab)
+	end
+
+	do -- Access Group Object Code
+		function ParameterObject.AccessGroupObject:Set(name)
+			self.name = name
+			return self
+		end
+
+		function ParameterObject.AccessGroupObject:GetType()
+			return 11
+		end
+
+		function ParameterObject.AccessGroupObject:SetValue(value)
+			self.value = value
+		end
+
+		function ParameterObject.AccessGroupObject:GetValue()
+			return self.value
+		end
+
+		function ParameterObject.AccessGroupObject:NetWrite()
+			self.value:NetWrite()
+		end
+
+		function ParameterObject.AccessGroupObject:NetRead()
+			self.value = JAAS.AccessGroupObject():NetRead()
+			return self:GetValue()
+		end
+	end
+
+	local function AccessGroupObject(tab)
+		return Object(ParameterObject.AccessGroupObject, tab)
+	end
+
+	do -- Command Object Code
+		function ParameterObject.CommandObject:Set(name)
+			self.name = name
+			return self
+		end
+
+		function ParameterObject.CommandObject:GetType()
+			return 12
+		end
+
+		function ParameterObject.CommandObject:SetValue(value)
+			self.value = value
+		end
+
+		function ParameterObject.CommandObject:GetValue()
+			return self.value
+		end
+
+		function ParameterObject.CommandObject:NetWrite()
+			self.value:NetWrite()
+		end
+
+		function ParameterObject.CommandObject:NetRead()
+			self.value = JAAS.CommandObject():NetRead()
+			return self:GetValue()
+		end
+	end
+
+	local function CommandObject(tab)
+		return Object(ParameterObject.CommandObject, tab)
+	end
+
 	do -- Parameter Table Object
 		function ParameterTable:AddBool(name, default)
 			self.internal[1 + #self.internal] = BoolObject():Set(name, default)
@@ -453,6 +624,22 @@ do -- Parameter Object Code
 			self.internal[1 + #self.internal] = OptionsObject():Set(name, option_list, default, filter_func)
 		end
 
+		function ParameterTable:AddRank(name)
+			self.internal[1 + #self.internal] = RankObject():Set(name)
+		end
+
+		function ParameterTable:AddPermission(name)
+			self.internal[1 + #self.internal] = PermissionObject():Set(name)
+		end
+
+		function ParameterTable:AddAccessGroup(name)
+			self.internal[1 + #self.internal] = AccessGroupObject():Set(name)
+		end
+
+		function ParameterTable:AddCommand(name)
+			self.internal[1 + #self.internal] = CommandObject():Set(name)
+		end
+
 		function ParameterTable:BuildTable()
 			return self.internal
 		end
@@ -473,18 +660,30 @@ function MODULE:ParameterBuilder()
 	return Object(ParameterTable, {internal = {}})
 end
 
-function MODULE:RegisterCommand(name, parameters, func)
+J_CMD_SERVER = 1
+
+function MODULE:RegisterCommand(name, parameters, func, flags)
+	flags = flags or 0
 	if CommandTable:Insert(name, self.category) then
-		command_table[self.category + ":" + name] = {0, 0, func, parameters}
+		command_table[self.category] = {[name] = {0, 0, func, parameters}}
 		return CommandObject(name, self.category)
 	else
 		local found_command = CommandTable:Select(name, self.category)
 
 		if found_command then
-			command_table[self.category + ":" + name] = {found_command.Code, found_command.AccessGroup, func, parameters}
+			command_table[self.category] = {[name] = {found_command.Code, found_command.AccessGroup, func, parameters}}
 			return CommandObject(name, self.category)
 		else
 			error("An error occurred whilst registering Command", 2)
+		end
+	end
+end
+
+if CLIENT then
+	function MODULE:RegisterCommand(name, parameters, func, flags)
+		if command_table[self.category] == nil and command_table[self.category][name] == nil and bit.band(flags, J_CMD_SERVER) == 0 then
+			command_table[self.category] = {[name] = {0, 0, func, parameters}}
+			return CommandObject(name, self.category)
 		end
 	end
 end
@@ -607,20 +806,25 @@ do -- Net Code
 			local not_default_commands = {}
 			local command_amount = 0
 
-			for k,v in pairs(command_table) do
-				if v[1] > 0 then
-					command_amount = 1 + command_amount
-					not_default_commands[k] = v
+			for category,name_table in pairs(command_table) do
+				for name,info in pairs(name_table) do
+					if info[1] > 0 and bit.band(info[5], J_CMD_SERVER) == 0 then
+						command_amount = 1 + command_amount
+						not_default_commands[category] = {[name_table] = info}
+					end
 				end
 			end
 
 			J_NET:Start(Sync_OnConnect)
 			net.WriteUInt(command_amount, 16)
 
-			for k,v in pairs(not_default_commands) do
-				net.WriteString(k)
-				net.WriteUInt(v[1], 32)
-				net.WriteUInt(v[2], 8)
+			for category,name_table in pairs(not_default_commands) do
+				for name,info in pairs(name_table) do
+					net.WriteString(category)
+					net.WriteString(name)
+					net.WriteUInt(v[1], 32)
+					net.WriteUInt(v[2], 8)
+				end
 			end
 
 			net.Send(ply)
@@ -715,7 +919,7 @@ do -- Net Code
 		do -- Execute Command (Send)
 			function CommandObject:Execute(...)
 				local args = {...}
-				local parameters = command_table[self:BuildKey()][4]
+				local parameters = command_table[self:GetCategory][self:GetName][4]
 
 				J_NET:Start(Client_Execute)
 
@@ -745,12 +949,13 @@ do -- Net Code
 				local index = 1
 
 				repeat
-					local key = net.ReadString()
+					local category = net.ReadString()
+					local name = net.ReadString()
 					local code = net.ReadUInt(32)
 					local access_value = net.ReadUInt(8)
 
-					command_table[key][1] = code
-					command_table[key][2] = access_value
+					command_table[category][name][1] = code
+					command_table[category][name][2] = access_value
 
 					index = 1 + index
 				until (index <= command_amount)
@@ -776,3 +981,178 @@ do -- Net Code
 		end
 	end
 end
+
+local function Objectify_String(str)
+	/*	String Conversion Mapping
+		Bool : T/F
+		Number : 0-9*
+		Float : 0-9*.0-9*
+		String : 'Char*'
+		Player SteamID : (Char*)
+		Player UserID : (0-9*)
+		Players : (Char*,*)
+		Option : [Char*]
+		Options : [Char*,*]
+		Rank : R{Char*}
+		Permission : P{Char*}
+		AccessGroup : A{Char*}
+		Command : C{Char*}
+	*/
+
+	local str_func = string.gmatch(str, ".")
+	local endOfStr = false
+	local str_char = str_func()
+
+	local function nextChar()
+		str_char = str_func()
+
+		if str_char == nil then
+			endOfStr = true
+		else
+			str_char = string.byte(str_char)
+		end
+	end
+
+	local text = ""
+	local value = nil
+
+	local function repeatAddText(endChar)
+		repeat
+			text = text + string.char(str_char)
+			nextChar()
+		until (str_char != endChar and !endOfStr)
+	end
+
+	local function repeatMultiAddText(endChar)
+		local multi = false
+
+		repeat
+			if multi then
+				text[#text] = text[#text] + string.char(str_char)
+			else
+				text = text + string.char(str_char)
+			end
+			nextChar()
+			if str_char == 44 then
+				if !multi then
+					multi = true
+					text = {text}
+				end
+				text[1 + #text] = ""
+			end
+		until (str_char != endChar and !endOfStr)
+
+		return multi
+	end
+
+	while !endOfStr do
+		if str_char == 39 then -- ' String Open
+			nextChar()
+			repeatAddText(39)
+			value = text
+
+		elseif str_char == 40 then -- ( Player Open
+			nextChar()
+			local isUserID = false
+
+			if str_char >= 48 and str_char <= 57 then
+				isUserID = true
+			end
+
+			local multi = repeatMultiAddText(41)
+
+			if multi then
+				value = {}
+				local index = 1
+				repeat
+					if isUserID then
+						value[index] = player.GetByID(text[index])
+					else
+						value[index] = player.GetBySteamID(text[index])
+					end
+					index = 1 + index
+				until (index <= #text)
+			else
+				if isUserID then
+					value = player.GetByID(text)
+				else
+					value = player.GetBySteamID(text)
+				end
+			end
+
+		elseif str_char >= 48 and str_char <= 57 then -- Number
+			repeatAddText(0)
+			value = tonumber(text)
+
+		elseif str_char == 91 then -- Option | Options
+			nextChar()
+
+			local multi = repeatMultiAddText(93)
+
+			if multi then
+				value = {}
+				local index = 1
+				repeat
+					value[index] = text[index]
+					index = 1 + index
+				until (index <= #text)
+			else
+				value = text
+			end
+
+		elseif str_char == 82 then -- Rank
+			nextChar()
+			if str_char == 123 then
+				nextChar()
+				repeatAddText(125)
+			end
+			value = JAAS.RankObject(text)
+
+		elseif str_char == 80 then -- Permission
+			nextChar()
+			if str_char == 123 then
+				nextChar()
+				repeatAddText(125)
+			end
+			value = JAAS.PermissionObject(text)
+
+		elseif str_char == 65 then -- Access Group
+			nextChar()
+			if str_char == 123 then
+				nextChar()
+				repeatAddText(125)
+			end
+			value = JAAS.AccessGroupObject(text)
+
+		elseif str_char == 67 then -- Command
+			nextChar()
+			if str_char == 123 then
+				nextChar()
+				repeatAddText(125)
+			end
+			value = JAAS.CommandObject(text)
+
+		elseif str_char == 84 then
+			value = true
+		elseif str_char == 70 then
+			value = false
+		end
+	end
+
+	return value
+end
+
+concommand.Add("J", function (ply, cmd, args, argStr)
+	local command_object = CommandObject(args[1], args[2])
+	if command_object:IsPresent() and (ply == nil or command_object:Check(ply:GetCode())) then
+		local parameters = command_object:GetParameters()
+		local read_parameter_values = {}
+
+		for index,v in ipairs(parameters) do
+			v:SetValue(Objectify_String(args + 2))
+			read_parameter_values[index] = v:GetValue()
+		end
+
+		command_object:Execute(unpack(read_parameter_values))
+	end
+end, nil, "Execute JAAS Commands") -- Autocomplete nil for now
