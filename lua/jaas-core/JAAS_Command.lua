@@ -1146,13 +1146,17 @@ concommand.Add("J", function (ply, cmd, args, argStr)
 	local command_object = CommandObject(args[1], args[2])
 	if command_object:IsPresent() and (ply == nil or command_object:Check(ply:GetCode())) then
 		local parameters = command_object:GetParameters()
-		local read_parameter_values = {}
+		if #args - 2 == #parameters then
+			local read_parameter_values = {}
 
-		for index,v in ipairs(parameters) do
-			v:SetValue(Objectify_String(args + 2))
-			read_parameter_values[index] = v:GetValue()
+			for index,v in ipairs(parameters) do
+				v:SetValue(Objectify_String(args + 2))
+				read_parameter_values[index] = v:GetValue()
+			end
+
+			command_object:Execute(unpack(read_parameter_values))
+		else
+			ErrorNoHalt("Incorrect amount of parameters were parsed")
 		end
-
-		command_object:Execute(unpack(read_parameter_values))
 	end
 end, nil, "Execute JAAS Commands") -- Autocomplete nil for now
