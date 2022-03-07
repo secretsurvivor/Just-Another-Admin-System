@@ -721,9 +721,13 @@ elseif CLIENT then
 	end)
 end
 
-local jaas_module.Client = {}
-local jaas_module.Server = {}
-local jaas_module.Shared = {}
+local function addPostFunc(t, k, v)
+	rawset(t, 1 + #t, v)
+end
+
+local jaas_module.Client = setmetatable({},{__newindex = addPostFunc})
+local jaas_module.Server = setmetatable({},{__newindex = addPostFunc})
+local jaas_module.Shared = setmetatable({},{__newindex = addPostFunc})
 
 --- Overridable Functions ---
 function jaas_module.Client:Post() end
@@ -754,14 +758,17 @@ end
 
 function JAAS:ExecuteModulesPost()
 	for k,module_data in pairs(module_list) do -- k = index, v = module data
-		module_data.Shared:Post()
-
-		if SERVER then
-			module_data.Server:Post()
+		for k,func in ipairs(module_data.Shared) do
+			func()
 		end
-
-		if CLIENT then
-			module_data.Client:Post()
+		if SERVER then
+			for k,func in ipairs(module_data.Server) do
+				func()
+			end
+		elseif CLIENT then
+			for k,func in ipairs(module_data.Client) do
+				func()
+			end
 		end
 	end
 end
