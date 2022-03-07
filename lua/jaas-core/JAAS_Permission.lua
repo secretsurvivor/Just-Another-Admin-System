@@ -43,11 +43,11 @@ function JAAS.Hook("Rank")("OnRemove")["PermissionModule::RankCodeUpdate"](isMul
 	end
 end
 
-local PermissionObject = {Name = ""}
+local PermissionObject = {name = ""}
 
 do -- Permission Object Code
 	function PermissionObject:GetName()
-		return self.Name
+		return self.name
 	end
 
 	function PermissionObject:GetCode()
@@ -114,7 +114,7 @@ do -- Permission Object Code
 	end
 
 	function PermissionObject:NetRead()
-		self.Name = net.ReadString()
+		self.name = net.ReadString()
 		self.Code = net.ReadUInt(32)
 		self.AccessGroup = net.ReadUInt(16)
 		return self
@@ -130,22 +130,20 @@ do -- Permission Object Code
 		end
 
 		function PermissionObject:NetRead()
-			self.Name = net.ReadString()
-			permission_table[self.Name] = {}
+			self.name = net.ReadString()
+			permission_table[self.name] = {}
 			self:SetCode(net.ReadUInt(32))
 			self:SetAccessCode(net.ReadUInt(16))
 			return self
 		end
 	end
-
-	function JAAS.PermissionObject(tab)
-		return Object(PermissionObject, tab)
-	end
 end
 
-local function PermissionObject(tab)
-	return Object(PermissionObject, tab)
+local function PermissionObject(name)
+	return Object(PermissionObject, {name = name})
 end
+
+JAAS.PermissionObject
 
 function MODULE:RegisterPermission(name)
 	local found_data = PermissionTable:Select(name)
@@ -153,19 +151,19 @@ function MODULE:RegisterPermission(name)
 	if found_data == nil then
 		if PermissionTable:Insert(name) then
 			permission_table[name] = {[1] = 0, [2] = 0}
-			return Object(PermissionObject, {Name = name})
+			return PermissionObject(name)
 		else
 			error("Invalid Permission Name", 2)
 		end
 	else
 		permission_table[name] = {[1] = found_data.Code, [2] = found_data.AccessGroup}
-		return Object(PermissionObject, {Name = name})
+		return PermissionObject(name)
 	end
 end
 
 function MODULE:GetPermission(name)
 	if permission_table[name] then
-		return Object(PermissionObject, {Name = name})
+		return PermissionObject(name)
 	else
 		error("Permission does not exist", 2)
 	end
@@ -224,7 +222,7 @@ do -- Modification Net Message
 		if self.opcode == 1 then
 			self.rank = JAAS.RankObject():NetRead()
 		elseif self.opcode == 2 then
-			self.access_group_object = JAAS.AccessGroundObject():NetRead()
+			self.access_group_object = JAAS.AccessGroupObject():NetRead()
 		end
 	end
 
@@ -312,7 +310,7 @@ do -- Permission Net Code
 
 				net.WriteUInt(permission_amount, 16)
 				for k,v in ipairs(NotDefaultPermissions) do
-					PermissionObject{Name = v}:NetWrite()
+					PermissionObject(v):NetWrite()
 				end
 
 				net.Send(ply)

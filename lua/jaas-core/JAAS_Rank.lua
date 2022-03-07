@@ -213,20 +213,18 @@ do -- Rank Object Code
 			rank_table[self:GetName()] = {}
 		end
 	end
-
-	function JAAS.RankObject(tab)
-		return Object(RankObject, tab)
-	end
 end
 
-local function RankObject(tab) then
-	return Object(RankObject, tab)
+local function RankObject(name) then
+	return Object(RankObject, {name = name})
 end
+
+JAAS.RankObject = RankObject
 
 function MODULE:AddRank(name, power, invisible)
 	if RankTable:Insert(name, power, invisible) then
 		rank_manager:MakeDirty()
-		local obj = RankObject{name = name}
+		local obj = RankObject(name)
 		Rank_Hook_Run("OnAdd")(obj)
 		return obj
 	end
@@ -527,7 +525,7 @@ if CLIENT then
 		local found_ranks = {}
 
 		for name,information in pairs(rank_table) do
-			local obj = RankObject{name = name}
+			local obj = RankObject(name)
 
 			if bit.band(obj:GetCode(), code) then
 				found_ranks[1 + #found_ranks] = obj
@@ -541,7 +539,7 @@ if CLIENT then
 		local max_power = 0
 
 		for name,information in pairs(rank_table) do
-			local obj = RankObject{name = name}
+			local obj = RankObject(name)
 
 			if bit.band(obj:GetCode(), code) and obj:GetPower() > max_power then
 				max_power = obj:GetPower()
@@ -850,7 +848,7 @@ do -- Net Code
 
 		do -- On Rank Removal (Receive) + Hook
 			J_NET:ReceiveString(Update_Removed, function (name)
-				local obj = RankObject{name = name}
+				local obj = RankObject(name)
 
 				Rank_Hook_Run("OnRemove", function () obj:Remove() end)(false, obj:GetName(), function (code)
 					if code != nil or code > 0 then

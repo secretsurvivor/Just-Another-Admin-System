@@ -199,20 +199,18 @@ do -- Access Group Object Code
 			return self
 		end
 	end
-
-	function JAAS.AccessGroupObject(tab)
-		return Object(AccessGroupObject, tab)
-	end
 end
 
-local function AccessGroupObject(tab)
-	return Object(AccessGroupObject, tab)
+local function AccessGroupObject(name, accessType)
+	return Object(AccessGroupObject, {name = name, type = accessType})
 end
+
+JAAS.AccessGroupObject = AccessGroupObject
 
 function MODULE:AddAccessGroup(name, accessType)
 	if AccessGroupTable:Insert(name, accessType) then
 		check_dirty = true
-		local obj = AccessGroupObject({name = name, type = accessType})
+		local obj = AccessGroupObject(name, accessType)
 		AccessGroup_Hook_Run("OnAdd")(obj)
 
 		return obj
