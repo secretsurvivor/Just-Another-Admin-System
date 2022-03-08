@@ -95,6 +95,24 @@ do -- SQL Table Object Code
 	end
 end
 
+local f = FindMetaTable "File"
+
+function f:WriteString(str)
+	for c in gmatch(str, ".") do
+		self:WriteByte(string.byte(c))
+	end
+	self:WriteByte(0x0)
+end
+
+function f:ReadString()
+	local byte,str = self:ReadByte(),""
+	while byte > 0x0 do
+		str = str .. string.char(byte)
+		byte = self:ReadByte()
+	end
+	return str
+end
+
 local jaas_net = {}
 local jaas_net_network_strings = {}
 
@@ -216,8 +234,21 @@ local jaas_log_list = {}
 module_list["Log"] = Object(jaas_module)
 local jaas_log = jaas_module["Log"]
 
+local TextObjectColours = {
+	String = Color(197, 90, 17),
+	Number = Color(84, 130, 53),
+	Bool = Color(46, 117, 182),
+	Player = Color(68, 84, 106),
+	Permission = Color(196, 149, 0),
+	Rank = Color(112, 48, 160),
+	Command = Color(204, 0, 0),
+	AccessGroup = Color(132, 60, 12)
+}
+
 local CLIENTLOGFILEALLPULL = jaas_net:RegisterNetworkString("Base::ModuleClientLogFileDateFullPull")
 local CLIENTLOGFILEPULL = jaas_net:RegisterNetworkString("Base::ModuleClientLogFileDatePull")
+local CLIENTCHATTEXT = jaas_net:RegisterNetworkString("Base::ModuleClientChatText")
+local CLIENTCONSOLETEXT = jaas_net:RegisterNetworkString("Base::ModuleClientConsoleText")
 
 do --JAAS Log Module
 	function jaas_log:RegisterLog(tab)
@@ -386,6 +417,105 @@ do --JAAS Log Module
 		f:Close()
 
 		return {properties = readInfo(f),records = readLogBlock(f)}
+	end
+
+	if SERVER then
+		local function MapColourToJAASObjects(str, ...)
+			/*	Replace Mapping
+				%s : String
+				%n : Number/Float
+				%b : Bool
+				%p : Player
+				%P : Permission
+				%R : Rank
+				%C : Command
+				%A : Access Group
+			*/
+			local varArgs = {...}
+			local tab = {}
+			local index = 0
+
+			local char_func = string.gmatch(str, ".")
+			local str_char = str_func()
+			local endOfStr = false
+
+			local function nextChar()
+				str_char = str_func()
+
+				if str_char == nil then
+					endOfStr = true
+				end
+			end
+
+			local function addToTable(value)
+				tab[1 + #tab] = value
+			end
+
+			local text = ""
+
+			while !endOfStr do
+				if str_char == "%" then
+					addToTable(text)
+					text = ""
+					nextChar()
+					index = 1 + index
+
+					if str_char == "s" then
+						addToTable(TextObjectColours.String)
+					elseif str_char == "n" then
+						addToTable(TextObjectColours.Number)
+					elseif str_char == "b" then
+						addToTable(TextObjectColours.Bool)
+					elseif str_char == "p" then
+						addToTable(TextObjectColours.Player)
+					elseif str_char == "P" then
+						addToTable(TextObjectColours.Permission)
+					elseif str_char == "R" then
+						addToTable(TextObjectColours.Rank)
+					elseif str_char == "C" then
+						addToTable(TextObjectColours.Command)
+					elseif str_char == "A" then
+						addToTable(TextObjectColours.AccessGroup)
+					end
+					addToTable(varArgs[index])
+					addToTable(Color(255, 241, 122, 200))
+				else
+					text = text + str_char
+				end
+
+				nextChar()
+			end
+
+			return tab
+		end
+
+		function jaas_log:ChatText(ply, str, ...)
+			jaas_net:Start(CLIENTCHATTEXT)
+			net.WriteTable(MapColourToJAASObjects(str, ...))
+			if ply then
+				net.Send(ply)
+			else
+				net.Broadcast()
+			end
+		end
+
+		function jaas_log:ConsoleText(ply, str, ...)
+			jaas_net:Start(CLIENTCONSOLETEXT)
+			net.WriteTable(MapColourToJAASObjects(str, ...))
+			if ply then
+				net.Send(ply)
+			else
+				net.Broadcast()
+			end
+		end
+	elseif CLIENT then
+		jaas_net:Receive(CLIENTCHATTEXT, function ()
+			chat.AddText(unpack(net.ReadTable()))
+		end)
+
+		jaas_net:Receive(CLIENTCONSOLETEXT, function ()
+			MsgC(unpack(net.ReadTable()))
+		end)
 	end
 
 	do -- Log Objects
