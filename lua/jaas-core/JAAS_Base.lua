@@ -261,7 +261,7 @@ do --JAAS Log Module
 		local this = self
 
 		return function (tab)
-			this:WriteToLog(index, tab)
+			jaas_log:RecordObject(os.time(), this.label, index, tab)
 		end, index
 	end
 
@@ -501,7 +501,7 @@ do --JAAS Log Module
 
 		function jaas_log:ConsoleText(ply, str, ...)
 			jaas_net:Start(CLIENTCONSOLETEXT)
-			net.WriteTable(MapColourToJAASObjects(str, ...))
+			net.WriteTable(MapColourToJAASObjects(self.label + str, ...))
 			if ply then
 				net.Send(ply)
 			else
@@ -602,29 +602,29 @@ do --JAAS Log Module
 			f:WriteByte(0x1)
 
 			f:WriteByte(0x2)
-			f:WriteULong(os.time())
+			f:WriteULong(self.Timestamp)
 
 			f:WriteByte(0x3)
-			f:WriteString(record.Label)
-			f:WriteUShort(record.Type)
+			f:WriteString(self.Label)
+			f:WriteUShort(self.Type)
 
 			f:WriteByte(0x4)
-			writeStringTable(record.Rank)
+			writeStringTable(self.Rank)
 
 			f:WriteByte(0x5)
-			writeStringTable(record.Player)
+			writeStringTable(self.Player)
 
 			f:WriteByte(0x6)
-			writeStringTable(record.Entity)
+			writeStringTable(self.Entity)
 
 			f:WriteByte(0x7)
-			f:WriteByte(#record.Data)
-			for k,v in ipairs(record.Data) do
+			f:WriteByte(#self.Data)
+			for k,v in ipairs(self.Data) do
 				f:WriteFloat(v)
 			end
 
 			f:WriteByte(0x8)
-			writeStringTable(record.String)
+			writeStringTable(self.String)
 
 			f:WriteByte(0xA)
 		end
@@ -679,10 +679,12 @@ do --JAAS Log Module
 			end
 		end
 
-		function jaas_log:RecordObject(starting_data) -- Make the Object globally accessible
+		function jaas_log:RecordObject(Timestamp, label, logType, starting_data) -- Make the Object globally accessible
 			starting_data = starting_data or {}
 
-			starting_data.Timestamp = starting_data.Timestamp or 0
+			starting_data.Timestamp = Timestamp or 0
+			starting_data.Label = label or ""
+			starting_data.Type = logType or 0
 			starting_data.Rank = starting_data.Rank or {}
 			starting_data.Player = starting_data.Player or {}
 			starting_data.Entity = starting_data.Entity or {}
