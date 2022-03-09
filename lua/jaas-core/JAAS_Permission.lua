@@ -92,18 +92,18 @@ do -- Permission Object Code
 		function PermissionObject:AccessCheck(code)
 			return AccessModule:Check("Permission", self:GetAccessCode(), code)
 		end
+	end
 
-		function PermissionObject:GetPlayers() -- Get All Players that have this permission
-			local playersWithPermission = {}
+	function PermissionObject:GetPlayers() -- Get All Players that have this permission
+		local playersWithPermission = {}
 
-			for k,v in ipairs(player.GetAll()) do
-				if self:Check(v:GetCode()) then
-					playersWithPermission[1 + #playersWithPermission] = v
-				end
+		for k,v in ipairs(player.GetAll()) do
+			if self:Check(v:GetCode()) then
+				playersWithPermission[1 + #playersWithPermission] = v
 			end
-
-			return playersWithPermission
 		end
+
+		return playersWithPermission
 	end
 
 	function PermissionObject:NetWrite()
@@ -249,8 +249,12 @@ local Permission_Net_Update = MODULE:RegisterNetworkType("Update")
 local Update_Code = Permission_Net_Update("Code")
 local Update_AccessGroup = Permission_Net_Update("AccessGroup")
 
-local CanModifyPermission = MODULE:RegisterPermission("Can Modify Permission")
+local CanModifyPermission = MODULE:RegisterPermission("Can Modify Permission Code")
 local CanModifyPermissionValue = MODULE:RegisterPermission("Can Modify Permission Access Group")
+
+local CanReceiveMinorPermissionChatLogs = MODULE:RegisterPermission("Receive Minor Permission Chat Logs")
+local CanReceiveMajorPermissionChatLogs = MODULE:RegisterPermission("Receive Major Permission Chat Logs")
+local CanReceivePermissionUpdatesOnConsole = MODULE:RegisterPermission("Receive Permission Updates in Console")
 
 do -- Permission Net Code
 	/*	Net Code Checklist
@@ -318,32 +322,71 @@ do -- Permission Net Code
 		end
 
 		do -- Modify Code (Receive) | Modify Access Group (Receive)
+			local PermissionAdded_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "added", "to", 1, "by", 2}
+			local PermissionRemoved_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "removed", "from", 1, "by", 2}
+			local PermissionGlobalAccess_Log = LOG:RegisterLog {"Permission", 3, "was given", 6, "global access", "by", 2}
+			local PermissionAttempt_Log = LOG:RegisterLog {2, 6, "attempted", "to modify Permission", 3}
+
+			local AccessGroupSet_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "added", "to Access Group", 3, "by", 2}
+			local AccessGroupRemove_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "removed", "from Access Group", 3, "by", 2}
+
 			J_NET:Receive(Client_Modify, function (len, ply)
 				local msg = ModificationMessage():NetRead()
 
 				if msg:IsModifyCode() then
+					local permission_object = msg:GetPermissionObject()
 					if CanModifyPermission:Check(ply:GetCode()) then
-						if CanModifyPermission:AccessCheck(ply:GetCode()) then
-							local permission_object = msg:GetPermissionObject()
-							local rank_object = msg:GetRankObject()
-
+						local rank_object = msg:GetRankObject()
+						if permission_object:AccessCheck(ply:GetCode()) then
 							if permission_object:XorCode(rank_object:GetCode()) then
+								if permission_object:GetCode() == 0 then
+									LOG:ChatText(CanReceiveMajorPermissionChatLogs:GetPlayers(), "%P was given global access by %p", permission_object:GetName(), ply:Nick())
+									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%P was given global access by %p", permission_object:GetName(), ply:Nick())
+									PermissionGlobalAccess_Log{Entity = {permission_object:GetName()}, Player = {ply:Nick()}}
+								else
+									if permission_object:Check(rank_object:GetCode()) then
+										LOG:ChatText(CanReceiveMajorPermissionChatLogs:GetPlayers(), "%p added %P to %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
+										LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p added %P to %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
+										PermissionAdded_Log{Entity = {permission_object:GetName()}, Player = {ply:Nick()}, Rank = {rank_object:GetName()}}
+									else
+										LOG:ChatText(CanReceiveMajorPermissionChatLogs:GetPlayers(), "%p removed %P from %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
+										LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p removed %P from %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
+										PermissionRemoved_Log{Entity = {permission_object:GetName()}, Player = {ply:Nick()}, Rank = {rank_object:GetName()}}
+									end
+								end
 							else
+								LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p failed to add %P to %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
 							end
 						else
+							LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p attempted to add %P to %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
 						end
 					else
+						PermissionAttempt_Log{Entity = {permission_object:GetName()}, Player = {ply:Nick()}}
 					end
 				elseif msg:IsModifyValue() then
 					if CanModifyPermissionValue:Check(ply:GetCode()) then
-						if CanModifyPermissionValue:AccessCheck(ply:GetCode()) then
-							local permission_object = msg:GetPermissionObject()
-							local access_group = msg:GetAccessGroup()
-
-							if permission_object:SetAccessCode(access_group:GetValue()) then
+						local permission_object = msg:GetPermissionObject()
+						local access_group = msg:GetAccessGroup()
+						if permission_object:AccessCheck(ply:GetCode()) then
+							if permission_object:GetAccessCode() == access_group:GetValue() then
+								if permission_object:SetAccessCode(0) then -- Remove
+									LOG:ChatText(CanReceiveMinorPermissionChatLogs:GetPlayers(), "%p removed %P from %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
+									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p removed %P from %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
+									AccessGroupRemove_Log{Entity = {permission_object:GetName(), access_group:GetName()}, Player = {ply:Nick()}}
+								else
+									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p failed to remove %P from %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
+								end
 							else
+								if permission_object:SetAccessCode(access_group:GetValue()) then -- Set
+									LOG:ChatText(CanReceiveMinorPermissionChatLogs:GetPlayers(), "%p added %P to %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
+									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p added %P to %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
+									AccessGroupSet_Log{Entity = {permission_object:GetName(), access_group:GetName()}, Player = {ply:Nick()}}
+								else
+									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p failed to add %P to %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
+								end
 							end
 						else
+							LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p attempted to add %P to %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
 						end
 					else
 					end
