@@ -253,4 +253,14 @@ do -- Hook Function
 	}, {__newindex = ReadOnlyFunc, __metatable = "jaas_globalvar"})
 end
 
+include.Shared {
+	"jaas-core/JAAS_Base.lua",
+	"jaas-core/JAAS_Rank.lua",
+	"jaas-core/JAAS_Permission.lua",
+	"jaas-core/JAAS_Command.lua",
+	"jaas-core/JAAS_AccessGroup.lua",
+	"jaas-core/JAAS_GUI.lua",
+	"jaas-core/JAAS_Player.lua"
+}
 
+JAAS:ExecuteModulesPost()
