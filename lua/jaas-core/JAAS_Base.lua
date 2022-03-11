@@ -501,7 +501,7 @@ do --JAAS Log Module
 
 		function jaas_log:ConsoleText(ply, str, ...)
 			jaas_net:Start(CLIENTCONSOLETEXT)
-			net.WriteTable(MapColourToJAASObjects(self.label + str, ...))
+			net.WriteTable(MapColourToJAASObjects("JAAS::" + self.label + " " + str, ...))
 			if ply then
 				net.Send(ply)
 			else
@@ -608,23 +608,33 @@ do --JAAS Log Module
 			f:WriteString(self.Label)
 			f:WriteUShort(self.Type)
 
-			f:WriteByte(0x4)
-			writeStringTable(self.Rank)
-
-			f:WriteByte(0x5)
-			writeStringTable(self.Player)
-
-			f:WriteByte(0x6)
-			writeStringTable(self.Entity)
-
-			f:WriteByte(0x7)
-			f:WriteByte(#self.Data)
-			for k,v in ipairs(self.Data) do
-				f:WriteFloat(v)
+			if #self.Rank > 0 then
+				f:WriteByte(0x4)
+				writeStringTable(self.Rank)
 			end
 
-			f:WriteByte(0x8)
-			writeStringTable(self.String)
+			if #self.Player > 0 then
+			f:WriteByte(0x5)
+			writeStringTable(self.Player)
+			end
+
+			if #self.Entity > 0 then
+				f:WriteByte(0x6)
+				writeStringTable(self.Entity)
+			end
+
+			if #self.Data > 0 then
+				f:WriteByte(0x7)
+				f:WriteByte(#self.Data)
+				for k,v in ipairs(self.Data) do
+					f:WriteFloat(v)
+				end
+			end
+
+			if #self.String > 0 then
+				f:WriteByte(0x8)
+				writeStringTable(self.String)
+			end
 
 			f:WriteByte(0xA)
 		end

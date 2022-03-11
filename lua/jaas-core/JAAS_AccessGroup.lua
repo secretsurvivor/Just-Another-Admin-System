@@ -133,6 +133,10 @@ do -- Access Group Object Code
 		return self:SetCode(bit.bxor(self:GetCode(), code))
 	end
 
+	function AccessGroupObject:IsGlobalAccess()
+		return self:GetCode() == 0
+	end
+
 	function AccessGroupObject:GetValue()
 		return access_group_manager:Get(self.name, self.type)[2]
 	end
@@ -253,7 +257,7 @@ if SERVER then
 
 		if found_groups then
 			for k,v in ipairs(found_groups) do
-				if bit.band(v.Code, code) > 0 then
+				if v.Code == 0 or bit.band(v.Code, code) > 0 then
 					return true
 				end
 			end
@@ -449,57 +453,93 @@ do -- Access Group Net Code
 		local CanModifyAccessGroupValue = PermissionModule:RegisterPermission("Can Modify Access Group Value")
 		local CanRemoveAccessGroup = PermissionModule:RegisterPermission("Can Remove Access Group")
 
+		local ReceiveAccessGroupMinorChatLogs = PermissionModule:RegisterPermission("Receive Minor Access Group Chat Logs")
+		local ReceiveAccessGroupMajorChatLogs = PermissionModule:RegisterPermission("Receive Major Access Group Chat Logs")
+		local ReceiveAccessGroupUpdatesByConsole = PermissionModule:RegisterPermission("Receive Access Group Updates in Console")
+
+		local GroupAdd_Log = LOG:RegisterLog {"Access Group", 3, "was", 6, "added", "by", 2} -- Access Group Admin Group was added by secret_survivor
+		local GroupRemove_Log = LOG:RegisterLog {"Access Group", 3, "was", 6, "removed", "by", 2} --Access Group Admin Group was removed by secret_survivor
+		local GroupAddRank_Log = LOG:RegisterLog {1, "was", 6, "added", "to Access Group", 3, "by", 2} -- Admin was added to Access Group Admin Group by secret_survivor
+		local GroupRemoveRank_Log = LOG:RegisterLog {1, "was", 6, "removed", "from Access Group", 3, "by", 2} -- Admin was removed from Access Group Admin Group by secret_survivor
+		local GroupDefaultAccess_Log = LOG:RegisterLog {"Access Group", 3, "was given", 6, "global access", "by", 2} -- Access Group Admin Group was given global access by secret_survivor
+		local GroupSetValue_Log = LOG:RegisterLog {"Access Group", 3, "had its value", 6, "set", "to", 4, "by", 2} -- Access Group Admin Group had its value set to 2 by secret_survivor
+
 		do -- Rank Addition (Receive) | Rank Removal (Receive) | Modify Code (Receive) | Modify Access Group Value (Receive)
 			J_NET:Receive(Client_Modify, function (len, ply)
 				local msg = ModificationMessage():NetRead()
 
 				if msg:IsAdd() then
 					if CanAddAccessGroup:Check(ply:GetCode()) then
-						if CanAddAccessGroup:AccessCheck(ply:GetCode()) then
-							if MODULE:AddAccessGroup(msg:GetAddParameters()) then
-							else
-							end
+						local name = msg:GetAddParameters()
+						local access_group = MODULE:AddAccessGroup(msg:GetAddParameters())
+						if access_group != false then
+							LOG:ChatText(ReceiveAccessGroupMajorChatLogs:GetPlayers(), "%p created %A", ply:Nick(), access_group:GetName())
+							LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p created %A", ply:Nick(), access_group:GetName())
+							GroupAdd_Log{Entity = {access_group:GetName()}, Player = {ply:SteamID64()}}
 						else
+							LOG:ChatText(ReceiveAccessGroupMinorChatLogs:GetPlayers(), "%p failed to create %A", ply:Nick(), name)
+							LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p failed to create %A", ply:Nick(), name)
 						end
 					else
+						LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p attempted to create new Access Group", ply:Nick())
 					end
 				elseif msg:IsModifyCode() then
+					local access_group = msg:GetAccessGroup()
 					if CanModifyAccessGroupCode:Check(ply:GetCode()) then
-						if CanModifyAccessGroupCode:AccessCheck(ply:GetCode()) then
-							local access_group = msg:GetAccessGroup()
-							local rank_object = msg:GetRankObject()
+						local rank_object = msg:GetRankObject()
 
-							if access_group:XorCode(rank_object:GetCode()) then
+						if access_group:XorCode(rank_object:GetCode()) then
+							if access_group:IsGlobalAccess() then
+								LOG:ChatText(ReceiveAccessGroupMajorChatLogs:GetPlayers(), "%p made %A have Global Access", ply:Nick(), access_group:GetName())
+								LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p made %A have Global Access", ply:Nick(), access_group:GetName())
+								GroupDefaultAccess_Log{Entity = {access_group:GetName()}, Player = {ply:SteamID64()}}
 							else
+								if bit.band(access_group:GetCode(), rank_object:GetCode()) > 0 then
+									LOG:ChatText(ReceiveAccessGroupMajorChatLogs:GetPlayers(), "%p added %R to %A", ply:Nick(), rank_object:GetName(), access_group:GetName())
+									LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p added %R to %A", ply:Nick(), rank_object:GetName(), access_group:GetName())
+									GroupAddRank_Log{Rank = {rank_object:GetName()}, Entity = {access_group:GetName()}, Player = {ply:SteamID64()}}
+								else
+									LOG:ChatText(ReceiveAccessGroupMajorChatLogs:GetPlayers(), "%p removed %R from %A", ply:Nick(), rank_object:GetName(), access_group:GetName())
+									LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p removed %R from %A", ply:Nick(), rank_object:GetName(), access_group:GetName())
+									GroupRemoveRank_Log{Rank = {rank_object:GetName()}, Entity = {access_group:GetName()}, Player = {ply:SteamID64()}}
+								end
 							end
 						else
+							LOG:ChatText(ReceiveAccessGroupMinorChatLogs:GetPlayers(), "%p failed to modify %A with %R's code", ply:Nick(), access_group:GetName(), rank_object:GetName())
+							LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p failed to modify %A with %R", ply:Nick(), access_group:GetName(), rank_object:GetName())
 						end
 					else
+						LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p attempted to modify %A's code", ply:Nick(), access_group:GetName())
 					end
 				elseif msg:IsModifyValue() then
+					local access_group = msg:GetAccessGroup()
 					if CanModifyAccessGroupValue:Check(ply:GetCode()) then
-						if CanModifyAccessGroupValue:AccessCheck(ply:GetCode()) then
-							local access_group = msg:GetAccessGroup()
-							local value = msg:GetValue()
+						local value = msg:GetValue()
 
-							if access_group:SetValue(value) then
-							else
-							end
+						if access_group:SetValue(value) then
+							LOG:ChatText(ReceiveAccessGroupMinorChatLogs:GetPlayers(), "%p set %A's value to %n", ply:Nick(), access_group:GetName(), value)
+							LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p set %A's value to %n", ply:Nick(), access_group:GetName(), value)
+							GroupSetValue_Log{Entity = {name}, Player = {ply:SteamID64()}, Data = {value}}
 						else
+							LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p failed to set %A's value to %n", ply:Nick(), access_group:GetName(), value)
 						end
 					else
+						LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p attempted to modify %A's value", ply:Nick(), access_group:GetName())
 					end
 				elseif msg:IsRemove() then
+					local access_group = msg:GetAccessGroup()
+					local name = access_group:GetName()
 					if CanRemoveAccessGroup:Check(ply:GetCode()) then
-						if CanRemoveAccessGroup:AccessCheck(ply:GetCode()) then
-							local access_group = msg:GetAccessGroup()
-
-							if access_group:Remove() then
-							else
-							end
+						if access_group:Remove() then
+							LOG:ChatText(ReceiveAccessGroupMajorChatLogs:GetPlayers(), "%p removed %A", ply:Nick(), name)
+							LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p removed %A", ply:Nick(), name)
+							GroupRemove_Log{Entity = {name}, Player = {ply:SteamID64()}}
 						else
+							LOG:ChatText(ReceiveAccessGroupMinorChatLogs:GetPlayers(), "%p failed to remove %A", ply:Nick(), name)
+							LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p failed to remove %A", ply:Nick(), name)
 						end
 					else
+						LOG:ConsoleText(ReceiveAccessGroupUpdatesByConsole:GetPlayers(), "%p attempted to remove %A", ply:Nick(), name)
 					end
 				end
 			end)

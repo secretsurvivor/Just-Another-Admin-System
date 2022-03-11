@@ -77,6 +77,14 @@ do -- Command Object Code
 		return false
 	end
 
+	function CommandObject:XorCode(code)
+		return self:SetCode(bit.bxor(self:GetCode(), code))
+	end
+
+	function CommandObject:IsGlobalAccess()
+		return self:GetCode() == 0
+	end
+
 	function CommandObject:GetAccessCode()
 		return command_table[self.category][self.name][2]
 	end
@@ -854,32 +862,78 @@ do -- Net Code
 			local CanModifyCode = PermissionModule:RegisterPermission("Can Modify Permission Code")
 			local CanModifyAccessGroup = PermissionModule:RegisterPermission("Can Modify Permission Access Group")
 
+			local ReceiveCommandMinorChatLogs = PermissionModule:RegisterPermission("Receive Minor Command Chat Logs")
+			local ReceiveCommandMajorChatLogs = PermissionModule:RegisterPermission("Receive Major Command Chat Logs")
+			local ReceiveCommandUpdatesByConsole = PermissionModule:RegisterPermission("Receive Command Updates in Console")
+
+			local CommandAddRank_Log = LOG:RegisterLog {"Command", 3, "was", 6, "added", "to", 1, "by", 2} -- Command Kill was added to VIP by secret_survivor
+			local CommandRemoveRank_Log = LOG:RegisterLog {"Command", 3, "was", 6, "removed", "from", 1, "by", 2} -- Command Kill was removed from VIP by secret_survivor
+			local CommandGlobalAccess_Log = LOG:RegisterLog {"Command", 3, "was given", 6, "global access", "by", 2}
+			local CommandAttemptToModify_Log = LOG:RegisterLog {2, 6, "attempted", "to modify Command", 3}
+			local CommandAccessValueSet_Log = LOG:RegisterLog {"Command", 3, "was", 6, "added", "to Access Group", 3, "by", 2}
+			local CommandAccessValueReset_Log = LOG:RegisterLog {"Command", 3, "was", 6, "reset", "by", 2}
+
 			J_NET:Receive(Client_Modify, function (len, ply)
 				local msg = ModificationMessage():NetRead()
 
 				if msg:IsModifyCode() then
+					local command_object = msg:GetCommandObject()
 					if CanModifyCode:Check(ply:GetCode()) then
-						local command_object = msg:GetCommandObject()
+						local rank_object = msg:GetRankObject()
 						if command_object:AccessCheck(ply:GetCode()) then
-							local rank_object = msg:GetRankObject()
-							if command_object:SetCode(rank_object:GetCode()) then
+							if command_object:XorCode(rank_object:GetCode()) then
+								if command_object:IsGlobalAccess() then
+									LOG:ChatText(ReceiveCommandMajorChatLogs:GetPlayers(), "%p made %C have Global Access", ply:Nick(), command_object:GetName())
+									LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p made %C have Global Access", ply:Nick(), command_object:GetName())
+									CommandGlobalAccess_Log{Entity = {command_object:GetName()}, Player = {ply:SteamID64()}}
+								else
+									if command_object:Check(rank_object:GetCode()) then
+										LOG:ChatText(ReceiveCommandMajorChatLogs:GetPlayers(), "%p added %C to %R", ply:Nick(), command_object:GetName(), rank_object:GetName())
+										LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p added %C to %R", ply:Nick(), command_object:GetName(), rank_object:GetName())
+										CommandAddRank_Log{Entity = {command_object:GetName()}, Rank = {rank_object:GetName()}, Player = {ply:SteamID64()}}
+									else
+										LOG:ChatText(ReceiveCommandMajorChatLogs:GetPlayers(), "%p removed %C from %R", ply:Nick(), command_object:GetName(), rank_object:GetName())
+										LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p removed %C from %R", ply:Nick(), command_object:GetName(), rank_object:GetName())
+										CommandRemoveRank_Log{Entity = {command_object:GetName()}, Rank = {rank_object:GetName()}, Player = {ply:SteamID64()}}
+									end
+								end
 							else
+								LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p failed to modify %C's code with %R", ply:Nick(), command_object:GetName(), rank_object:GetName())
 							end
 						else
+							LOG:ChatText(ReceiveCommandMinorChatLogs:GetPlayers(), "%p attempted to modify %C's code with %R", ply:Nick(), command_object:GetName(), rank_object:GetName())
+							LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p attempted to modify %C's code with %R", ply:Nick(), command_object:GetName(), rank_object:GetName())
 						end
 					else
+						CommandAttemptToModify_Log{Entity = {command_object:GetName()}, Player = {ply:SteamID64()}}
 					end
 				elseif msg:IsModifyValue() then
+					local command_object = msg:GetCommandObject()
 					if CanModifyAccessGroup:Check(ply:GetCode()) then
-						local command_object = msg:GetCommandObject()
 						if command_object:AccessCheck(ply:GetCode()) then
 							local access_group_object = msg:GetAccessGroup()
-							if command_object:SetAccessCode(access_group_object:GetValue()) then
+							if command_object:GetAccessCode() == access_group_object:GetValue() then
+								if command_object:SetAccessCode(0) then
+									LOG:ChatText(ReceiveCommandMinorChatLogs:GetPlayers(), "%p reset %C's Access Code", ply:Nick(), command_object:GetName())
+									LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p reset %C's Access Code", ply:Nick(), command_object:GetName())
+									CommandAccessValueReset_Log{Entity = {command_object:GetName()}, Player = {ply:SteamID64()}}
+								else
+									LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p failed to reset %C's Access Code", ply:Nick(), command_object:GetName())
+								end
 							else
+								if command_object:SetAccessCode(access_group_object:GetValue()) then
+									LOG:ChatText(ReceiveCommandMinorChatLogs:GetPlayers(), "%p added %C to %A", ply:Nick(), command_object:GetName(), access_group_object:GetName())
+									LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p added %C to %A", ply:Nick(), command_object:GetName(), access_group_object:GetName())
+									CommandAccessValueSet_Log{Entity = {command_object:GetName()}, access_group_object:GetName(), Player = {ply:SteamID64()}}
+								else
+									LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p failed to add %C to %A", ply:Nick(), command_object:GetName(), access_group_object:GetName())
+								end
 							end
 						else
+							LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p attempted to modify %C's Access Value with %A", ply:Nick(), command_object:GetName(), access_group_object:GetName())
 						end
 					else
+						LOG:ConsoleText(ReceiveCommandUpdatesByConsole:GetPlayers(), "%p attempted to modify %C's Access Value", ply:Nick(), command_object:GetName())
 					end
 				else
 				end

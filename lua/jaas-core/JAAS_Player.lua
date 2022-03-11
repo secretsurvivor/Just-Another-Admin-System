@@ -50,6 +50,10 @@ function PlayerMetaTable:GetLastConnected()
 	return player_table[self:SteamID64()][2]
 end
 
+function PlayerMetaTable:IsDefaultUser()
+	return self:GetCode() == 0
+end
+
 function MODULE.Shared:Post()
 	local RankModule = JAAS:GetModule("Rank")
 
@@ -235,20 +239,71 @@ do -- Net Code
 
 				local CanModifyCode = PermissionModule:RegisterPermission("Can Modify Player Code")
 
+				local CanReceiveMinorPlayerChatLogs = PermissionModule:RegisterPermission("Receive Minor Player Chat Logs")
+				local CanReceiveMajorPlayerChatLogs = PermissionModule:RegisterPermission("Receive Major Player Chat Logs")
+				local CanReceivePlayerConsoleLogs = PermissionModule:RegisterPermission("Receive Player Updates in Console")
+
+				local PlayerSetRank_Log = LOG:RegisterLog {2, "was", 6, "given", 1 "by", 2} -- secret_survivor was given Admin by SomeOneElse
+				local PlayerRemoveRank_Log = LOG:RegisterLog {2, "had", 1, 6, "took", "by", 2} -- secret_survivor had Admin taken away by SomeOneElse
+				local PlayerSetRankSelf_Log = LOG:RegisterLog {2, 6, "given", "themself", 1} -- secret_survivor given themself Admin
+				local PlayerRemoveRankSelf_Log = LOG:RegisterLog {2, "had", 6, "taken", 1, "away from themself"} -- secret_survivor had taken Admin away from themself
+				local PlayerMadeDefaultUser_Log = LOG:RegisterLog {2, "was made a", 6, "default user"} -- secret_survivor was made a default user
+
 				J_NET:Receive(Update_Modify, function (len, ply)
 					local msg = ModificationMessage():NetRead()
 
 					if CanModifyCode:Check(ply:GetCode()) then
 						local target = msg:GetPlayer()
-						if ply:CanTarget(target) then
+						if ply:SteamID64() == target:SteamID64() or ply:CanTarget(target) then
 							local rank_object = msg:GetRank()
 							if rank_object:AccessCheck(ply:GetCode()) then
-								if MODULE:XorPlayerCode(target, rank_object:GetCode()) then
+								if MODULE:XorPlayerCode(target:GetCode(), rank_object:GetCode()) then
+									if target:IsDefaultUser() then
+										LOG:ChatText(CanReceiveMajorPlayerChatLogs:GetPlayers(), "%p was made a %R", target:Nick(), "Default User")
+										LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p was made a %R", target:Nick(), "Default User")
+										PlayerMadeDefaultUser_Log{Player = {target:SteamID64()}}
+									else
+										if bit.band(target:GetCode(), rank_object:GetCode()) > 0 then
+											if ply:SteamID64() == target:SteamID64() then
+												LOG:ChatText(CanReceiveMajorPlayerChatLogs:GetPlayers(), "%p gave themself %R", ply:Nick(), rank_object:GetName())
+												LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p gave themself %R", ply:Nick(), rank_object:GetName())
+												PlayerSetRankSelf_Log{Player = {ply:SteamID64()}, Rank = {rank_object:GetName()}}
+											else
+												LOG:ChatTex(CanReceiveMajorPlayerChatLogs:GetPlayers(), "%p made %p a member of %R", ply:Nick(), target:Nick(), rank_object:GetName())
+												LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p made %p a member of %R", ply:Nick(), target:Nick(), rank_object:GetName())
+												PlayerSetRank_Log{Player = {target:SteamID64(), ply:SteamID64()}, Rank = {rank_object:GetName()}}
+											end
+										else
+											if ply:SteamID64() == target:SteamID64() then
+												LOG:ChatText(CanReceiveMajorPlayerChatLogs:GetPlayers(), "%p removed themself from %R", ply:Nick(), rank_object:GetName())
+												LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p removed themself from %R", ply:Nick(), rank_object:GetName())
+												PlayerRemoveRankSelf_Log{Player = {ply:SteamID64()}, Rank = {rank_object:GetName()}}
+											else
+												LOG:ChatText(CanReceiveMajorPlayerChatLogs:GetPlayers(), "%p removed %p from %R", ply:Nick(), target:Nick(), rank_object:GetName())
+												LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p removed %p from %R", ply:Nick(), target:Nick(), rank_object:GetName())
+												PlayerRemoveRank_Log{Player = {target:SteamID64(), ply:SteamID64()}, Rank = {rank_object:GetName()}}
+											end
+										end
+									end
 								else
+									if ply:SteamID64() == target:SteamID64() then
+										LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p failed to modify their own Rank", ply:Nick(), target:Nick())
+									else
+										LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p failed to modify %p's Rank", ply:Nick(), target:Nick())
+									end
 								end
 							else
+								if ply:SteamID64() == target:SteamID64() then
+									LOG:ChatText(CanReceiveMinorPlayerChatLogs:GetPlayers(), "%p attempted to give themself %R", ply:Nick(), rank_object:GetName())
+									LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p attempted to give themself %R", ply:Nick(), rank_object:GetName())
+								else
+									LOG:ChatText(CanReceiveMinorPlayerChatLogs:GetPlayers(), "%p attempted to give %p %R", ply:Nick(), target:Nick(), rank_object:GetName())
+									LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p attempted to give %p %R", ply:Nick(), target:Nick(), rank_object:GetName())
+								end
 							end
 						else
+							LOG:ChatText(CanReceiveMinorPlayerChatLogs:GetPlayers(), "%p attempted to modify %p's Rank", ply:Nick(), target:Nick())
+							LOG:ConsoleText(CanReceivePlayerConsoleLogs:GetPlayers(), "%p attempted to modify %p's Rank", ply:Nick(), target:Nick())
 						end
 					else
 					end

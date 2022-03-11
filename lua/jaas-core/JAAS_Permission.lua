@@ -72,6 +72,10 @@ do -- Permission Object Code
 		return permission_table[self:GetName()][2]
 	end
 
+	function permission_object:IsGlobalAccess()
+		return self:GetCode() == 0
+	end
+
 	function PermissionObject:SetAccessCode(access_group)
 		if PermissionTable:UpdateAccessGroup(self:GetName(), access_group) then
 			local old_value = self:GetAccessCode()
@@ -322,13 +326,13 @@ do -- Permission Net Code
 		end
 
 		do -- Modify Code (Receive) | Modify Access Group (Receive)
-			local PermissionAdded_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "added", "to", 1, "by", 2}
-			local PermissionRemoved_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "removed", "from", 1, "by", 2}
-			local PermissionGlobalAccess_Log = LOG:RegisterLog {"Permission", 3, "was given", 6, "global access", "by", 2}
-			local PermissionAttempt_Log = LOG:RegisterLog {2, 6, "attempted", "to modify Permission", 3}
+			local PermissionAdded_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "added", "to", 1, "by", 2} -- Permission Noclip was added to Admin by secret_survivor
+			local PermissionRemoved_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "removed", "from", 1, "by", 2} -- Permission Noclip was removed from Admin by secret_survivor
+			local PermissionGlobalAccess_Log = LOG:RegisterLog {"Permission", 3, "was given", 6, "global access", "by", 2} -- Permission Noclip was given global access by secret_survivor
+			local PermissionAttempt_Log = LOG:RegisterLog {2, 6, "attempted", "to modify Permission", 3} -- secret_survivor attempted to modify Permission Noclip
 
-			local AccessGroupSet_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "added", "to Access Group", 3, "by", 2}
-			local AccessGroupRemove_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "removed", "from Access Group", 3, "by", 2}
+			local AccessGroupSet_Log = LOG:RegisterLog {"Permission", 3, "was", 6, "added", "to Access Group", 3, "by", 2} -- Permission Noclip was added to Access Group Admin Group by secret_survivor
+			local AccessGroupRemove_Log = LOG:RegisterLog {"Permission", 3, "had its Access Value", 6, "reset", "by", 2} -- Permission Noclip has its Access Value reset by secret_survivor
 
 			J_NET:Receive(Client_Modify, function (len, ply)
 				local msg = ModificationMessage():NetRead()
@@ -339,29 +343,29 @@ do -- Permission Net Code
 						local rank_object = msg:GetRankObject()
 						if permission_object:AccessCheck(ply:GetCode()) then
 							if permission_object:XorCode(rank_object:GetCode()) then
-								if permission_object:GetCode() == 0 then
+								if permission_object:IsGlobalAccess() then
 									LOG:ChatText(CanReceiveMajorPermissionChatLogs:GetPlayers(), "%P was given global access by %p", permission_object:GetName(), ply:Nick())
 									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%P was given global access by %p", permission_object:GetName(), ply:Nick())
-									PermissionGlobalAccess_Log{Entity = {permission_object:GetName()}, Player = {ply:Nick()}}
+									PermissionGlobalAccess_Log{Entity = {permission_object:GetName()}, Player = {ply:SteamID64()}}
 								else
 									if permission_object:Check(rank_object:GetCode()) then
 										LOG:ChatText(CanReceiveMajorPermissionChatLogs:GetPlayers(), "%p added %P to %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
 										LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p added %P to %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
-										PermissionAdded_Log{Entity = {permission_object:GetName()}, Player = {ply:Nick()}, Rank = {rank_object:GetName()}}
+										PermissionAdded_Log{Entity = {permission_object:GetName()}, Player = {ply:SteamID64()}, Rank = {rank_object:GetName()}}
 									else
 										LOG:ChatText(CanReceiveMajorPermissionChatLogs:GetPlayers(), "%p removed %P from %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
 										LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p removed %P from %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
-										PermissionRemoved_Log{Entity = {permission_object:GetName()}, Player = {ply:Nick()}, Rank = {rank_object:GetName()}}
+										PermissionRemoved_Log{Entity = {permission_object:GetName()}, Player = {ply:SteamID64()}, Rank = {rank_object:GetName()}}
 									end
 								end
 							else
-								LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p failed to add %P to %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
+								LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p failed to modify %P's code with %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
 							end
 						else
-							LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p attempted to add %P to %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
+							LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p failed to modify %P's code with %R", ply:Nick(), permission_object:GetName(), rank_object:GetName())
 						end
 					else
-						PermissionAttempt_Log{Entity = {permission_object:GetName()}, Player = {ply:Nick()}}
+						PermissionAttempt_Log{Entity = {permission_object:GetName()}, Player = {ply:SteamID64()}}
 					end
 				elseif msg:IsModifyValue() then
 					if CanModifyPermissionValue:Check(ply:GetCode()) then
@@ -369,24 +373,24 @@ do -- Permission Net Code
 						local access_group = msg:GetAccessGroup()
 						if permission_object:AccessCheck(ply:GetCode()) then
 							if permission_object:GetAccessCode() == access_group:GetValue() then
-								if permission_object:SetAccessCode(0) then -- Remove
-									LOG:ChatText(CanReceiveMinorPermissionChatLogs:GetPlayers(), "%p removed %P from %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
-									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p removed %P from %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
-									AccessGroupRemove_Log{Entity = {permission_object:GetName(), access_group:GetName()}, Player = {ply:Nick()}}
+								if permission_object:SetAccessCode(0) then
+									LOG:ChatText(CanReceiveMinorPermissionChatLogs:GetPlayers(), "%p reset %P's Access Code", ply:Nick(), permission_object:GetName())
+									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p reset %P's Access Code", ply:Nick(), permission_object:GetName())
+									AccessGroupRemove_Log{Entity = {permission_object:GetName()}, Player = {ply:SteamID64()}}
 								else
-									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p failed to remove %P from %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
+									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p failed to reset %P's Access Code", ply:Nick(), permission_object:GetName())
 								end
 							else
-								if permission_object:SetAccessCode(access_group:GetValue()) then -- Set
+								if permission_object:SetAccessCode(access_group:GetValue()) then
 									LOG:ChatText(CanReceiveMinorPermissionChatLogs:GetPlayers(), "%p added %P to %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
 									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p added %P to %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
-									AccessGroupSet_Log{Entity = {permission_object:GetName(), access_group:GetName()}, Player = {ply:Nick()}}
+									AccessGroupSet_Log{Entity = {permission_object:GetName(), access_group:GetName()}, Player = {ply:SteamID64()}}
 								else
 									LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p failed to add %P to %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
 								end
 							end
 						else
-							LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p attempted to add %P to %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
+							LOG:ConsoleText(CanReceivePermissionUpdatesOnConsole:GetPlayers(), "%p attempted to set %P's Access Group to %A", ply:Nick(), permission_object:GetName(), access_group:GetName())
 						end
 					else
 					end

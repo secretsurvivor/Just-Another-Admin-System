@@ -256,7 +256,7 @@ function MODULE:RemoveRank(obj)
 
 		return true
 	end
-	return true
+	return false
 end
 
 function MODULE:RemoveRanks(tableOfRanks)
@@ -626,14 +626,32 @@ do -- Net Code
 		local CanModifyRankInvisibility = PermissionModule:RegisterPermission("Can Modify Rank's Invisibility")
 		local CanModifyRankAccessValue = PermissionModule:RegisterPermission("Can Modify Rank's Access Group")
 
+		local ReceiveMinorRankChatLogs = PermissionModule:RegisterPermission("Receive Minor Rank Chat Logs")
+		local ReceiveMajorRankChatLogs = PermissionModule:RegisterPermission("Receive Major Rank Chat Logs")
+		local ReceiveRankConsoleUpdates = PermissionModule:RegisterPermission("Receive Rank Updates in Console")
+
+		local RankAdd_Log = LOG:RegisterLog {1, "was", 6, "created", "by", 2, ":", 4, 5} -- Admin was created by secret_survivor : 2 "false"
+		local RankRemove_Log = LOG:RegisterLog {2, 6, "removed", 1} -- secret_survivor removed Admin
+		local RankSetPower_Log = LOG:RegisterLog {2, 6, "set power", "on", 1, "to", 4} -- secret_survivor set power on Admin to 6
+		local RankSetInvisibility_Log = LOG:RegisterLog {2, 6, "set invisibility", "on", 1, "to", 5} -- secret_survivor set invisibility on Admin to "false"
+		local RankSetAccessGroup_Log = LOG:RegisterLog {1, "was", 6, "added", "to Access Group", 3, "by", 2} -- Admin was added to Access Group Admin Group by secret_survivor
+		local RankResetAccessGroup_Log = LOG:RegisterLog {1, "had its Access Value", 6, "reset", "by", 2} -- Admin had its Access Value reset by secret_survivor
+
 		do -- Rank Addition (Receive) | Rank Removal (Receive) | Multi Rank Removal (Receive) | Modify Power (Receive) | Modify Invisible (Receive) | Modify Access Group (Receive)
 			J_NET:Receive(Client_Modify, function (len, ply)
 				local msg = ModificationMessage():NetRead()
 
 				if msg:IsAdd() then
 					if CanAddRank:Check(ply:GetCode()) then
-						if MODULE:AddRank(msg:GetAddParameters()) then
+						local name,power,invisible = msg:GetAddParameters()
+						local rank_object = MODULE:AddRank(name,power,invisible)
+						if rank_object != false then
+							LOG:ChatText(ReceiveMajorRankChatLogs:GetPlayers(), "%p created %R", ply:Nick(), name)
+							LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p created %R", ply:Nick(), name)
+							RankAdd_Log{Rank = {name}, Player = {ply:SteamID64()}, Data = {power}, String = {invisible and "true" or "false"}}
 						else
+							LOG:ChatText(ReceiveMinorRankChatLogs:GetPlayers(), "%p failed to create %R", ply:Nick(), name)
+							LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p failed to create %R", ply:Nick(), name)
 						end
 					else
 					end
@@ -642,9 +660,13 @@ do -- Net Code
 						local rank_object = msg:GetRankObject()
 						if rank_object:AccessCheck(ply:GetCode()) then
 							if MODULE:RemoveRank(rank_object) then
+								LOG:ChatText(ReceiveMajorRankChatLogs:GetPlayers(), "%p removed %R", ply:Nick(), rank_object:GetName())
+								LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p removed %R", ply:Nick(), rank_object:GetName())
+								RankRemove_Log{Rank = {rank_object:GetName()}, Player = {ply:SteamID64()}}
 							else
 							end
 						else
+							LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p attempted to remove %R", ply:Nick(), rank_object:GetName())
 						end
 					else
 					end
@@ -663,11 +685,23 @@ do -- Net Code
 
 						if amount == 1 then
 							if MODULE:RemoveRank(v[1]) then
+								LOG:ChatText(ReceiveMajorRankChatLogs:GetPlayers(), "%p removed %R", ply:Nick(), v[1]:GetName())
+								LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p removed %R", ply:Nick(), v[1]:GetName())
+								RankRemove_Log{Rank = {v[1]:GetName()}, Player = {ply:SteamID64()}}
 							else
+								LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p failed to remove %R", ply:Nick(), v[1]:GetName())
 							end
 						elseif amount > 1 then
-							if MODULE:RemoveRanks(v) then
-							else
+							local ranks_removed = MODULE:RemoveRanks(v)
+
+							for k,v in ipairs(ranks_removed) do
+								if v[2] then
+									LOG:ChatText(ReceiveMajorRankChatLogs:GetPlayers(), "%p removed %R", ply:Nick(), v[1])
+									LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p removed %R", ply:Nick(), v[1])
+									RankRemove_Log{Rank = {v[1]}, Player = {ply:SteamID64()}}
+								else
+									LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p failed to remove %R", ply:Nick(), v[1])
+								end
 							end
 						else
 						end
@@ -678,7 +712,11 @@ do -- Net Code
 						local rank_object = msg:GetRankObject()
 						if rank_object:AccessCheck(ply:GetCode()) then
 							if rank_object:SetPower(msg:GetPower()) then
+								LOG:ChatText(ReceiveMinorRankChatLogs:GetPlayers(), "%p set %R's power to %n", ply:Nick(), v[1], msg:GetPower())
+								LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p set %R's power to %n", ply:Nick(), v[1], msg:GetPower())
+								RankSetPower_Log{Player = {ply:SteamID64()}, Rank = {rank_object:GetName()}, Data = {msg:GetPower()}}
 							else
+								LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p failed to set %R's power to %n", ply:Nick(), v[1], msg:GetPower())
 							end
 						else
 						end
@@ -689,7 +727,11 @@ do -- Net Code
 						local rank_object = msg:GetRankObject()
 						if rank_object:AccessCheck(ply:GetCode()) then
 							if rank_object:SetInvisible(msg:GetInvisible()) then
+								LOG:ChatText(ReceiveMinorRankChatLogs:GetPlayers(), "%p set %R's invisibility to %b", ply:Nick(), rank_object:GetName(), msg:GetInvisible())
+								LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p set %R's invisibility to %b", ply:Nick(), rank_object:GetName(), msg:GetInvisible())
+								RankSetInvisibility_Log{Player = {ply:SteamID64()}, Rank = {rank_object:GetName()}, String = {msg:GetInvisible() and "true" or "false"}}
 							else
+								LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p failed to set %R's invisibility to %b", ply:Nick(), rank_object:GetName(), msg:GetInvisible())
 							end
 						else
 						end
@@ -699,10 +741,26 @@ do -- Net Code
 					if CanModifyRankAccessValue:Check(ply:GetCode()) then
 						local rank_object = msg:GetRankObject()
 						if rank_object:AccessCheck(ply:GetCode()) then
-							if rank_object:SetAccessCode(msg:GetAccessGroup()) then
+							local access_group = msg:GetAccessGroup()
+							if rank_object:GetAccessCode() == access_group:GetValue() then
+								if rank_object:SetAccessCode(0) then
+									LOG:ChatText(ReceiveMinorRankChatLogs:GetPlayers(), "%p reset %R's Access Code", ply:Nick(), rank_object:GetName())
+									LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p reset %R's Access Value", ply:Nick(), rank_object:GetName())
+									RankResetAccessGroup_Log{Rank = {rank_object:GetName()}, Player = {ply:SteamID64()}}
+								else
+									LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p failed to reset %R's Access Code", ply:Nick(), rank_object:GetName())
+								end
 							else
+								if rank_object:SetAccessCode(access_group:GetValue()) then
+									LOG:ChatText(ReceiveMinorRankChatLogs:GetPlayers(), "%p add %R to %A", ply:Nick(), rank_object:GetName(), access_group:GetName())
+									LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p add %R to %A", ply:Nick(), rank_object:GetName(), access_group:GetName())
+									RankSetAccessGroup_Log{Rank = {rank_object:GetName()}, Player = {ply:SteamID64()}, Entity = {access_group:GetName()}}
+								else
+									LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p failed to add %R to %A", ply:Nick(), rank_object:GetName(), access_group:GetName())
+								end
 							end
 						else
+							LOG:ConsoleText(ReceiveRankConsoleUpdates:GetPlayers(), "%p attempted to modify %R's Access Value", ply:Nick(), rank_object:GetName())
 						end
 					else
 					end
