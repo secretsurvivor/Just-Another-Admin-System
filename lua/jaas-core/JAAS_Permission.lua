@@ -29,14 +29,21 @@ do -- SQL Permission Table Code
 end
 
 local Permission_Hook = JAAS.Hook("Permission")
+
+local Permission_OnCodeUpdate = Permission_Hook("OnCodeUpdate")
+local Permission_OnAccessUpdate = Permission_Hook("OnAccessUpdate")
+
 local Permission_Hook_Run = JAAS.Hook.Run("Permission")
+
+local Rank_Hook_OnRemove = JAAS.Hook("Rank")("OnRemove")
+local Player_Hook_OnConnect = JAAS.Hook("Player")("OnConnect")
 
 local PermissionDataManipulation_NetType = MODULE:RegisterNetworkType("Modify")
 local Modify_PushChange = PermissionDataManipulation_NetType("ClientPush")
 
 local permission_table = permission_table or {} -- [Name] = {1 = Code, 2 = AccessGroup}
 
-function JAAS.Hook("Rank")("OnRemove")["PermissionModule::RankCodeUpdate"](isMulti, rank_name, remove_func)
+function Rank_Hook_OnRemove.PermissionModule_RankCodeUpdate(isMulti, rank_name, remove_func)
 	for k,v in pairs(permission_table) do
 		permission_table[k][1] = remove_func(permission_table[k][1])
 		PermissionTable:UpdateCode(k, permission_table[k][1])
@@ -72,7 +79,7 @@ do -- Permission Object Code
 		return permission_table[self:GetName()][2]
 	end
 
-	function permission_object:IsGlobalAccess()
+	function PermissionObject:IsGlobalAccess()
 		return self:GetCode() == 0
 	end
 
@@ -87,6 +94,9 @@ do -- Permission Object Code
 	end
 
 	function PermissionObject:Check(code)
+		if !isnumber(code) then
+			error("Wrong data type", 2)
+		end
 		return bit.band(self:GetCode(), code) > 0
 	end
 
@@ -124,6 +134,10 @@ do -- Permission Object Code
 		return self
 	end
 
+	function PermissionObject:SaveLocal()
+		permission_table[self.name] = {self.Code, self.AccessGroup}
+	end
+
 	if CLIENT then
 		function PermissionObject:SetCode(code)
 			permission_table[self:GetName()][1] = code
@@ -132,42 +146,46 @@ do -- Permission Object Code
 		function PermissionObject:SetAccessCode(access_group)
 			permission_table[self:GetName()][2] = access_group
 		end
-
-		function PermissionObject:NetRead()
-			self.name = net.ReadString()
-			permission_table[self.name] = {}
-			self:SetCode(net.ReadUInt(32))
-			self:SetAccessCode(net.ReadUInt(16))
-			return self
-		end
 	end
 end
 
-local function PermissionObject(name)
+local function CreatePermissionObject(name)
 	return Object(PermissionObject, {name = name})
 end
 
-JAAS.PermissionObject
+JAAS.PermissionObject = CreatePermissionObject
 
 function MODULE:RegisterPermission(name)
 	local found_data = PermissionTable:Select(name)
 
-	if found_data == nil then
+	if found_data then
+		found_data = found_data[1]
+		permission_table[name] = {[1] = found_data.Code, [2] = found_data.AccessGroup}
+		return CreatePermissionObject(name)
+	else
 		if PermissionTable:Insert(name) then
 			permission_table[name] = {[1] = 0, [2] = 0}
-			return PermissionObject(name)
+			return CreatePermissionObject(name)
 		else
 			error("Invalid Permission Name", 2)
 		end
-	else
-		permission_table[name] = {[1] = found_data.Code, [2] = found_data.AccessGroup}
-		return PermissionObject(name)
+	end
+end
+
+if CLIENT then
+	function MODULE:RegisterPermission(name)
+		if permission_table[name] == nil then
+			permission_table[name] = {[1] = 0, [2] = 0}
+			return CreatePermissionObject(name)
+		else
+			error("Permission already exists; use GetPermission function to get already registered functions", 2)
+		end
 	end
 end
 
 function MODULE:GetPermission(name)
 	if permission_table[name] then
-		return PermissionObject(name)
+		return CreatePermissionObject(name)
 	else
 		error("Permission does not exist", 2)
 	end
@@ -288,7 +306,7 @@ do -- Permission Net Code
 	*/
 	if SERVER then
 		do -- On Code Update (Send)
-			function Permission_Hook("OnCodeUpdate")["PermissionModule::UpdateClients"](permission, new_value, old_value)
+			function Permission_OnCodeUpdate.PermissionModule_UpdateClients(permission, new_value, old_value)
 				J_NET:Start(Update_Code)
 				permission:NetWrite()
 				net.Broadcast()
@@ -296,7 +314,7 @@ do -- Permission Net Code
 		end
 
 		do -- On Access Group Update (Send)
-			function Permission_Hook("OnAccessUpdate")["PermissionModule::UpdateClients"](permission, new_value, old_value)
+			function Permission_OnAccessUpdate.PermissionModule_UpdateClients(permission, new_value, old_value)
 				J_NET:Start(Update_AccessGroup)
 				permission:NetWrite()
 				net.Broadcast()
@@ -304,25 +322,17 @@ do -- Permission Net Code
 		end
 
 		do -- On Connect Client Sync (Send)
-			hook.Add("PlayerAuthed", J_NET:GetNetworkString(Sync_OnConnect), function (ply)
+			function Player_Hook_OnConnect.Permission_SyncClients(ply)
 				J_NET:Start(Sync_OnConnect)
 
-				local NotDefaultPermissions = {}
-				local permission_amount = 0
-				for k,v in pairs(permission_table) do
-					if v[1] > 0 then
-						permission_amount = 1 + permission_amount
-						NotDefaultPermissions[1 + #NotDefaultPermissions] = k
-					end
-				end
-
+				local permission_amount = tonumber(PermissionTable:TopValue(PermissionTable:Query("select count(*) from JAAS_Permission"), "count(*)", 0))
 				net.WriteUInt(permission_amount, 16)
-				for k,v in ipairs(NotDefaultPermissions) do
-					PermissionObject(v):NetWrite()
+				for k,v in pairs(permission_table) do
+					CreatePermissionObject(k):NetWrite()
 				end
 
 				net.Send(ply)
-			end)
+			end
 		end
 
 		do -- Modify Code (Receive) | Modify Access Group (Receive)
@@ -414,14 +424,14 @@ do -- Permission Net Code
 
 		do -- On Code Update (Receive) + Hook
 			J_NET:Receive(Update_Code, function ()
-				local updated_object = PermissionObject():NetRead()
+				local updated_object = CreatePermissionObject():NetRead()
 				Permission_Hook_Run("OnCodeUpdate")(updated_object, updated_object:GetCode())
 			end)
 		end
 
 		do -- On Access Group Update (Receive) + Hook
 			J_NET:Receive(Update_AccessGroup, function ()
-				local updated_object = PermissionObject():NetRead()
+				local updated_object = CreatePermissionObject():NetRead()
 				Permission_Hook_Run("OnAccessUpdate")(updated_object, updated_object:GetCode())
 			end)
 		end
@@ -432,10 +442,12 @@ do -- Permission Net Code
 
 				local index = 1
 				repeat
-					PermissionObject():NetRead()
+					CreatePermissionObject():NetRead():SaveLocal()
 
 					index = 1 + index
-				until (index <= permission_amount)
+				until (index >= permission_amount)
+
+				Permission_Hook_Run("PostPermissionSync")()
 			end)
 		end
 	end

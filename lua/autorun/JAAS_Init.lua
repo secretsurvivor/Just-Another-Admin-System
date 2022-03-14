@@ -175,7 +175,7 @@ do -- Hook Function
 				return function (identifier)
 					if hook_func.permission != nil and hook_func.permission[name] != nil and hook_func.permission[name][identifier] != nil then
 						local r = hook_func.permission[name][identifier]
-						hook_func.permission[name][identifier]
+						hook_func.permission[name][identifier] = nil
 						return r
 					end
 				end
@@ -185,7 +185,7 @@ do -- Hook Function
 					return function (identifier)
 						if hook_func.command != nil and hook_func.command[category] != nil and hook_func.command[category][name] != nil and hook_func.command[category][name][identifier] != nil then
 							local r = hook_func.command[category][name][identifier]
-							hook_func.command[category][name][identifier]
+							hook_func.command[category][name][identifier] = nil
 							return r
 						end
 					end
@@ -255,12 +255,12 @@ end
 
 include.Shared {
 	"jaas-core/JAAS_Base.lua",
+	"jaas-core/JAAS_Player.lua",
 	"jaas-core/JAAS_Rank.lua",
 	"jaas-core/JAAS_Permission.lua",
 	"jaas-core/JAAS_Command.lua",
 	"jaas-core/JAAS_AccessGroup.lua",
-	"jaas-core/JAAS_GUI.lua",
-	"jaas-core/JAAS_Player.lua"
+	"jaas-core/JAAS_GUI.lua"
 }
 
 JAAS:ExecuteModulesPost()

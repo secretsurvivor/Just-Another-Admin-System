@@ -7,6 +7,12 @@ function Object(obj, starting_data)
 	return setmetatable(starting_data or {}, {__index = obj})
 end
 
+local query,format,print = sql.Query,string.format,print
+
+function printf(str, ...)
+	print(format(str, ...))
+end
+
 local SQLTableObject = {tableName = ""}
 
 do -- SQL Table Object Code
@@ -16,43 +22,48 @@ do -- SQL Table Object Code
 
 	function SQLTableObject:Exists()
 		if self.exists == nil then
-			self.exists = sql.TableExists(self.tableName)
+			self.exists = tonumber(self:TopValue(self:Query("select count(*) from sqlite_master where type='table' and name='%s'", self.tableName), "count(*)", 0)) > 0
 		end
-
 		return self.exists
 	end
 
+
 	function SQLTableObject:CreateTable(tableData, createOnClient)
-		if self.tableName = "" then
+		if self.tableName == "" then
 			error("SQL Table Name not set; 'SetSQLTable' function must be called first", 2)
 		end
 
-		if !SQLTableObject:Exists() and (SERVER or (createOnClient or false)) then
-			local create_table_statement = "CREATE TABLE " + self.tableName + " ("
+		if !self:Exists() and (SERVER or (createOnClient or false)) then
+			local create_table_statement = "CREATE TABLE " .. self.tableName .. " ("
 			local first = true
 
 			local function AddString(str)
-				create_table_statement = create_table_statement + str
+				create_table_statement = create_table_statement .. str
 			end
+
+			local post_str = ""
 
 			for k,v in pairs(tableData) do
 				if isstring(k) then
-					AddString((first and "") or ", " + k + " " + v)
+					AddString((first and "" or ", ") .. k .. " " .. v)
+					if first then
+						first = false
+					end
 				else
-					AddString((first and "") or ", " + v)
-				end
-				if first then
-					first = false
+					post_str = post_str .. ", " .. v
 				end
 			end
+			AddString(post_str)
 			AddString(");")
 
-			sql.Commit(create_table_statement)
+			if query(create_table_statement) == false then
+				error("SQL Table failed to be created", 2)
+			end
 		end
 	end
 
 	function SQLTableObject:DeleteAll() -- Assumes its executed after CreateTable
-		sql.Commit("DELETE FROM " + self.tableName)
+		sql.Commit("DELETE FROM " .. self.tableName)
 	end
 
 	function SQLTableObject:GetTableName()
@@ -60,19 +71,17 @@ do -- SQL Table Object Code
 	end
 
 	function SQLTableObject:SelectResults(tab)
-		return tab != {} and tab
+		return tab != {} and tab or nil
 	end
 
 	function SQLTableObject:TopValue(tab, key, default)
 		tab = self:SelectResults(tab)
-		return (tab and tab[key]) or default
+		return tab != nil and tab[1][key] or default
 	end
 
 	function SQLTableObject:SelectAll()
 		return self:SelectResults(self:Query("select * from %s", self:GetTableName()))
 	end
-
-	local query,format = sql.Query(string query),string.format
 
 	function SQLTableObject:Query(str, ...)
 		return query(format(str, ...))
@@ -116,19 +125,20 @@ end
 local jaas_net = {}
 local jaas_net_network_strings = {}
 
-do -- JAAS Net Module
-	local function internalRegisterNetworkStr(name)
-		if SERVER then
-			util.AddNetworkString(name)
-		end
-
-		jaas_net_network_strings[1 + #jaas_net_network_strings] = name
-
-		return jaas_net_network_strings[#jaas_net_network_strings]
+local function internalRegisterNetworkStr(name)
+	if SERVER then
+		util.AddNetworkString(name)
 	end
 
+	local index = 1 + #jaas_net_network_strings
+	jaas_net_network_strings[index] = name
+
+	return index
+end
+
+do -- JAAS Net Module
 	function jaas_net:RegisterNetworkString(name)
-		name = "JAAS::" + name
+		name = "JAAS::" .. name
 
 		return internalRegisterNetworkStr(name)
 	end
@@ -230,9 +240,126 @@ do -- JAAS Net Module
 	end
 end
 
+local module_list = {}
+local jaas_module = {}
+local module_state = {}
+local configs = {}
+
+function jaas_module:RegisterNetworkString(name)
+	name = "JAAS::" .. self.label .. "::" .. name
+
+	return internalRegisterNetworkStr(name)
+end
+
+function jaas_module:RegisterNetworkType(type_name)
+	return function (name)
+		name = "JAAS::" .. self.label .. "::" .. type_name .. "::" .. name
+
+		return internalRegisterNetworkStr(name)
+	end
+end
+
+function jaas_module:Print(str)
+	print(self.label .. " :: " .. str)
+end
+
+local CLIENTPRINT = jaas_net:RegisterNetworkString("Base::ModuleClientPrint")
+
+if SERVER then
+	function jaas_module:ClientPrint(ply, str)
+		jaas_net:SendString(CLIENTPRINT, "JAAS::" .. self.label .. ":: " .. str, ply)
+	end
+elseif CLIENT then
+	function jaas_module:ClientPrint(ply, str) end -- To avoid errors caused by use in Shared modules
+
+	jaas_net:ReceiveString(CLIENTPRINT, function (str)
+		print(str)
+	end)
+end
+
+local function addPostFunc(t, k, v)
+	rawset(t, 1 + #t, v)
+end
+
+local function JAASModule()
+	tab = {
+		Client = setmetatable({},{__newindex = addPostFunc}),
+		Server = setmetatable({},{__newindex = addPostFunc}),
+		Shared = setmetatable({},{__newindex = addPostFunc})
+	}
+
+	return Object(jaas_module, tab)
+end
+
+local function configKeyPull()
+	return setmetatable({}, {__index = configs})
+end
+
+function JAAS:Module(module_name, state)
+	state = state or "Shared"
+
+	module_list[module_name] = JAASModule()
+	module_list[module_name].label = module_name
+
+	if state == "Shared" then
+		module_state[module_name] = SERVER or CLIENT
+	elseif state == "Server" then
+		module_state[module_name] = SERVER
+	elseif state == "Client" then
+		module_state[module_name] = CLIENT
+	end
+
+	local logModule = self:GetModule("Log")
+	logModule:SetLabel(module_name)
+
+	return module_list[module_name],logModule,jaas_net,configKeyPull()
+end
+
+function JAAS:ExecuteModulesPost()
+	for k,module_data in pairs(module_list) do -- k = index, v = module data
+		for k,func in ipairs(module_data.Shared) do
+			func()
+		end
+		if SERVER then
+			for k,func in ipairs(module_data.Server) do
+				func()
+			end
+		elseif CLIENT then
+			for k,func in ipairs(module_data.Client) do
+				func()
+			end
+		end
+	end
+end
+
+function JAAS:GetModule(module_name)
+	if module_list[module_name] then
+		if module_state[module_name] then
+			return Object(module_list[module_name])
+		else
+			error("Module [" .. module_name .. "] cannot be accessed from [" .. ((SERVER and "Server") or (CLIENT and "Client")) .. "], must be accessed from [" .. ((SERVER and "Server") or (CLIENT and "Client")), 3)
+		end
+	else
+		error("Module does not exist; if this module does exist, make sure that this function gets called after the module is registered", 2)
+	end
+end
+
+function JAAS:Configs(tab)
+	for k,v in pairs(tab) do
+		if configs[k] == nil then
+			configs[k] = v
+		end
+	end
+end
+
+function JAAS:GetConfigs()
+	return configKeyPull()
+end
+
 local jaas_log_list = {}
-module_list["Log"] = Object(jaas_module)
-local jaas_log = jaas_module["Log"]
+module_list["Log"] = JAASModule()
+module_state["Log"] = true
+local jaas_log = module_list["Log"]
 
 local TextObjectColours = {
 	String = Color(197, 90, 17),
@@ -252,7 +379,7 @@ local CLIENTCONSOLETEXT = jaas_net:RegisterNetworkString("Base::ModuleClientCons
 
 do --JAAS Log Module
 	function jaas_log:RegisterLog(tab)
-		if jaas_log_list[self.label] = nil then
+		if jaas_log_list[self.label] == nil then
 			jaas_log_list[self.label] = {}
 		end
 
@@ -304,7 +431,7 @@ do --JAAS Log Module
 			end
 
 			local function addString(v)
-				built_string = built_string + v
+				built_string = built_string .. v
 			end
 
 			nextValue()
@@ -335,7 +462,7 @@ do --JAAS Log Module
 				end
 
 				nextValue()
-			until (index <= #log_data)
+			until (index >= #log_data)
 
 			return built_string
 		else
@@ -501,7 +628,7 @@ do --JAAS Log Module
 
 		function jaas_log:ConsoleText(ply, str, ...)
 			jaas_net:Start(CLIENTCONSOLETEXT)
-			net.WriteTable(MapColourToJAASObjects("JAAS::" + self.label + " " + str, ...))
+			net.WriteTable(MapColourToJAASObjects("JAAS::" .. self.label .. " " .. str, ...))
 			if ply then
 				net.Send(ply)
 			else
@@ -533,7 +660,7 @@ do --JAAS Log Module
 
 			local function writeStringTable(tab)
 				net.WriteUInt(#tab, 8)
-				if #tab > then
+				if #tab > 0 then
 					for k,v in ipairs(tab) do
 						net.WriteString(v)
 					end
@@ -569,7 +696,7 @@ do --JAAS Log Module
 					repeat
 						tab[i] = net.ReadString()
 						i = 1 + i
-					until (i <= amount)
+					until (i >= amount)
 				end
 			end
 
@@ -585,7 +712,7 @@ do --JAAS Log Module
 				repeat
 					self.Data[i] = net.ReadFloat()
 					i = 1 + i
-				until (i <= amount)
+				until (i >= amount)
 			end
 
 			readStringTable(self.String) -- String
@@ -725,7 +852,7 @@ do --JAAS Log Module
 				self.records[index] = Object(log_record):NetRead()
 
 				index = 1 + index
-			until (index <= record_amount)
+			until (index >= record_amount)
 		end
 
 		function log_file:FileWrite(f) -- This method will be mainly used for debugging purposes
@@ -745,7 +872,7 @@ do --JAAS Log Module
 				self.records[index] = Object(log_record):FileRead(f)
 
 				index = 1 + index
-			until (index <= record_amount)
+			until (index >= record_amount)
 		end
 
 		function jaas_log:FileObject(starting_data)
@@ -759,7 +886,7 @@ do --JAAS Log Module
 	end
 
 	do -- Log Net Code
-		function jaas_net.Server:Post()
+		function jaas_log.Server:Post()
 			local PermissionModule = JAAS:GetModule("Permission")
 
 			local CanReadLog = PermissionModule:RegisterPermission("Can Read Log")
@@ -806,7 +933,7 @@ do --JAAS Log Module
 					log_dates[index] = net.ReadUInt(32)
 
 					index = 1 + index
-				until (index <= log_files_amount)
+				until (index >= log_files_amount)
 
 				func(log_dates)
 			end)
@@ -824,117 +951,4 @@ do --JAAS Log Module
 			end)
 		end
 	end
-end
-
-local module_list = {}
-local module_state = {}
-local jaas_module = {}
-local configs = {}
-
-function jaas_module:RegisterNetworkString(name)
-	name = "JAAS::" + self.name + "::" + name
-
-	return internalRegisterNetworkStr(name)
-end
-
-function jaas_module:RegisterNetworkType(type_name)
-	return function (name)
-		name = "JAAS::" + self.name + "::" + type_name + "::" + name
-
-		return internalRegisterNetworkStr(name)
-	end
-end
-
-function jaas_module:Print(str)
-	print(self.name + " :: " + str)
-end
-
-local CLIENTPRINT = jaas_net:RegisterNetworkString("Base::ModuleClientPrint")
-
-if SERVER then
-	function jaas_module:ClientPrint(ply, str)
-		jaas_net:SendString(CLIENTPRINT, "JAAS::" + self.name + ":: " + str, ply)
-	end
-elseif CLIENT then
-	function jaas_module:ClientPrint(ply, str) end -- To avoid errors caused by use in Shared modules
-
-	jaas_net:ReceiveString(CLIENTPRINT, function (str)
-		print(str)
-	end)
-end
-
-local function addPostFunc(t, k, v)
-	rawset(t, 1 + #t, v)
-end
-
-local jaas_module.Client = setmetatable({},{__newindex = addPostFunc})
-local jaas_module.Server = setmetatable({},{__newindex = addPostFunc})
-local jaas_module.Shared = setmetatable({},{__newindex = addPostFunc})
-
---- Overridable Functions ---
-function jaas_module.Client:Post() end
-function jaas_module.Server:Post() end
-function jaas_module.Shared:Post() end
---- ---
-
-local function configKeyPull()
-	return setmetatable({}, {__index = configs})
-end
-
-function JAAS:Module(module_name, state)
-	state = state or "Shared"
-	self.name = module_name
-
-	module_list[module_name] = Object(jaas_module)
-
-	if state == "Shared" then
-		module_state[module_name] = SERVER or CLIENT
-	elseif state == "Server" then
-		module_state[module_name] = SERVER
-	elseif state == "Client" then
-		module_state[module_name] = CLIENT
-	end
-
-	return module_list[#module_list],self:GetModule("Log"),jaas_net,configKeyPull()
-end
-
-function JAAS:ExecuteModulesPost()
-	for k,module_data in pairs(module_list) do -- k = index, v = module data
-		for k,func in ipairs(module_data.Shared) do
-			func()
-		end
-		if SERVER then
-			for k,func in ipairs(module_data.Server) do
-				func()
-			end
-		elseif CLIENT then
-			for k,func in ipairs(module_data.Client) do
-				func()
-			end
-		end
-	end
-end
-
-function JAAS:GetModule(module_name)
-	if module_list[module_name] then
-		if module_state[module_name] then
-			return Object(module_list[module_name])
-		else
-			error("This module cannot be accessed from [" + ((SERVER and "Server") or (CLIENT and "Client")) + "], must be accessed from [" + ((SERVER and "Server") or (CLIENT and "Client")), 2)
-		end
-	else
-		error("Module does not exist; if this module does exist, make sure that this function gets called after the module is registered", 2)
-	end
-end
-
-function JAAS:Configs(tab)
-	for k,v in pairs(tab) do
-		if configs[k] == nil then
-			configs[k] = v
-		end
-	end
-end
-
-function JAAS:GetConfigs()
-	return configKeyPull()
 end

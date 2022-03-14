@@ -73,7 +73,8 @@ function MODULE.Client:Post()
 			current_interface_object:ReceiveRegisteredTabs(tab_object)
 		end
 	else
-		error("Interface Set in Configs has not been Registered; this interface name may have been a missspelling, double check the name before overwriting Configurations")
+		-- TODO : Uncomment when Interface exists
+		--error("Interface Set in Configs has not been Registered; this interface name may have been a missspelling, double check the name before overwriting Configurations")
 	end
 end
 

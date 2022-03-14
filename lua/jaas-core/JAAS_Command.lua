@@ -31,11 +31,18 @@ do -- Command SQL Table
 end
 
 local Command_Hook = JAAS.Hook("Command")
+
+local Command_OnCodeUpdate = Command_Hook("OnCodeUpdate")
+local Command_OnAccessUpdate = Command_Hook("OnAccessUpdate")
+
 local Command_Hook_Run = JAAS.Hook.Run("Command")
+
+local Rank_Hook_OnRemove = JAAS.Hook("Rank")("OnRemove")
+local Player_Hook_OnConnect = JAAS.Hook("Player")("OnConnect")
 
 local command_table = {} -- [Category][Name] = {1 = Code, 2 = AccessGroup, 3 = function, 4 = Parameters, 5 = Flags}
 
-function JAAS.Hook("Rank")("OnRemove")["CommandModule::RankCodeUpdate"](isMulti, rank_name, remove_func)
+function Rank_Hook_OnRemove.CommandModule_RankCodeUpdate(isMulti, rank_name, remove_func)
 	for category,name_table in pairs(command_table) do
 		for name,v in pairs(name_table) do
 			command_table[category][name][1] = remove_func(command_table[category][name][1])
@@ -152,11 +159,11 @@ do -- Command Object Code
 	end
 end
 
-local function CommandObject(name, category)
+local function CreateCommandObject(name, category)
 	return Object(CommandObject, {name = name, category = category})
 end
 
-JAAS.CommandObject = CommandObject
+JAAS.CommandObject = CreateCommandObject
 
 local ParameterTable = {}
 local ParameterObject = {
@@ -170,7 +177,7 @@ local ParameterObject = {
 	OptionsObject = {},
 	RankObject = {},
 	PermissionObject = {},
-	AccessGroup = {},
+	AccessGroupObject = {},
 	CommandObject = {}
 }
 
@@ -377,7 +384,7 @@ do -- Parameter Object Code
 			repeat
 				read_plyers[index] = player.GetByID(net.ReadUInt(32))
 				index = 1 + index
-			until (index <= amount)
+			until (index >= amount)
 			self.value = read_plyers
 			return self.value
 		end
@@ -461,7 +468,7 @@ do -- Parameter Object Code
 			repeat
 				read_options[index] = net.ReadUInt(8)
 				index = 1 + index
-			until (index <= amount)
+			until (index >= amount)
 			self.value = read_options
 			return self:GetValue()
 		end
@@ -674,13 +681,14 @@ function MODULE:RegisterCommand(name, parameters, func, flags)
 	flags = flags or 0
 	if CommandTable:Insert(name, self.category) then
 		command_table[self.category] = {[name] = {0, 0, func, parameters}}
-		return CommandObject(name, self.category)
+		return CreateCommandObject(name, self.category)
 	else
 		local found_command = CommandTable:Select(name, self.category)
 
 		if found_command then
-			command_table[self.category] = {[name] = {found_command.Code, found_command.AccessGroup, func, parameters}}
-			return CommandObject(name, self.category)
+			found_command = found_command[1]
+			command_table[self.category] = {[name] = {tonumber(found_command.Code), tonumber(found_command.AccessGroup), func, parameters}}
+			return CreateCommandObject(name, self.category)
 		else
 			error("An error occurred whilst registering Command", 2)
 		end
@@ -691,7 +699,7 @@ if CLIENT then
 	function MODULE:RegisterCommand(name, parameters, func, flags)
 		if command_table[self.category] == nil and command_table[self.category][name] == nil and bit.band(flags, J_CMD_SERVER) == 0 then
 			command_table[self.category] = {[name] = {0, 0, func, parameters}}
-			return CommandObject(name, self.category)
+			return CreateCommandObject(name, self.category)
 		end
 	end
 end
@@ -745,7 +753,7 @@ do -- Modification Net Message Code
 
 	function net_modification_message:NetRead()
 		self.opcode = net.ReadUInt(2)
-		self.command_object = CommandObject():NetRead()
+		self.command_object = CreateCommandObject():NetRead()
 
 		if self.opcode == 1 then
 			self.rank_object = JAAS.RankObject:NetRead()
@@ -797,26 +805,26 @@ do -- Net Code
 			Code Access Group (Send) : O
 	*/
 
-	local Command_Net_Sync = MODULE:RegisterNetworkString("Sync")
+	local Command_Net_Sync = MODULE:RegisterNetworkType("Sync")
 	local Sync_OnConnect = Command_Net_Sync("OnConnect")
 
-	local Command_Net_Update = MODULE:RegisterNetworkString("Update")
+	local Command_Net_Update = MODULE:RegisterNetworkType("Update")
 	local Update_Code = Command_Net_Update("Code")
 	local Update_AccessGroup = Command_Net_Update("AccessGroup")
 
-	local Command_Net_Client = MODULE:RegisterNetworkString("Client")
+	local Command_Net_Client = MODULE:RegisterNetworkType("Client")
 	local Client_Modify = Command_Net_Client("Modify")
 	local Client_Execute = Command_Net_Client("Execute")
 	local Client_ExecuteResponse = Command_Net_Client("ExecuteResponse")
 
 	do -- On Connect Sync (Send)
-		hook.Add("PlayerAuthed", J_NET:GetNetworkString(Sync_OnConnect), function (ply)
+		function Player_Hook_OnConnect.CommandModule_SyncOnConnect(ply)
 			local not_default_commands = {}
 			local command_amount = 0
 
 			for category,name_table in pairs(command_table) do
 				for name,info in pairs(name_table) do
-					if info[1] > 0 and bit.band(info[5], J_CMD_SERVER) == 0 then
+					if bit.band(info[5], J_CMD_SERVER) == 0 then
 						command_amount = 1 + command_amount
 						not_default_commands[category] = {[name_table] = info}
 					end
@@ -836,11 +844,11 @@ do -- Net Code
 			end
 
 			net.Send(ply)
-		end)
+		end
 	end
 
 	do -- On Update Code (Send)
-		function Command_Hook("OnCodeUpdate")("CommandModule::UpdateCode")(command, new_value, old_value)
+		function Command_OnCodeUpdate.CommandModule_UpdateCode(command, new_value, old_value)
 			J_NET:Start(Update_Code)
 			command:NetWrite()
 			net.Broadcast()
@@ -848,7 +856,7 @@ do -- Net Code
 	end
 
 	do -- On Update Access Group (Send)
-		function Command_Hook("OnAccessUpdate")("CommandModule::UpdateValue")(command, new_value, old_value)
+		function Command_OnAccessUpdate.CommandModule_UpdateValue(command, new_value, old_value)
 			J_NET:Start(Update_Code)
 			command:NetWrite()
 			net.Broadcast()
@@ -943,7 +951,7 @@ do -- Net Code
 
 	do -- Execute Command (Receive) | Execute Response (Send)
 		J_NET:Receive(Client_Execute, function (len, ply)
-			local command_object = CommandObject():NetRead()
+			local command_object = CreateCommandObject():NetRead()
 
 			if command_object:Check(ply:GetCode()) then
 				local response_code, msg = command_object:NetExecute()
@@ -973,7 +981,7 @@ do -- Net Code
 		do -- Execute Command (Send)
 			function CommandObject:Execute(...)
 				local args = {...}
-				local parameters = command_table[self:GetCategory][self:GetName][4]
+				local parameters = command_table[self:GetCategory()][self:GetName()][4]
 
 				J_NET:Start(Client_Execute)
 
@@ -989,7 +997,7 @@ do -- Net Code
 
 		do -- Execute Response (Receive) + Hook
 			J_NET:Receive(Client_ExecuteResponse, function ()
-				local read_command = CommandObject():NetRead()
+				local read_command = CreateCommandObject():NetRead()
 				local response_code = net.ReadUInt(8)
 				local msg = net.ReadString()
 
@@ -1002,23 +1010,28 @@ do -- Net Code
 				local command_amount = net.ReadUInt(16)
 				local index = 1
 
-				repeat
-					local category = net.ReadString()
-					local name = net.ReadString()
-					local code = net.ReadUInt(32)
-					local access_value = net.ReadUInt(8)
+				if !isnumber(command_amount) then
+					error("Something went wrong")
+				end
+				if command_amount > 0 then
+					repeat
+						local category = net.ReadString()
+						local name = net.ReadString()
+						local code = net.ReadUInt(32)
+						local access_value = net.ReadUInt(8)
 
-					command_table[category][name][1] = code
-					command_table[category][name][2] = access_value
+						command_table[category][name][1] = code
+						command_table[category][name][2] = access_value
 
-					index = 1 + index
-				until (index <= command_amount)
+						index = 1 + index
+					until (index >= command_amount)
+				end
 			end)
 		end
 
 		do -- On Update Code (Receive) + Hook
 			J_NET:Receive(Update_Code, function ()
-				local command_object = CommandObject():NetRead()
+				local command_object = CreateCommandObject():NetRead()
 				command_object:SaveLocal()
 				Command_Hook_Run("OnCodeUpdate")(command_object, command_object:GetCode())
 			end)
@@ -1027,7 +1040,7 @@ do -- Net Code
 
 		do -- On Update Access Group (Receive) + Hook
 			J_NET:Receive(Update_Code, function ()
-				local command_object = CommandObject():NetRead()
+				local command_object = CreateCommandObject():NetRead()
 				command_object:SaveLocal()
 				Command_Hook_Run("OnAccessUpdate")(command_object, command_object:GetAccessCode())
 			end)
@@ -1074,7 +1087,7 @@ local function Objectify_String(str)
 		repeat
 			text = text + string.char(str_char)
 			nextChar()
-		until (str_char != endChar and !endOfStr)
+		until (str_char == endChar and endOfStr)
 	end
 
 	local function repeatMultiAddText(endChar)
@@ -1094,7 +1107,7 @@ local function Objectify_String(str)
 				end
 				text[1 + #text] = ""
 			end
-		until (str_char != endChar and !endOfStr)
+		until (str_char == endChar and endOfStr)
 
 		return multi
 	end
@@ -1125,7 +1138,7 @@ local function Objectify_String(str)
 						value[index] = player.GetBySteamID(text[index])
 					end
 					index = 1 + index
-				until (index <= #text)
+				until (index >= #text)
 			else
 				if isUserID then
 					value = player.GetByID(text)
@@ -1149,7 +1162,7 @@ local function Objectify_String(str)
 				repeat
 					value[index] = text[index]
 					index = 1 + index
-				until (index <= #text)
+				until (index >= #text)
 			else
 				value = text
 			end
@@ -1197,7 +1210,7 @@ local function Objectify_String(str)
 end
 
 concommand.Add("J", function (ply, cmd, args, argStr)
-	local command_object = CommandObject(args[1], args[2])
+	local command_object = CreateCommandObject(args[1], args[2])
 	if command_object:IsPresent() and (ply == nil or command_object:Check(ply:GetCode())) then
 		local parameters = command_object:GetParameters()
 		if #args - 2 == #parameters then

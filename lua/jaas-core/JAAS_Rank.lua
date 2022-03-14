@@ -46,16 +46,24 @@ do -- Rank SQL Table
 	end
 
 	function RankTable:Delete(name, position)
-		return self:Query([[[begin transaction;
+		return self:Query([[begin transaction;
 			delete from JAAS_Rank where Name='%s';
 			update JAAS_Rank Position = Position - 1 where Position > %s;
 			on conflict rollback;
-			commit transaction;]]], name, position) == nil
+			commit transaction;]], name, position) == nil
 	end
 end
 
 local Rank_Hook = JAAS.Hook("Rank")
+
+local OnAdd = Rank_Hook("OnAdd")
+local OnRemove = Rank_Hook("OnRemove")
+local OnPowerUpdate = Rank_Hook("OnPowerUpdate")
+local OnInvisibilityUpdate = Rank_Hook("OnInvisibleUpdate")
+local OnAccessCodeUpdate = Rank_Hook("OnAccessCodeUpdate")
+
 local Rank_Hook_Run = JAAS.Hook.Run("Rank")
+local Player_Hook_OnConnect = JAAS.Hook("Player")("OnConnect")
 
 local dirty = false
 local rank_table = {} -- [Name] = {1 = Position, 2 = Power, 3 = Invisible, 4 = AccessGroup}
@@ -215,16 +223,16 @@ do -- Rank Object Code
 	end
 end
 
-local function RankObject(name) then
+local function CreateRankObject(name)
 	return Object(RankObject, {name = name})
 end
 
-JAAS.RankObject = RankObject
+JAAS.RankObject = CreateRankObject
 
 function MODULE:AddRank(name, power, invisible)
 	if RankTable:Insert(name, power, invisible) then
 		rank_manager:MakeDirty()
-		local obj = RankObject(name)
+		local obj = CreateRankObject(name)
 		Rank_Hook_Run("OnAdd")(obj)
 		return obj
 	end
@@ -326,7 +334,7 @@ function MODULE:RemoveRanks(tableOfRanks)
 						calculateSection(bit_sections_to_remove[index][1], bit_sections_to_remove[index + 1][2])
 
 						index = 1 + index
-					until (index <= #bit_sections_to_remove - 1)
+					until (index >= #bit_sections_to_remove - 1)
 
 					if bit_length > bit_sections_to_remove[#bit_sections_to_remove][1] then
 						calculateSection(bit_sections_to_remove[index][1], bit_length)
@@ -367,7 +375,11 @@ function MODULE:GetMaxPower(code)
 end
 
 function MODULE:GetAllRanks()
-	return RankTable:SelectAll()
+	local results = RankTable:SelectResults(RankTable:Query("select Name,Position,Power,Invisible,AccessGroup from JAAS_Rank")) or {}
+	if !istable(results) then
+		error("Unable to properly turn into a table")
+	end
+	return results
 end
 
 local net_modification_message = {}
@@ -494,7 +506,7 @@ do -- Modify Net Message
 				repeat
 					self.rank[index] = JAAS.RankObject():NetWrite()
 					index = 1 + index
-				until (index <= amount)
+				until (index >= amount)
 			else
 				self.rank = JAAS.RankObject():NetWrite()
 			end
@@ -525,7 +537,7 @@ if CLIENT then
 		local found_ranks = {}
 
 		for name,information in pairs(rank_table) do
-			local obj = RankObject(name)
+			local obj = CreateRankObject(name)
 
 			if bit.band(obj:GetCode(), code) then
 				found_ranks[1 + #found_ranks] = obj
@@ -539,7 +551,7 @@ if CLIENT then
 		local max_power = 0
 
 		for name,information in pairs(rank_table) do
-			local obj = RankObject(name)
+			local obj = CreateRankObject(name)
 
 			if bit.band(obj:GetCode(), code) and obj:GetPower() > max_power then
 				max_power = obj:GetPower()
@@ -622,9 +634,9 @@ do -- Net Code
 
 		local CanAddRank = PermissionModule:RegisterPermission("Can Add Rank")
 		local CanRemoveRank = PermissionModule:RegisterPermission("Can Remove Rank")
-		local CanModifyRankPower = PermissionModule:RegisterPermission("Can Modify Rank's Power Level")
-		local CanModifyRankInvisibility = PermissionModule:RegisterPermission("Can Modify Rank's Invisibility")
-		local CanModifyRankAccessValue = PermissionModule:RegisterPermission("Can Modify Rank's Access Group")
+		local CanModifyRankPower = PermissionModule:RegisterPermission("Can Modify Rank Power Level")
+		local CanModifyRankInvisibility = PermissionModule:RegisterPermission("Can Modify Rank Invisibility")
+		local CanModifyRankAccessValue = PermissionModule:RegisterPermission("Can Modify Rank Access Group")
 
 		local ReceiveMinorRankChatLogs = PermissionModule:RegisterPermission("Receive Minor Rank Chat Logs")
 		local ReceiveMajorRankChatLogs = PermissionModule:RegisterPermission("Receive Major Rank Chat Logs")
@@ -769,7 +781,7 @@ do -- Net Code
 		end
 
 		do -- On Connect Client Sync (Send)
-			hook.Add("PlayerAuthed", J_NET:GetNetworkString(Sync_OnConnect), function (ply)
+			function Player_Hook_OnConnect.RankModule_SyncOnConnect(ply)
 				local found_ranks = MODULE:GetAllRanks()
 
 				J_NET:Start(Sync_OnConnect)
@@ -784,11 +796,11 @@ do -- Net Code
 				end
 
 				net.Send(ply)
-			end)
+			end
 		end
 
 		do -- On Power Update (Send)
-			function Rank_Hook("OnPowerUpdate")["RankModule::UpdateClients"](rank, new_value, old_value)
+			function OnPowerUpdate.RankModule_UpdateClients(rank, new_value, old_value)
 				J_NET:Start(Update_ModifiedPower)
 				rank:NetWrite()
 				net.Broadcast()
@@ -798,7 +810,7 @@ do -- Net Code
 		local CanViewInvisibleRank = PermissionModule:RegisterPermission("Can View Invisible Rank")
 
 		do -- On Invisible Update (Send)
-			function Rank_Hook("OnInvisibleUpdate")["RankModule::UpdateClients"](rank, new_value, old_value)
+			function OnInvisibilityUpdate.RankModule_UpdateClients(rank, new_value, old_value)
 				local plys = CanViewInvisibleRank:GetPlayers()
 
 				J_NET:Start(Update_ModifiedInvisible)
@@ -816,7 +828,7 @@ do -- Net Code
 		end
 
 		do -- On Access Group Update (Send)
-			function Rank_Hook("OnAccessCodeUpdate")["RankModule::UpdateClients"](rank, new_value, old_value)
+			function OnAccessCodeUpdate.RankModule_UpdateClients(rank, new_value, old_value)
 				J_NET:Start(Update_ModifiedAccessGroup)
 				rank:NetWrite()
 				net.Broadcast()
@@ -824,7 +836,7 @@ do -- Net Code
 		end
 
 		do -- On Rank Addition (Send)
-			function Rank_Hook("OnAdd")["RankModule::UpdateClients"](obj)
+			function OnAdd.RankModule_UpdateClients(obj)
 				J_NET:Start(Update_Added)
 				obj:NetWrite()
 				net.Broadcast()
@@ -832,7 +844,7 @@ do -- Net Code
 		end
 
 		do -- On Rank Removal (Send)
-			function Rank_Hook("OnRemove")["RankModule::UpdateClients"](multi_remove, name)
+			function OnRemove.RankModule_UpdateClients(multi_remove, name)
 				if multi_remove then -- Update_MultiRemoved
 					J_NET:Start(Update_MultiRemoved)
 					net.WriteUInt(#name, 6)
@@ -889,24 +901,26 @@ do -- Net Code
 			J_NET:Receive(Sync_OnConnect, function ()
 				local rank_amount = net.ReadUInt(6)
 
-				local index = 1
-				repeat
-					RankObject():NetRead()
-					index = 1 + index
-				until (index <= rank_amount)
+				if rank_amount > 0 then
+					local index = 1
+					repeat
+						CreateRankObject():NetRead()
+						index = 1 + index
+					until (index >= rank_amount)
+				end
 			end)
 		end
 
 		do -- On Rank Addition (Receive) + Hook
 			J_NET:Receive(Update_Added, function ()
-				local obj = RankObject():NetRead()
+				local obj = CreateRankObject():NetRead()
 				Rank_Hook_Run("OnAdd")(obj)
 			end)
 		end
 
 		do -- On Rank Removal (Receive) + Hook
 			J_NET:ReceiveString(Update_Removed, function (name)
-				local obj = RankObject(name)
+				local obj = CreateRankObject(name)
 
 				Rank_Hook_Run("OnRemove", function () obj:Remove() end)(false, obj:GetName(), function (code)
 					if code != nil or code > 0 then
@@ -936,9 +950,9 @@ do -- Net Code
 
 				local index = 1
 				repeat
-					RankObject():NetRead()
+					CreateRankObject():NetRead()
 					index = 1 + index
-				until (index <= rank_to_remove_amount)
+				until (index >= rank_to_remove_amount)
 
 				local min_pos_to_remove = 32
 
@@ -989,7 +1003,7 @@ do -- Net Code
 								calculateSection(bit_sections_to_remove[index][1], bit_sections_to_remove[index + 1][2])
 
 								index = 1 + index
-							until (index <= #bit_sections_to_remove - 1)
+							until (index >= #bit_sections_to_remove - 1)
 
 							if bit_length > bit_sections_to_remove[#bit_sections_to_remove][1] then
 								calculateSection(bit_sections_to_remove[index][1], bit_length)
@@ -1013,21 +1027,21 @@ do -- Net Code
 
 		do -- On Power Update (Receive) + Hook
 			J_NET:Receive(Update_ModifiedPower, function ()
-				local obj = RankObject():NetRead()
+				local obj = CreateRankObject():NetRead()
 				Rank_Hook_Run("OnModifiedPower")(obj)
 			end)
 		end
 
 		do -- On Invisible Update (Receive) + Hook
 			J_NET:Receive(Update_ModifiedInvisible, function ()
-				local obj = RankObject():NetRead()
+				local obj = CreateRankObject():NetRead()
 				Rank_Hook_Run("OnModifiedInvisibility")(obj)
 			end)
 		end
 
 		do -- On Access Group Update (Receive) + Hook
 			J_NET:Receive(Update_ModifiedAccessGroup, function ()
-				local obj = RankObject():NetRead()
+				local obj = CreateRankObject():NetRead()
 				Rank_Hook_Run("OnModifiedAccessCode")(obj)
 			end)
 		end

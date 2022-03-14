@@ -43,14 +43,24 @@ do -- Access Group SQL Table
 end
 
 local AccessGroup_Hook = JAAS.Hook("AccessGroup")
+
+local AccessGroup_OnAdd = AccessGroup_Hook("OnAdd")
+local AccessGroup_OnRemove = AccessGroup_Hook("OnRemove")
+local AccessGroup_OnCodeChange = AccessGroup_Hook("OnCodeChange")
+local AccessGroup_OnValueChange = AccessGroup_Hook("OnValueChange")
+
 local AccessGroup_Hook_Run = JAAS.Hook.Run("AccessGroup")
+
+local Rank_Hook_OnRemove = JAAS.Hook("Rank")("OnRemove")
+local Player_Hook_OnConnect = JAAS.Hook("Player")("OnConnect")
+local Permission_Hook_PostPermissionSync = JAAS.Hook("Permission")("PostPermissionSync")
 
 local dirty = true
 local access_group_table = {} -- [AccessType][Name] = {1 = Code, 2 = AccessGroupValue}
 
-function JAAS.Hook("Rank")("OnRemove")["AccessGroupModule::RankCodeUpdate"](isMulti, rank_name, remove_func)
+function Rank_Hook_OnRemove.AccessGroupModule_RankCodeUpdate(isMulti, rank_name, remove_func)
 	for accessType,v in pairs(access_group_table) do
-		if name,y in pairs(v) do
+		for name,y in pairs(v) do
 			access_group_table[accessType][name][1] = remove_func(access_group_table[accessType][name][1])
 			AccessGroupTable:UpdateCode(name, accessType, code)
 		end
@@ -205,16 +215,16 @@ do -- Access Group Object Code
 	end
 end
 
-local function AccessGroupObject(name, accessType)
+local function CreateAccessGroupObject(name, accessType)
 	return Object(AccessGroupObject, {name = name, type = accessType})
 end
 
-JAAS.AccessGroupObject = AccessGroupObject
+JAAS.AccessGroupObject = CreateAccessGroupObject
 
 function MODULE:AddAccessGroup(name, accessType)
 	if AccessGroupTable:Insert(name, accessType) then
 		check_dirty = true
-		local obj = AccessGroupObject(name, accessType)
+		local obj = CreateAccessGroupObject(name, accessType)
 		AccessGroup_Hook_Run("OnAdd")(obj)
 
 		return obj
@@ -235,7 +245,7 @@ function MODULE:GetAllGroupTypes()
 	local found_types = {}
 
 	for k,v in ipairs(AccessGroupTable:SelectAllGroupTypes()) do
-		found_types[1 + #found_types] = AccessGroupObject({name = v.Name})
+		found_types[1 + #found_types] = CreateAccessGroupObject(v.Name, v.AccessType)
 	end
 
 	return found_types
@@ -245,7 +255,7 @@ function MODULE:GetAllAccessGroupsByType(accessType)
 	local found_groups = {}
 
 	for k,v in ipairs(AccessGroupTable:SelectAllByGroupType(accessType)) do
-		found_groups[1 + #found_groups] = AccessGroupObject({name = v.Name})
+		found_groups[1 + #found_groups] = CreateAccessGroupObject(v.Name, v.AccessType)
 	end
 
 	return found_groups
@@ -548,7 +558,7 @@ do -- Access Group Net Code
 		local CanViewAccessGroups = PermissionModule:RegisterPermission(CanViewAccessGroups_PermissionName)
 
 		do -- On Access Group Addition (Send)
-			function AccessGroup_Hook("OnAdd")["AccessGroup::UpdateClientAdd"](obj)
+			function AccessGroup_OnAdd.AccessGroup_UpdateClientAdd(obj)
 				J_NET:Start(Update_Added)
 				obj:NetWrite()
 				net.Send(CanViewAccessGroups:GetPlayers())
@@ -556,7 +566,7 @@ do -- Access Group Net Code
 		end
 
 		do -- On Access Group Removal (Send)
-			function AccessGroup_Hook("OnRemove")["AccessGroup::UpdateClientRemove"](name, accessType)
+			function AccessGroup_OnRemove.AccessGroup_UpdateClientRemove(name, accessType)
 				J_NET:Start(Update_Removed)
 				net.WriteString(name)
 				net.WriteString(accessType)
@@ -577,17 +587,21 @@ do -- Access Group Net Code
 					net.WriteUInt(v.Code, 32)
 					net.WriteUInt(v.AccessGroupValue, 8)
 				end
+
+				net.Send(ply)
 			end
 		end
 
 		do -- On Connect Access Group Sync (Send)
-			hook.Add("PlayerAuthed", J_NET:GetNetworkString(Sync_OnConnect), function (ply)
-				sendAllGroups(CanViewAccessGroups:GetPlayers())
-			end)
+			function Player_Hook_OnConnect.AccessGroupModule_Update_Sync(ply)
+				if CanViewAccessGroups:Check(ply:GetCode()) then
+					sendAllGroups(ply)
+				end
+			end
 		end
 
 		do -- On Code Update (Send)
-			function AccessGroup_Hook("OnCodeChange")["AccessGroupModule::UpdateCode"](access_group_object, new_value, old_value)
+			function AccessGroup_OnCodeChange.AccessGroupModule_UpdateCode(access_group_object, new_value, old_value)
 				J_NET:Start(Update_Code)
 				access_group_object:NetWrite()
 				net.Send(CanViewAccessGroups:GetPlayers())
@@ -595,7 +609,7 @@ do -- Access Group Net Code
 		end
 
 		do -- On Access Group Value (Send)
-			function AccessGroup_Hook("OnValueChange")["AccessGroupModule::UpdateValue"](access_group_object, new_value, old_value)
+			function AccessGroup_OnValueChange.AccessGroupModule_UpdateValue(access_group_object, new_value, old_value)
 				J_NET:Start(Update_Value)
 				access_group_object:NetWrite()
 				net.Send(CanViewAccessGroups:GetPlayers())
@@ -678,7 +692,7 @@ do -- Access Group Net Code
 
 		do -- On Access Group Addition (Receive)
 			J_NET:Receive(Update_Added, function ()
-				local obj = AccessGroupObject():NetRead()
+				local obj = CreateAccessGroupObject():NetRead()
 				AccessGroup_Hook_Run("OnAdd")(obj)
 			end)
 		end
@@ -694,14 +708,14 @@ do -- Access Group Net Code
 
 		do -- On Code Update (Receive) + Hook
 			J_NET:Receive(Update_Code, function ()
-				local obj = AccessGroupObject():NetRead()
+				local obj = CreateAccessGroupObject():NetRead()
 				AccessGroup_Hook_Run("OnCodeChange")(obj, obj:GetCode())
 			end)
 		end
 
 		do -- On Access Group Value (Receive)
 			J_NET:Receive(Update_Value, function ()
-				local obj = AccessGroupObject():NetRead()
+				local obj = CreateAccessGroupObject():NetRead()
 				AccessGroup_Hook_Run("OnValueChange")(obj, obj:GetCode())
 			end)
 		end
@@ -712,9 +726,9 @@ do -- Access Group Net Code
 
 			local index = 1
 			repeat
-				retrieved_groups[index] = AccessGroupObject():NetRead()
+				retrieved_groups[index] = CreateAccessGroupObject():NetRead()
 				index = 1 + index
-			until (index <= type_amount)
+			until (index >= group_amount)
 
 			return retrieved_groups
 		end
@@ -745,18 +759,20 @@ do -- Access Group Net Code
 			local PermissionModule = JAAS:GetModule("Permission")
 			local PlayerModule = JAAS:GetModule("Player")
 
-			local CanViewAccessGroups = PermissionModule:GetPermission(CanViewAccessGroups_PermissionName)
+			function Permission_Hook_PostPermissionSync.AccessGroupModule_LocalPermissionUse()
+				local CanViewAccessGroups = PermissionModule:GetPermission(CanViewAccessGroups_PermissionName)
 
-			local CanAccess = CanViewAccessGroups:Check(LocalPlayer():GetCode())
+				local CanAccess = CanViewAccessGroups:Check(LocalPlayer():GetCode())
 
-			function MODULE:HasAccessToView()
-				return CanAccess
+				function MODULE:HasAccessToView()
+					return CanAccess
+				end
+
+				PlayerModule:OnLocalPermissionAccessChange(CanViewAccessGroups, function (access)
+					CanAccess = access
+					AccessGroup_Hook_Run("OnAccessViewChange")(access)
+				end)
 			end
-
-			PlayerModule:OnLocalPermissionAccessChange(CanViewAccessGroups, function (access)
-				CanAccess = access
-				AccessGroup_Hook_Run("OnAccessViewChange")(access)
-			end)
 		end
 	end
 end
