@@ -1049,7 +1049,7 @@ do -- Net Code
 	end
 end
 
-local function Objectify_String(str)
+local function Objectify_String(str) -- TODO : Use a parsed gmatch function
 	/*	String Conversion Mapping
 		Bool : T/F
 		Number : 0-9*
@@ -1217,7 +1217,7 @@ concommand.Add("J", function (ply, cmd, args, argStr)
 			local read_parameter_values = {}
 
 			for index,v in ipairs(parameters) do
-				v:SetValue(Objectify_String(args + 2))
+				v:SetValue(Objectify_String(args + 2)) -- TODO : Convert post 2 arguments into a single string to be ran through
 				read_parameter_values[index] = v:GetValue()
 			end
 
@@ -1225,5 +1225,7 @@ concommand.Add("J", function (ply, cmd, args, argStr)
 		else
 			ErrorNoHalt("Incorrect amount of parameters were parsed")
 		end
+	else
+		error("Command does not exist", 2)
 	end
 end, nil, "Execute JAAS Commands") -- Autocomplete nil for now
