@@ -210,7 +210,7 @@ do -- Paint Library Code
 	local blurscreen_material = Material("pp/blurscreen")
 
 	local function PaintLib.Blur(width, height, panel, amount)
-		local x, y = s:LocalToScreen(0, 0)
+		local x, y = panel:LocalToScreen(0, 0)
 
 		surface.SetDrawColor(255, 255, 255)
 		surface.SetMaterial(blurscreen_material)
