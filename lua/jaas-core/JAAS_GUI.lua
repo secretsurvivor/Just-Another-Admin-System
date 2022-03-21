@@ -44,8 +44,16 @@ function tab_object:GetOrderNum()
 	return self.order
 end
 
-function tab_object:SetParent()
-	error("Function not implemented")
+function tab_object:GetColor()
+	return self.color
+end
+
+function tab_object:CanOpenedAlt()
+	return self.can_opened_alt
+end
+
+function tab_object:GetPanel()
+	error("Get Panel function must be set")
 end
 
 function tab_object:OnVisibleUpdate(visible)
@@ -55,8 +63,8 @@ function tab_object:SetVisible(visible)
 	self:OnVisibleUpdate(visible)
 end
 
-local function TabObject(name, order)
-	return Object(tab_object, {name = name, order = order})
+local function TabObject(name, order, color, can_opened_alt)
+	return Object(tab_object, {name = name, order = order, color = color, can_opened_alt = can_opened_alt or false})
 end
 
 local current_interface_object = nil
@@ -119,10 +127,6 @@ concommand.Add("jaas_interface_cmd", function (ply, cmd, args, argStr)
 	end
 end, nil, "Executes JAAS Interface Command", FCVAR_LUA_CLIENT)
 
-
-
-
-
 local PaintLib = {}
 local PaintLibObject = {}
 
@@ -149,9 +153,6 @@ do -- Paint Library Code
 		surface.DrawOutlinedRect(0 + vertical_padding, 0 + horizontal_padding, width - (horizontal_padding * 2), height - (vertical_padding * 2), thickness)
 	end
 
-	local function PaintLib.Clear()
-	end
-
 	local function PaintLib.BackgroundHover(width, height, panel, alpha, color, rounded_corner_radius)
 		color = ColorAlpha(color, color.a * alpha)
 
@@ -164,24 +165,19 @@ do -- Paint Library Code
 		PaintLib.Outline(width, height, panel, color, thickness, vertical_padding, horizontal_padding)
 	end
 
-	J_BLOCK_SIDE_TOP = 1
-	J_BLOCK_SIDE_RIGHT = 2
-	J_BLOCK_SIDE_BOTTOM = 3
-	J_BLOCK_SIDE_LEFT = 4
-
 	local function PaintLib.SideBlock(width, height, panel, color, side, thickness, vertical_padding, horizontal_padding)
 		vertical_padding = vertical_padding or 0
 		horizontal_padding = horizontal_padding or 0
 		thickness = thickness or 1
 
 		surface.SetDrawColor(color)
-		if side == 1 then -- Top
+		if side == TOP then -- Top
 			surface.DrawRect(0 + horizontal_padding, 0 + vertical_padding, width - (horizontal_padding * 2), thickness)
-		elseif side == 2 then -- Right
+		elseif side == RIGHT then -- Right
 			surface.DrawRect((width - thickness) + horizontal_padding, 0 + vertical_padding, thickness, height - (horizontal_padding * 2))
-		elseif side == 3 then -- Bottom
+		elseif side == BOTTOM then -- Bottom
 			surface.DrawRect(0 + horizontal_padding, (height - thickness) + vertical_padding, width - (horizontal_padding * 2), thickness)
-		elseif side == 4 then -- Left
+		elseif side == LEFT then -- Left
 			surface.DrawRect(0 + horizontal_padding, 0 + vertical_padding, thickness, height - (vertical_padding * 2))
 		end
 	end
@@ -211,6 +207,23 @@ do -- Paint Library Code
 		end
 	end
 
+	local blurscreen_material = Material("pp/blurscreen")
+
+	local function PaintLib.Blur(width, height, panel, amount)
+		local x, y = s:LocalToScreen(0, 0)
+
+		surface.SetDrawColor(255, 255, 255)
+		surface.SetMaterial(blurscreen_material)
+
+		for i=0.33, 1, 0.33 do
+			blurscreen_material:SetFloat("$blur", i * (amount or 8))
+			blurscreen_material:Recompute()
+
+			render.UpdateScreenEffectTexture()
+			surface.DrawTexturedRect(x * -1, y * -1, ScrW(), ScrH())
+		end
+	end
+
 	local function PaintLib.CheckBox(width, height, panel, color)
 	end
 
@@ -236,23 +249,23 @@ do -- Paint Library Object Code
 		return self
 	end
 
-	function PaintLibObject:Clear()
-		self.paint_list[1 + self.paint_list] = {"Clear", {}}
-		return self
-	end
-
 	function PaintLibObject:SideBlock(color, side, thickness, vertical_padding, horizontal_padding)
 		self.paint_list[1 + self.paint_list] = {"SideBlock", {color, side, thickness, vertical_padding, horizontal_padding}}
 		return self
 	end
 
-	function PaintLibObject:Text(str, color, font, vertical_padding, horizontal_padding)
-		self.paint_list[1 + self.paint_list] = {"Text", {str, color, font, vertical_padding, horizontal_padding}}
+	function PaintLibObject:Text(str, color, font, align, vertical_padding, horizontal_padding)
+		self.paint_list[1 + self.paint_list] = {"Text", {str, color, font, align, vertical_padding, horizontal_padding}}
 		return self
 	end
 
 	function PaintLibObject:CornerText(str, color, font, corner, vertical_padding, horizontal_padding)
 		self.paint_list[1 + self.paint_list] = {"CornerText", {str, color, font, corner, vertical_padding, horizontal_padding}}
+		return self
+	end
+
+	function PaintLibObject:Blur(amount)
+		self.paint_list[1 + self.paint_list] = {"Blur", {amount}}
 		return self
 	end
 	--
@@ -367,6 +380,20 @@ do -- Panel Metatable Functions
 	function Panel:HideScrollBar()
 		self:GetVBar():SetWide(0)
 		self:GetVBar():Hide()
+	end
+
+	function Panel:SetFractionTall(fraction, target)
+		target = target or self:GetParent()
+		self:SetTall(target:GetTall() / fraction)
+	end
+
+	function Panel:SetFractionWide(decimal, target)
+		target = target or self:GetParent()
+		self:SetWide(target:GetWide() / fraction)
+	end
+
+	function Panel:ClearPaint()
+		self.Paint = nil
 	end
 end
 
@@ -629,8 +656,6 @@ do -- Controller Code
 					end
 
 					panel:MoveTo(pos_data.x, pos_data.y, self.animation_time, 0, self.animation_ease, function (animData, pnl)
-						pnl:SetPos(pos_data.x, pos_data.y)
-
 						if k == children_amount then
 							FinishedAnimation()
 						end
