@@ -413,3 +413,47 @@ do -- Net Code
 		end
 	end
 end
+
+if CLIENT then
+	local list_of_players = {}
+	local num_of_players = 0
+
+	for k,v in ipairs(player.GetAll()) do
+		list_of_players[v:SteamID64()] = v
+		num_of_players = k
+	end
+
+	function Player_OnConnect.PlayerModule_PlayerSelectPanel(ply)
+		list_of_players[ply:SteamID64()] = ply
+		num_of_players = 1 + num_of_players
+	end
+
+	function Player_OnDisconnect.PlayerModule_PlayerSelectPanel(ply)
+		list_of_players[ply:SteamID64()] = nil
+		num_of_players = num_of_players - 1
+	end
+
+	local PlayerSelectElement = {}
+
+	function PlayerSelectElement:Init()
+		self.num_of_players = num_of_players
+
+		for k,v in pairs(list_of_players) do
+			self:AddChoice(v:Nick(), v)
+		end
+	end
+
+	function PlayerSelectElement:Think()
+		if self.num_of_players != num_of_players then
+			self:Clear()
+
+			for k,v in pairs(list_of_players) do
+				self:AddChoice(v:Nick(), v)
+			end
+
+			self.num_of_players = num_of_players
+		end
+	end
+
+	derma.DefineControl("DPlayerComboBox", "Automatic Player List ComboBox", PlayerSelectElement, "DComboBox")
+end
