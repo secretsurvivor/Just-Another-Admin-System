@@ -452,3 +452,15 @@ do -- Permission Net Code
 		end
 	end
 end
+
+if CLIENT then
+	local PermissionSelectElement = {}
+
+	function PermissionSelectElement:Init()
+		for k,v in pairs(permission_table) do
+			self:AddChoice(k, CreatePermissionObject(k))
+		end
+	end
+
+	derma.DefineControl("JPermissionComboBox", "Automatic Permission List ComboBox", PermissionSelectElement, "DComboBox")
+end
