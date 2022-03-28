@@ -241,7 +241,7 @@ end
 
 function MODULE:RemoveRank(obj)
 	if RankTable:Delete(obj:GetName(), obj:GetPosition()) then
-		local name = obj:GetName()
+		local name = obj
 
 		Rank_Hook_Run("OnRemove", function () rank_manager:MakeDirty() end)(false, name, function (code)
 			if code != nil or code > 0 then
@@ -1046,4 +1046,55 @@ do -- Net Code
 			end)
 		end
 	end
+end
+
+if CLIENT then
+	local update_panel_funcs = {}
+
+	function OnAdd.RankModule_RankSelectPanel(obj)
+		for k,v in ipairs(update_panel_funcs) do
+			v(true, obj)
+		end
+	end
+
+	function OnRemove.RankModule_RankSelectPanel(multi, removed_ranks)
+		for k,v in ipairs(update_panel_funcs) do
+			v(false, obj, multi)
+		end
+	end
+
+	local RankSelectElement = {} -- rank_table
+
+	function RankSelectElement:Init()
+		for k,v in pairs(rank_table) do
+			self:AddChoice(k, CreateRankObject(k))
+		end
+
+		self.panel_id = update_panel_funcs[1 + #update_panel_funcs]
+		update_panel_funcs[self.panel_id] = function (add, rank_obj, multi)
+			self:Clear()
+
+			for k,v in pairs(rank_table) do
+				if add == false then
+					if multi then
+						for k,v in ipairs(rank_obj) do
+							if k != v:GetName() then
+								self:AddChoice(k, CreateRankObject(k))
+							end
+						end
+					elseif k != rank_obj:GetName() then
+						self:AddChoice(k, CreateRankObject(k))
+					end
+				else
+					self:AddChoice(k, CreateRankObject(k))
+				end
+			end
+		end
+	end
+
+	function RankSelectElement:OnRemove()
+		table.remove(update_panel_funcs, self.panel_id)
+	end
+
+	derma.DefineControl("JRankComboBox", "Automatic Rank List ComboBox", RankSelectElement, "DComboBox")
 end
