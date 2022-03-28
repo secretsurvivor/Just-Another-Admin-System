@@ -167,18 +167,18 @@ JAAS.CommandObject = CreateCommandObject
 
 local ParameterTable = {}
 local ParameterObject = {
-	BoolObject = {},
-	IntObject = {},
-	FloatObject = {},
-	StringObject = {},
-	PlayerObject = {},
-	PlayersObject = {},
-	OptionObject = {},
-	OptionsObject = {},
-	RankObject = {},
-	PermissionObject = {},
-	AccessGroupObject = {},
-	CommandObject = {}
+	BoolObject = {}, -- 1
+	IntObject = {}, -- 2
+	FloatObject = {}, -- 3
+	StringObject = {}, -- 4
+	PlayerObject = {}, -- 5
+	PlayersObject = {}, -- 6
+	OptionObject = {}, -- 7
+	OptionsObject = {}, -- 8
+	RankObject = {}, -- 9
+	PermissionObject = {}, -- 10
+	AccessGroupObject = {}, -- 11
+	CommandObject = {} -- 12
 }
 
 do -- Parameter Object Code
@@ -187,6 +187,10 @@ do -- Parameter Object Code
 			self.name = name
 			self.default = default
 			return self
+		end
+
+		function ParameterObject.BoolObject:GetName()
+			return self.name
 		end
 
 		function ParameterObject.BoolObject:GetType()
@@ -224,6 +228,10 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.IntObject:GetName()
+			return self.name
+		end
+
 		function ParameterObject.IntObject:GetType()
 			return 2
 		end
@@ -259,6 +267,10 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.FloatObject:GetName()
+			return self.name
+		end
+
 		function ParameterObject.FloatObject:GetType()
 			return 3
 		end
@@ -290,6 +302,10 @@ do -- Parameter Object Code
 			self.name = name
 			self.default = default
 			return self
+		end
+
+		function ParameterObject.StringObject:GetName()
+			return self.name
 		end
 
 		function ParameterObject.StringObject:GetType()
@@ -325,6 +341,10 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.PlayerObject:GetName()
+			return self.name
+		end
+
 		function ParameterObject.PlayerObject:GetType()
 			return 5
 		end
@@ -356,6 +376,10 @@ do -- Parameter Object Code
 			self.name = name
 			self.filter_func = filter_func
 			return self
+		end
+
+		function ParameterObject.PlayersObject:GetName()
+			return self.name
 		end
 
 		function ParameterObject.PlayersObject:GetType()
@@ -403,6 +427,18 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.OptionObject:GetName()
+			return self.name
+		end
+
+		function ParameterObject.OptionObject:GetDefault()
+			return self.default
+		end
+
+		function ParameterObject.OptionsObject:GetOptionList()
+			return self.option_list
+		end
+
 		function ParameterObject.OptionObject:GetType()
 			return 7
 		end
@@ -436,6 +472,10 @@ do -- Parameter Object Code
 			self.default = default
 			self.filter_func = filter_func
 			return self
+		end
+
+		function ParameterObject.OptionsObject:GetName()
+			return self.name
 		end
 
 		function ParameterObject.OptionsObject:GetType()
@@ -484,6 +524,10 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.RankObject:GetName()
+			return self.name
+		end
+
 		function ParameterObject.RankObject:GetType()
 			return 9
 		end
@@ -514,6 +558,10 @@ do -- Parameter Object Code
 		function ParameterObject.PermissionObject:Set(name)
 			self.name = name
 			return self
+		end
+
+		function ParameterObject.PermissionObject:GetName()
+			return self.name
 		end
 
 		function ParameterObject.PermissionObject:GetType()
@@ -548,6 +596,10 @@ do -- Parameter Object Code
 			return self
 		end
 
+		function ParameterObject.AccessGroupObject:GetName()
+			return self.name
+		end
+
 		function ParameterObject.AccessGroupObject:GetType()
 			return 11
 		end
@@ -578,6 +630,10 @@ do -- Parameter Object Code
 		function ParameterObject.CommandObject:Set(name)
 			self.name = name
 			return self
+		end
+
+		function ParameterObject.CommandObject:GetName()
+			return self.name
 		end
 
 		function ParameterObject.CommandObject:GetType()
@@ -627,17 +683,17 @@ do -- Parameter Object Code
 			self.internal[1 + #self.internal] = PlayerObject():Set(name, filter_func)
 		end
 
-		function ParameterTable:AddPlayers(name, default)
-			self.internal[1 + #self.internal] = PlayersObject():Set(name, filter_func)
-		end
+		-- function ParameterTable:AddPlayers(name, default)
+		-- 	self.internal[1 + #self.internal] = PlayersObject():Set(name, filter_func)
+		-- end
 
 		function ParameterTable:AddOption(name, default, option_list)
 			self.internal[1 + #self.internal] = OptionObject():Set(name, option_list, default, filter_func)
 		end
 
-		function ParameterTable:AddOptions(name, default, option_list)
-			self.internal[1 + #self.internal] = OptionsObject():Set(name, option_list, default, filter_func)
-		end
+		-- function ParameterTable:AddOptions(name, default, option_list)
+		-- 	self.internal[1 + #self.internal] = OptionsObject():Set(name, option_list, default, filter_func)
+		-- end
 
 		function ParameterTable:AddRank(name)
 			self.internal[1 + #self.internal] = RankObject():Set(name)
@@ -701,6 +757,19 @@ if CLIENT then
 			command_table[self.category] = {[name] = {0, 0, func, parameters}}
 			return CreateCommandObject(name, self.category)
 		end
+	end
+end
+
+function MODULE:iCommand()
+	local category_prev_key, category_prev_value, command_prev_key
+	return function ()
+		if command_prev_key == nil then
+			category_prev_key, category_prev_value = next(command_table, category_prev_key)
+		else
+			command_prev_key = next(category_prev_value, command_prev_key)
+		end
+
+		return CreateCommandObject(command_prev_key, category_prev_key)
 	end
 end
 
@@ -1229,3 +1298,17 @@ concommand.Add("J", function (ply, cmd, args, argStr)
 		error("Command does not exist", 2)
 	end
 end, nil, "Execute JAAS Commands") -- Autocomplete nil for now
+
+if CLIENT then
+	local CommandSelectElement = {}
+
+	function CommandSelectElement:Init()
+		for category,command_table in pairs(command_table) do
+			for name,info in pairs(command_table) do
+				self:AddChoice(string.format("%s : %s", category, name), CreateCommandObject(name, category))
+			end
+		end
+	end
+
+	derma.DefineControl("JCommandComboBox", "Automatic Command List ComboBox", CommandSelectElement, "DComboBox")
+end
