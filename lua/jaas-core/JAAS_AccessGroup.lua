@@ -776,3 +776,50 @@ do -- Access Group Net Code
 		end
 	end
 end
+
+if CLIENT then
+	local panel_update_func = {}
+
+	function AccessGroup_OnAdd.AccessGroupModule_GroupSelectPanel(obj)
+		for k,v in ipairs(panel_update_func) do
+			v(true, obj)
+		end
+	end
+
+	function AccessGroup_OnRemove.AccessGroupModule_GroupSelectPanel(obj)
+		for k,v in ipairs(panel_update_func) do
+			v(false, obj)
+		end
+	end
+
+	local AccessGroupSelectElement = {}
+
+	function AccessGroupSelectElement:Init()
+		for access_type,group in pairs(access_group_table) do
+			for name,info in pairs(group) do
+				if not (add == false and k == obj:GetName()) then
+					self:AddChoice(string.format("%s : %s", name, access_type), CreateAccessGroupObject(name, access_type))
+				end
+			end
+		end
+
+		self.panel_id = panel_update_func[1 + #panel_update_func]
+		panel_update_func[self.panel_id] = function (add, obj)
+			self:Clear()
+
+			for access_type,group in pairs(access_group_table) do
+				for name,info in pairs(group) do
+					if not (add == false and k == obj:GetName()) then
+						self:AddChoice(string.format("%s : %s", name, access_type), CreateAccessGroupObject(name, access_type))
+					end
+				end
+			end
+		end
+	end
+
+	function AccessGroupSelectElement:OnRemove()
+		table.remove(panel_update_func, self.panel_id)
+	end
+
+	derma.DefineControl("JAccessGroupComboBox", "Automatic Access Group List ComboBox", AccessGroupSelectElement, "DComboBox")
+end
