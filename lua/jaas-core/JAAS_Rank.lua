@@ -382,6 +382,17 @@ function MODULE:GetAllRanks()
 	return results
 end
 
+function MODULE:iRank()
+	local last_key
+	return function ()
+		last_key = next(rank_table, last_key)
+
+		if last_key != nil then
+			return CreateRankObject(last_key)
+		end
+	end
+end
+
 local net_modification_message = {}
 
 do -- Modify Net Message
