@@ -191,6 +191,17 @@ function MODULE:GetPermission(name)
 	end
 end
 
+function MODULE:iPermission()
+	local last_key
+	return function ()
+		last_key = next(permission_table, last_key)
+
+		if last_key != nil then
+			return CreatePermissionObject(last_key)
+		end
+	end
+end
+
 local net_modification_message = {}
 
 do -- Modification Net Message
