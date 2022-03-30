@@ -769,7 +769,9 @@ function MODULE:iCommand()
 			command_prev_key = next(category_prev_value, command_prev_key)
 		end
 
-		return CreateCommandObject(command_prev_key, category_prev_key)
+		if command_prev_key != nil and category_prev_key != nil then
+			return CreateCommandObject(command_prev_key, category_prev_key)
+		end
 	end
 end
 
