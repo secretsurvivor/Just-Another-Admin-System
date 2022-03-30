@@ -1038,14 +1038,14 @@ do -- Net Code
 
 	if CLIENT then
 		do -- Code Modify (Send)
-			function MODULE:SetPermissionCode(permission_object, rank_object)
-				ModificationMessage():ModifyCode(permission_object, rank_object):SendToServer(Client_Modify)
+			function MODULE:SetCommandCode(command_object, rank_object)
+				ModificationMessage():ModifyCode(command_object, rank_object):SendToServer(Client_Modify)
 			end
 		end
 
 		do -- Code Access Group (Send)
-			function MODULE:SetPermissionAccessGroup(permission_object, access_group_object)
-				ModificationMessage():ModifyAccessValue(permission_object, access_group_object):SendToServer(Client_Modify)
+			function MODULE:SetCommandAccessGroup(command_object, access_group_object)
+				ModificationMessage():ModifyAccessValue(command_object, access_group_object):SendToServer(Client_Modify)
 			end
 		end
 
