@@ -1,3 +1,3 @@
-JAAS:Congis{
+JAAS:Configs{
 
 }

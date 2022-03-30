@@ -1,4 +1,4 @@
-local MODULE,LOG,J_NET = JAAS:Module("Player")
+local MODULE,LOG,J_NET,CONFIG = JAAS:Module("Player")
 
 local PlayerTable = JAAS.SQLTableObject()
 
@@ -27,6 +27,10 @@ do -- Player SQL Table
 		return self:Query("update JAAS_Player set LastConnected=%s where SteamID='%s'", os.time(), steamid)
 	end
 end
+
+JAAS:Configs{
+	STEAM_API_KEY = nil
+}
 
 local Player_Hook = JAAS.Hook("Player")
 
@@ -88,6 +92,31 @@ end
 
 function MODULE:XorPlayerCode(ply, code) -- Should be the primary method of modifying a player's code
 	return MODULE:SetPlayerCode(ply, bit.bxor(ply:GetCode(), code))
+end
+
+function MODULE:GetSteamInfo(steam64, func) -- Requires Steam API Key to function
+	if CONFIG.STEAM_API_KEY != nil then
+		http.Fetch(
+			string.format("https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=%s&steamids=%s", CONFIG.STEAM_API_KEY, steam64), -- URL
+
+			function (body, size, headers, code) -- On Success
+				local response_table = util.JSONToTable(body)
+				local player_info = response_table.response.players and response_table.response.players[1] or false
+
+				if player_info == false then
+					func(false, "invalid steamid")
+				else
+					func(true, player_info)
+				end
+			end,
+
+			function (error) -- On Failure
+				func(false, error)
+			end
+		)
+		return true
+	end
+	return false
 end
 
 local net_modification_message = {}
