@@ -1218,10 +1218,59 @@ function JUI:Pre() -- Default JAAS Interface Tabs
 				end
 			end
 		end
+
+		local active_permissions = 0
+
+		if CanAddRank:Check(LocalPlayer():GetCode()) then
+			active_permissions = 1 + active_permissions
+		end
+
+		if CanRemoveRank:Check(LocalPlayer():GetCode()) then
+			active_permissions = 1 + active_permissions
+		end
+
+		if CanModifyPermission:Check(LocalPlayer():GetCode()) then
+			active_permissions = 1 + active_permissions
+		end
+
+		if CanModifyCommand:Check(LocalPlayer():GetCode()) then
+			active_permissions = 1 + active_permissions
+		end
+
+		if CanModifyPlayer:Check(LocalPlayer():GetCode()) then
+			active_permissions = 1 + active_permissions
+		end
+
+		local function CheckTabActive()
+			if active_permissions > 0 then
+				RankTab:SetVisible(true)
+			else
+				RankTab:SetVisible(false)
+			end
+		end
+
+		CheckTabActive()
+
+		local function UpdateMainPermissionAccess(access)
+			if access then
+				active_permissions = 1 + active_permissions
+			else
+				active_permissions = active_permissions - 1
+			end
+			CheckTabActive()
+		end
+
+		CanAddRank_OnChange[1 + #CanAddRank_OnChange] = UpdateMainPermissionAccess
+		CanRemoveRank_OnChange[1 + #CanRemoveRank_OnChange] = UpdateMainPermissionAccess
+		CanModifyPermission_OnChange[1 + #CanModifyPermission_OnChange] = UpdateMainPermissionAccess
+		CanModifyCommand_OnChange[1 + #CanModifyCommand_OnChange] = UpdateMainPermissionAccess
+		CanModifyPlayer_OnChange[1 + #CanModifyPlayer_OnChange] = UpdateMainPermissionAccess
 	end
 
 	do -- Access Group Tab
 		local AccessGroupTab = GUI:RegisterTab("Access", Color(81, 223, 145), 2, true)
+
+
 	end
 
 	do -- Log Tab
