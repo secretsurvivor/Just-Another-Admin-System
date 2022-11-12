@@ -613,6 +613,10 @@ function JUI:Pre() -- Default JAAS Interface Tabs
 		root:ClearPaint()
 		root:SetWide(515)
 
+		function RankTab:GetPanel()
+			return root
+		end
+
 		local rank_list = vgui.Create("DPanel", root)
 		rank_list:ClearPaint()
 		rank_list:Dock(LEFT)
@@ -1269,6 +1273,16 @@ function JUI:Pre() -- Default JAAS Interface Tabs
 
 	do -- Access Group Tab
 		local AccessGroupTab = GUI:RegisterTab("Access", Color(81, 223, 145), 2, true)
+
+		local root = vgui.Create("DPanel")
+		root:SetWide(742)
+
+		function AccessGroupTab:GetPanel()
+			return root
+		end
+
+		local object_tab = vgui.Create("JTabPanel", root)
+		object_tab:Dock(LEFT)
 
 
 	end

@@ -30,8 +30,10 @@ function interface_object:ReceiveRegisteredTabs(tab_object)
 	error("Function not implemented")
 end
 
+function interface_object:Pre()
+end
+
 function interface_object:Post()
-	error("Function not implemented")
 end
 
 local tab_object = {}
@@ -63,7 +65,7 @@ function tab_object:SetVisible(visible)
 	self:OnVisibleUpdate(visible)
 end
 
-local function TabObject(name, order, color, can_opened_alt)
+local function TabObject(name, color, order, can_opened_alt)
 	return Object(tab_object, {name = name, order = order, color = color, can_opened_alt = can_opened_alt or false})
 end
 
@@ -76,8 +78,8 @@ function MODULE:RegisterInterface(interface_name, authors, version)
 	return interface_list[interface_name]
 end
 
-function MODULE:RegisterTab(tab_name, order_num)
-	tab_list[1 + #tab_list] = TabObject(tab_name, order_num)
+function MODULE:RegisterTab(tab_name, color, order_num, can_opened_alt)
+	tab_list[1 + #tab_list] = TabObject(tab_name, color, order_num, can_opened_alt)
 
 	return tab_list[1 + #tab_list]
 end
@@ -95,6 +97,7 @@ end
 function MODULE.Client:Post()
 	if interface_list[CONFIG.JAAS_INTERFACE] != nil then
 		current_interface_object = interface_list[CONFIG.JAAS_INTERFACE]
+		current_interface_object:Pre()
 
 		for k,tab_object in ipairs(tab_list) do
 			current_interface_object:ReceiveRegisteredTabs(tab_object)
@@ -126,6 +129,12 @@ concommand.Add("jaas_interface_cmd", function (ply, cmd, args, argStr)
 		ErrorNoHalt("Unknown JAAS Interface Command")
 	end
 end, nil, "Executes JAAS Interface Command", FCVAR_LUA_CLIENT)
+
+concommand.Add("jaas_registered_interfaces", function (ply, cmd, args, argStr)
+	for k,v in ipairs(interface_information) do
+
+	end
+end, nil, "Gets all currently Registered Interfaces", FCVAR_LUA_CLIENT)
 
 local PaintLib = {}
 local PaintLibObject = {}
@@ -237,6 +246,10 @@ do -- Paint Library Code
 	end
 end
 
+function MODULE:GetPaintLibObject()
+	return Object({}, PaintLib)
+end
+
 do -- Paint Library Object Code
 	-- Paint Functions
 	function PaintLibObject:Background(color, rounded_corner_radius)
@@ -314,7 +327,7 @@ do -- Panel Metatable Functions
 	local Panel = FindMetaTable("Panel")
 
 	function Panel:StartPaint()
-		self.paintLibObject = Object({}, {__index = PaintLibObject})
+		self.paintLibObject = Object({paint_list = {}, hover_paint_list = {}}, {__index = PaintLibObject})
 		return self.paintLibObject
 	end
 
@@ -496,6 +509,24 @@ do -- Controller Code
 		end
 	end
 
+	function internal_position_controller:RemoveChild(id)
+		local index = self:GetIndex(id)
+
+		if index then
+			table.remove(self.child_order, index)
+			self.layout_properties[id] = nil
+		end
+	end
+
+	function internal_position_controller:GetIndex(id)
+		for k,panel in ipairs(self.child_order) do
+			if panel:GetName() == id then
+				return k
+			end
+		end
+		return false
+	end
+
 	function internal_position_controller:GetChildPanel(id)
 		for k,panel in ipairs(self:GetChildren()) do
 			if panel:GetName() == id then
@@ -638,7 +669,7 @@ do -- Controller Code
 		self.valid_positions = false
 	end
 
-	function internal_position_controller:RefreshPositions(invalidate, force)
+	function internal_position_controller:RefreshPositions(invalidate, force, ignore_animation)
 		if !self.animation_in_progress or (force or false) then
 			if !self.valid_positions or (invalidate or false) then
 				self:CalculatePositions()
@@ -647,7 +678,7 @@ do -- Controller Code
 			local children_amount = 0
 			for k,panel in ipairs(self:GetChildren()) do
 				local pos_data = self.calculated_pos[panel:GetName()]
-				if self.animated then
+				if self.animated and not (ignore_animation or false) then
 					self.animation_in_progress = true
 					children_amount = 1 + children_amount
 
@@ -672,4 +703,113 @@ do -- Controller Code
 	end
 
 	derma.DefineControl("JControlPanel", "A Panel that can control the positions of its children", internal_position_controller, "DPanel")
+
+	local tab_panel = {}
+
+	function tab_panel:Init()
+		self:SetPaintBackgroundEnabled(false)
+		self:SetPaintBorderEnabled(false)
+		self:SetPaintBackground(false)
+
+		self.tabs = {}
+	end
+
+	function tab_panel:AddTab(name, panel)
+		panel:SetParent(self)
+		panel:Dock(FILL)
+
+		if self.currentPanel then
+			panel:Hide()
+		else
+			self.currentPanel = panel
+			self.currentTab = name
+			self.currentPanel:Show()
+		end
+
+		self.tabs[name] = panel
+	end
+
+	function tab_panel:OnChange(changeTo)
+	end
+
+	function tab_panel:OpenTab(name)
+		if self.tabs[name] != nil then
+			self.currentPanel:Hide()
+			self.currentPanel = self.tabs[name]
+			self.currentPanel:Show()
+			self.currentTab = name
+			self:OnChange(name)
+		end
+	end
+
+	function tab_panel:GetCurrentTab()
+		return self.currentTab
+	end
+
+	derma.DefineControl("JTabPanel", "Panel that supports different Tab windows with external Tab buttons", tab_panel, "DPanel")
+
+	local vertical_slider = {}
+	AccessorFunc(vertical_slider, "knob_color", "KnobColor")
+
+	function vertical_slider:Init()
+		-- Default Variables --
+		self.reverse_order = false
+		self.knob_color = Color(242, 242, 242)
+		self.snapping_points = {}
+		-- --
+
+		local self.knob = vgui.Create("DButton", self)
+		self.knob:SetSize(self:GetWide(), self:GetWide())
+
+		self.knob.Paint = function (panel, w, h)
+			surface.SetDrawColor(self:GetKnobColor())
+			draw.NoTexture()
+			surface.DrawPoly{
+				{x = 0, y = 0},
+				{x = (w / 3) * 2, y = h * 0.25},
+				{x = w, y = h * 0.5},
+				{x = (w / 3) * 2, y = (h * 0.25) * 3},
+				{x = 0, y = h}
+			}
+		end
+
+		self.knob.OnCursorMoved = function( panel, x, y )
+			local x, y = panel:LocalToScreen( x, y )
+			x, y = self:ScreenToLocal( x, y )
+			self:OnCursorMoved( x, y )
+		end
+	end
+
+	function vertical_slider:OnSizeChanged(w)
+		self.knob:SetSize(w, w)
+	end
+
+	function vertical_slider:ReverseOrder(val) -- True = Bottom Up, False (Default) = Top Bottom
+		self.reverse_order = val
+	end
+
+	function vertical_slider:AddSnappingPoint(name, height)
+		self.snapping_points[1 + #self.snapping_points] = {name, height}
+	end
+
+	function vertical_slider:RemoveSnappingPoint(name)
+		for k,v in ipairs(self.snapping_points) do
+			if
+		end
+		self.snapping_points[name] = nil
+	end
+
+	function vertical_slider:OnValueChange()
+	end
+
+	function vertical_slider:OnCursorMoved(x, y)
+	end
+
+	function vertical_slider:GetValue()
+	end
+
+	function vertical_slider:SetValue()
+	end
+
+	derma.DefineControl("JVerticalNumSlider", "Vertical version of the DNumSlider", vertical_slider, "DPanel")
 end
