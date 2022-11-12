@@ -1,0 +1,57 @@
+ARGUMENT::String ( "File Name" ) : file_name
+ARGUMENT::FILE ( "Setup to Install", "*.JAAS.SETUP" ) : setup_file
+
+NEW FILE ( file_name & ".JAAS.SETUP" ) : file
+
+// Ranks
+if (#RANKS > 0) {
+	"CLEAR RANKS" > file::WRITE
+
+	for RANKS ~ rank {
+		rank > file::SAVE // R [name] [position] [group]
+	}
+}
+//
+
+// Commands
+if (#COMMANDS > 0) {
+	"CLEAR COMMANDS" > file::WRITE
+
+	for COMMANDS ~ command {
+		command > file::SAVE // C [,]["]
+	}
+}
+//
+
+// Permissions
+if (#PERMISSIONS > 0) {
+	"CLEAR PERMISSIONS" > file::WRITE
+
+	for PERMISSIONS ~ permission {
+		permission > file::SAVE // P [,10,11][Can Noclip23]
+	}
+}
+//
+
+// Groups
+if (#GROUPS > 0) {
+	"CLEAR GROUPS" > file::WRITE
+
+	for GROUPS ~ group {
+		group > file::SAVE // G [name] [code] [value]
+	}
+}
+//
+
+NEW FILE ( "ARCHIVE-" & CURRENT_DATE::FORMAT( "ddMMyyyy" ) & ".JAAS.LOG.ARCHIVE" ) : archive_file
+archive_file::ARCHIVE
+
+for LOGS ~ log, i {
+	log > archive_file::INSERT( [date] )
+	NEW FILE ( "log-archive-" & i & "_" & [date]::FORMAT( "ddMMyyyy" ) ) : log_file
+	log::COMPRESS > log_file::WRITE
+	log::DELETE
+}
+
+archive_file::COMPRESS
+
