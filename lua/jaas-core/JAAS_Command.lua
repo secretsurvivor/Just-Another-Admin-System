@@ -1120,7 +1120,7 @@ do -- Net Code
 	end
 end
 
-local function Objectify_String(str) -- TODO : Use a parsed gmatch function
+local function Objectify_String(str)
 	/*	String Conversion Mapping
 		Bool : T/F
 		Number : 0-9*

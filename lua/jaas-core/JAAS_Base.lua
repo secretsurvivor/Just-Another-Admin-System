@@ -104,24 +104,6 @@ do -- SQL Table Object Code
 	end
 end
 
-local f = FindMetaTable "File"
-
-function f:WriteString(str)
-	for c in gmatch(str, ".") do
-		self:WriteByte(string.byte(c))
-	end
-	self:WriteByte(0x0)
-end
-
-function f:ReadString()
-	local byte,str = self:ReadByte(),""
-	while byte > 0x0 do
-		str = str .. string.char(byte)
-		byte = self:ReadByte()
-	end
-	return str
-end
-
 local jaas_net = {}
 local jaas_net_network_strings = {}
 
@@ -273,7 +255,7 @@ elseif CLIENT then
 	function jaas_module:ClientPrint(ply, str) end -- To avoid errors caused by use in Shared modules
 
 	jaas_net:ReceiveString(CLIENTPRINT, function (str)
-		print(str)
+		(str)
 	end)
 end
 

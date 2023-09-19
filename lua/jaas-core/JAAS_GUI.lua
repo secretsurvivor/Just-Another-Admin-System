@@ -205,13 +205,13 @@ do -- Paint Library Code
 		vertical_padding = vertical_padding or 0
 		horizontal_padding = horizontal_padding or 0
 
-		if corner == 1 then -- Top Left
+		if corner == J_TEXT_CORNER_TOP_LEFT then -- Top Left
 			draw.SimpleText(str, font, 0 + horizontal_padding, 0 + vertical_padding, color, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM)
-		elseif corner == 2 then -- Top Right
+		elseif corner == J_TEXT_CORNER_TOP_RIGHT then -- Top Right
 			draw.SimpleText(str, font, width + horizontal_padding, 0 + vertical_padding, color, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM)
-		elseif corner == 3 then -- Bottom Left
+		elseif corner == J_TEXT_CORNER_BOTTOM_LEFT then -- Bottom Left
 			draw.SimpleText(str, font, 0 + horizontal_padding, height + vertical_padding, color, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
-		elseif corner == 4 then -- Bottom Right
+		elseif corner == J_TEXT_CORNER_BOTTOM_RIGHT then -- Bottom Right
 			draw.SimpleText(str, font, width + horizontal_padding, height + vertical_padding, color, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
 		end
 	end
